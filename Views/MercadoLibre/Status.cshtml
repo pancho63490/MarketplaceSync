@@ -1,0 +1,66 @@
+@model MarketplaceSync.Web.Models.MercadoLibreToken?
+
+@{
+    ViewData["Title"] = "Mercado Libre";
+}
+
+<div class="container mt-4">
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-4">
+            <h1 class="fw-bold mb-3">Mercado Libre</h1>
+            <p class="text-muted">
+                Conecta tu cuenta de Mercado Libre para poder publicar y actualizar productos desde esta plataforma.
+            </p>
+
+            @if (Model == null)
+            {
+                <div class="alert alert-warning">
+                    Mercado Libre todavía no está conectado.
+                </div>
+
+                <a asp-controller="MercadoLibre" asp-action="Connect" class="btn btn-primary">
+                    Conectar Mercado Libre
+                </a>
+            }
+            else
+            {
+                <div class="alert alert-success">
+                    Mercado Libre conectado correctamente.
+                </div>
+
+                <table class="table table-bordered align-middle">
+                    <tr>
+                        <th style="width: 180px;">User ID</th>
+                        <td>@Model.UserId</td>
+                    </tr>
+                    <tr>
+                        <th>Token Type</th>
+                        <td>@Model.TokenType</td>
+                    </tr>
+                    <tr>
+                        <th>Scope</th>
+                        <td>@Model.Scope</td>
+                    </tr>
+                    <tr>
+                        <th>Expires At</th>
+                        <td>@Model.ExpiresAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                    </tr>
+                    <tr>
+                        <th>Updated At</th>
+                        <td>@Model.UpdatedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                    </tr>
+                </table>
+
+                <div class="d-flex gap-2">
+                    <a asp-controller="MercadoLibre" asp-action="Connect" class="btn btn-outline-primary">
+                        Reconectar
+                    </a>
+
+                    <a asp-controller="MercadoLibre" asp-action="Me" target="_blank" class="btn btn-success">
+                        Probar users/me
+                    </a>
+                </div>
+            }
+        </div>
+    </div>
+</div>

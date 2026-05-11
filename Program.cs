@@ -9,11 +9,25 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddScoped<MarketplaceDetectorService>();
 
+builder.Services.AddHttpClient();
+
 builder.Services.AddControllersWithViews();
 
 var app = builder.Build();
 
-
+// TEMPORALMENTE DESACTIVADO PARA EVITAR QUE RENDER SE CAIGA AL ARRANCAR
+// try
+// {
+//     using var scope = app.Services.CreateScope();
+//     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+//     dbContext.Database.Migrate();
+// }
+// catch (Exception ex)
+// {
+//     Console.WriteLine("ERROR APPLYING MIGRATIONS:");
+//     Console.WriteLine(ex.ToString());
+//     throw;
+// }
 
 if (!app.Environment.IsDevelopment())
 {
