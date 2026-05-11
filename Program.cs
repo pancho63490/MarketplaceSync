@@ -13,18 +13,7 @@ builder.Services.AddControllersWithViews();
 
 var app = builder.Build();
 
-try
-{
-    using var scope = app.Services.CreateScope();
-    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    dbContext.Database.Migrate();
-}
-catch (Exception ex)
-{
-    Console.WriteLine("ERROR APPLYING MIGRATIONS:");
-    Console.WriteLine(ex.ToString());
-    throw;
-}
+
 
 if (!app.Environment.IsDevelopment())
 {
