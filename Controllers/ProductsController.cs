@@ -98,19 +98,28 @@ public async Task<IActionResult> PublishToMercadoLibre(PublishToMercadoLibreRequ
             source = request.PictureUrl
         });
     }
-
-    var payload = new
+var attributes = new List<object>
+{
+    new
     {
-        title = request.Title,
-        category_id = request.CategoryId,
-        price = request.Price,
-        currency_id = request.CurrencyId,
-        available_quantity = request.Stock,
-        buying_mode = "buy_it_now",
-        listing_type_id = request.ListingTypeId,
-        condition = request.Condition,
-        pictures = pictures
-    };
+        id = "BRAND",
+        value_name = "Genérica"
+    }
+};
+
+var payload = new
+{
+    title = request.Title,
+    category_id = request.CategoryId,
+    price = request.Price,
+    currency_id = request.CurrencyId,
+    available_quantity = request.Stock,
+    buying_mode = "buy_it_now",
+    listing_type_id = request.ListingTypeId,
+    condition = request.Condition,
+    pictures = pictures,
+    attributes = attributes
+};
 
     var client = _httpClientFactory.CreateClient();
 
