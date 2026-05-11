@@ -1,0 +1,112 @@
+@model MarketplaceSync.Web.ViewModels.PublishToMercadoLibreRequest
+
+@{
+    ViewData["Title"] = "Publicar en Mercado Libre";
+}
+
+<div class="container mt-4">
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-4">
+            <h1 class="fw-bold mb-3">Publicar en Mercado Libre</h1>
+            <p class="text-muted">
+                Completa los datos requeridos antes de enviar la publicación.
+            </p>
+
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div class="alert alert-danger">
+                    <div asp-validation-summary="All"></div>
+                </div>
+            }
+
+            <form asp-action="PublishToMercadoLibre" method="post">
+                @Html.AntiForgeryToken()
+
+                <input type="hidden" asp-for="ProductId" />
+
+                <div class="mb-3">
+                    <label asp-for="Title" class="form-label"></label>
+                    <input asp-for="Title" class="form-control" maxlength="60" />
+                    <small class="text-muted">Mercado Libre suele limitar títulos. Usa un título claro.</small>
+                    <span asp-validation-for="Title" class="text-danger"></span>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label asp-for="Price" class="form-label"></label>
+                        <input asp-for="Price" class="form-control" type="number" step="0.01" />
+                        <span asp-validation-for="Price" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label asp-for="Stock" class="form-label"></label>
+                        <input asp-for="Stock" class="form-control" type="number" />
+                        <span asp-validation-for="Stock" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label asp-for="CurrencyId" class="form-label"></label>
+                        <select asp-for="CurrencyId" class="form-select">
+                            <option value="MXN">MXN</option>
+                            <option value="USD">USD</option>
+                        </select>
+                        <span asp-validation-for="CurrencyId" class="text-danger"></span>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="CategoryId" class="form-label"></label>
+                    <input asp-for="CategoryId" class="form-control" placeholder="Ejemplo: MLM1747" />
+                    <small class="text-muted">
+                        Por ahora ingresa manualmente la categoría. Después agregamos predictor de categoría.
+                    </small>
+                    <span asp-validation-for="CategoryId" class="text-danger"></span>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label asp-for="Condition" class="form-label"></label>
+                        <select asp-for="Condition" class="form-select">
+                            <option value="new">Nuevo</option>
+                            <option value="used">Usado</option>
+                        </select>
+                        <span asp-validation-for="Condition" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label asp-for="ListingTypeId" class="form-label"></label>
+                        <select asp-for="ListingTypeId" class="form-select">
+                            <option value="gold_special">Clásica</option>
+                            <option value="gold_pro">Premium</option>
+                            <option value="free">Gratis</option>
+                        </select>
+                        <span asp-validation-for="ListingTypeId" class="text-danger"></span>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="PictureUrl" class="form-label"></label>
+                    <input asp-for="PictureUrl" class="form-control" />
+                    <span asp-validation-for="PictureUrl" class="text-danger"></span>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(Model.PictureUrl))
+                {
+                    <div class="mb-3">
+                        <img src="@Model.PictureUrl" style="max-width: 180px; border-radius: 8px;" />
+                    </div>
+                }
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-success">
+                        Publicar en Mercado Libre
+                    </button>
+
+                    <a asp-action="Index" class="btn btn-outline-secondary">
+                        Cancelar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

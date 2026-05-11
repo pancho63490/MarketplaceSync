@@ -73,3 +73,19 @@ VALUES ('20260511020436_InitialCreate', '8.0.11');
 
 COMMIT;
 
+START TRANSACTION;
+
+ALTER TABLE "MercadoLibreTokens" ALTER COLUMN "Scope" TYPE text;
+
+INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+VALUES ('20260511040032_UpdateMercadoLibreTokenScopeLength', '8.0.11');
+
+COMMIT;
+
+START TRANSACTION;
+
+INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+VALUES ('20260511040451_AddMercadoLibreFieldsToProducts', '8.0.11');
+
+COMMIT;
+

@@ -40,6 +40,7 @@
                                 <th>URL</th>
                                 <th>Status</th>
                                 <th>Creado</th>
+                                <th class="text-end">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -57,9 +58,28 @@
                                         </a>
                                     </td>
                                     <td>
-                                        <span class="badge bg-warning text-dark">@item.Status</span>
+                                        @if (item.Status == "Published")
+                                        {
+                                            <span class="badge bg-success">Publicado</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning text-dark">@item.Status</span>
+                                        }
                                     </td>
                                     <td>@item.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td class="text-end">
+                                        @if (!string.IsNullOrWhiteSpace(item.MercadoLibrePermalink))
+                                        {
+                                            <a href="@item.MercadoLibrePermalink" target="_blank" class="btn btn-sm btn-outline-success">
+                                                Ver ML
+                                            </a>
+                                        }
+
+                                        <a asp-action="PublishToMercadoLibre" asp-route-id="@item.Id" class="btn btn-sm btn-success">
+                                            Publicar ML
+                                        </a>
+                                    </td>
                                 </tr>
                             }
                         </tbody>

@@ -60,5 +60,24 @@ namespace MarketplaceSync.Web.Models
         public DateTime? UpdatedAt { get; set; }
 
         public List<ProductImage> Images { get; set; } = new();
+        public string? MercadoLibreItemId { get; set; }
+
+public string? MercadoLibreCategoryId { get; set; }
+
+public decimal? MercadoLibrePrice { get; set; }
+
+public int? MercadoLibreStock { get; set; }
+
+public string? MercadoLibreCurrencyId { get; set; } = "MXN";
+
+public string? MercadoLibreListingTypeId { get; set; } = "gold_special";
+
+public string? MercadoLibreCondition { get; set; } = "new";
+
+public string? MercadoLibreStatus { get; set; }
+
+public string? MercadoLibrePermalink { get; set; }
+
+public DateTime? MercadoLibrePublishedAt { get; set; }
     }
 }
