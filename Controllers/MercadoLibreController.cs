@@ -33,7 +33,32 @@ namespace MarketplaceSync.Web.Controllers
 
             return View(token);
         }
+[HttpGet]
+public async Task<IActionResult> CategoryPredictor(string title)
+{
+    if (string.IsNullOrWhiteSpace(title))
+        return BadRequest("Title is required.");
 
+    var token = await _context.MercadoLibreTokens
+        .OrderByDescending(x => x.CreatedAt)
+        .FirstOrDefaultAsync();
+
+    if (token == null || string.IsNullOrWhiteSpace(token.AccessToken))
+        return BadRequest("No Mercado Libre token found. Connect Mercado Libre first.");
+
+    var client = _httpClientFactory.CreateClient();
+
+    var url = $"https://api.mercadolibre.com/sites/MLM/domain_discovery/search?q={Uri.EscapeDataString(title)}&limit=5";
+
+    var request = new HttpRequestMessage(HttpMethod.Get, url);
+    request.Headers.Authorization =
+        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token.AccessToken);
+
+    var response = await client.SendAsync(request);
+    var content = await response.Content.ReadAsStringAsync();
+
+    return Content(content, "application/json");
+}
         [HttpGet]
         public IActionResult Connect()
         {
