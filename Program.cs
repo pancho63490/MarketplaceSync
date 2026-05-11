@@ -9,20 +9,23 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddScoped<MarketplaceDetectorService>();
 
-// Add services to the container.
 builder.Services.AddControllersWithViews();
 
 var app = builder.Build();
 
-// Apply database migrations automatically on startup.
-// This creates the tables in Render PostgreSQL if they do not exist.
-using (var scope = app.Services.CreateScope())
+try
 {
+    using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     dbContext.Database.Migrate();
 }
+catch (Exception ex)
+{
+    Console.WriteLine("ERROR APPLYING MIGRATIONS:");
+    Console.WriteLine(ex.ToString());
+    throw;
+}
 
-// Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
@@ -30,15 +33,14 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseStaticFiles();
+
 app.UseRouting();
 
 app.UseAuthorization();
 
-app.MapStaticAssets();
-
 app.MapControllerRoute(
     name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}")
-    .WithStaticAssets();
+    pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.Run();
