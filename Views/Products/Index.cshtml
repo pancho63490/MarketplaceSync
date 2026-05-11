@@ -1,0 +1,71 @@
+@model IEnumerable<MarketplaceSync.Web.Models.Product>
+
+@{
+    ViewData["Title"] = "Productos";
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="fw-bold mb-1">Productos</h1>
+            <p class="text-muted mb-0">Productos importados o creados como borrador.</p>
+        </div>
+
+        <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-primary">
+            + Agregar producto por link
+        </a>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            @if (!Model.Any())
+            {
+                <div class="text-center py-5">
+                    <h5 class="fw-bold">Todavía no hay productos</h5>
+                    <p class="text-muted">Agrega tu primer producto usando un link de Amazon, eBay o Mercado Libre.</p>
+                    <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-primary">
+                        Agregar producto
+                    </a>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Marketplace</th>
+                                <th>Source ID</th>
+                                <th>URL</th>
+                                <th>Status</th>
+                                <th>Creado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model)
+                            {
+                                <tr>
+                                    <td>@item.Id</td>
+                                    <td>
+                                        <span class="badge bg-dark">@item.SourceMarketplace</span>
+                                    </td>
+                                    <td>@(item.SourceProductId ?? "N/A")</td>
+                                    <td>
+                                        <a href="@item.SourceUrl" target="_blank" class="text-decoration-none">
+                                            Abrir link
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-warning text-dark">@item.Status</span>
+                                    </td>
+                                    <td>@item.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
