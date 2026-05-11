@@ -17,8 +17,7 @@ namespace MarketplaceSync.Web.Models
         [MaxLength(50)]
         public string? TokenType { get; set; }
 
-        [MaxLength(500)]
-        public string? Scope { get; set; }
+       public string? Scope { get; set; }
 
         public int? ExpiresIn { get; set; }
 
