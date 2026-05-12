@@ -1,6 +1,9 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+
+using System.Text.Json.Nodes;
+
 using MarketplaceSync.Web.Data;
 using MarketplaceSync.Web.Models;
 using MarketplaceSync.Web.Services;
@@ -43,6 +46,105 @@ namespace MarketplaceSync.Web.Controllers
 
             return View(products);
         }
+        private async Task<List<MercadoLibreAttributeInput>> GetRequiredAttributesAsync(string categoryId)
+{
+    var result = new List<MercadoLibreAttributeInput>();
+
+    var token = await _context.MercadoLibreTokens
+        .OrderByDescending(x => x.CreatedAt)
+        .FirstOrDefaultAsync();
+
+    if (token == null || string.IsNullOrWhiteSpace(token.AccessToken))
+        return result;
+
+    var client = _httpClientFactory.CreateClient();
+
+    var url = $"https://api.mercadolibre.com/categories/{Uri.EscapeDataString(categoryId)}/attributes";
+
+    var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
+    httpRequest.Headers.Authorization =
+        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token.AccessToken);
+
+    var response = await client.SendAsync(httpRequest);
+    var content = await response.Content.ReadAsStringAsync();
+
+    if (!response.IsSuccessStatusCode)
+        return result;
+
+    var json = JsonNode.Parse(content)?.AsArray();
+
+    if (json == null)
+        return result;
+
+    foreach (var node in json)
+    {
+        if (node == null)
+            continue;
+
+        var id = node["id"]?.GetValue<string>() ?? string.Empty;
+        var name = node["name"]?.GetValue<string>() ?? id;
+        var valueType = node["value_type"]?.GetValue<string>();
+
+        var required = node["tags"]?["required"]?.GetValue<bool>() == true;
+
+        if (!required)
+            continue;
+
+        var input = new MercadoLibreAttributeInput
+        {
+            Id = id,
+            Name = name,
+            Required = true,
+            ValueType = valueType
+        };
+
+        var values = node["values"]?.AsArray();
+
+        if (values != null)
+        {
+            foreach (var valueNode in values)
+            {
+                if (valueNode == null)
+                    continue;
+
+                var valueId = valueNode["id"]?.GetValue<string>();
+                var valueName = valueNode["name"]?.GetValue<string>();
+
+                if (!string.IsNullOrWhiteSpace(valueName))
+                {
+                    input.Values.Add(new MercadoLibreAttributeValueOption
+                    {
+                        Id = valueId,
+                        Name = valueName
+                    });
+                }
+            }
+        }
+
+        result.Add(input);
+    }
+
+    return result;
+}
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> LoadMercadoLibreAttributes(PublishToMercadoLibreRequest request)
+{
+    if (string.IsNullOrWhiteSpace(request.CategoryId))
+    {
+        ModelState.AddModelError(nameof(request.CategoryId), "Primero ingresa una categoría de Mercado Libre.");
+        return View("PublishToMercadoLibre", request);
+    }
+
+    request.Attributes = await GetRequiredAttributesAsync(request.CategoryId);
+
+    if (!request.Attributes.Any())
+    {
+        ModelState.AddModelError("", "No se encontraron atributos requeridos para esta categoría o no se pudo consultar Mercado Libre.");
+    }
+
+    return View("PublishToMercadoLibre", request);
+}
 [HttpGet]
 public async Task<IActionResult> PublishToMercadoLibre(int id)
 {
@@ -98,14 +200,15 @@ public async Task<IActionResult> PublishToMercadoLibre(PublishToMercadoLibreRequ
             source = request.PictureUrl
         });
     }
-var attributes = new List<object>
-{
-    new
+var attributes = request.Attributes
+    .Where(x => !string.IsNullOrWhiteSpace(x.Id) && !string.IsNullOrWhiteSpace(x.ValueName))
+    .Select(x => new
     {
-        id = "BRAND",
-        value_name = "Genérica"
-    }
-};
+        id = x.Id,
+        value_name = x.ValueName
+    })
+    .Cast<object>()
+    .ToList();
 
 var payload = new
 {

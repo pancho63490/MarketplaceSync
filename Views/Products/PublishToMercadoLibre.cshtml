@@ -98,10 +98,65 @@
                 }
 
                 <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-success">
-                        Publicar en Mercado Libre
-                    </button>
+                 @if (Model.Attributes != null && Model.Attributes.Any())
+{
+    <hr />
 
+    <h5 class="fw-bold mb-3">Atributos requeridos por Mercado Libre</h5>
+
+    @for (var i = 0; i < Model.Attributes.Count; i++)
+    {
+        <div class="mb-3">
+            <input type="hidden" asp-for="Attributes[i].Id" />
+            <input type="hidden" asp-for="Attributes[i].Name" />
+            <input type="hidden" asp-for="Attributes[i].Required" />
+            <input type="hidden" asp-for="Attributes[i].ValueType" />
+
+            <label class="form-label">
+                @Model.Attributes[i].Name
+                @if (Model.Attributes[i].Required)
+                {
+                    <span class="text-danger">*</span>
+                }
+            </label>
+
+            @if (Model.Attributes[i].Values != null && Model.Attributes[i].Values.Any())
+            {
+                <select asp-for="Attributes[i].ValueName" class="form-select">
+                    <option value="">Selecciona una opción</option>
+                    @foreach (var option in Model.Attributes[i].Values)
+                    {
+                        <option value="@option.Name">@option.Name</option>
+                    }
+                </select>
+            }
+            else
+            {
+                <input asp-for="Attributes[i].ValueName" class="form-control" />
+            }
+        </div>
+    }
+}
+
+<div class="d-flex gap-2">
+    <button type="submit"
+            asp-action="LoadMercadoLibreAttributes"
+            formmethod="post"
+            class="btn btn-outline-primary">
+        Cargar atributos
+    </button>
+
+    <button type="submit"
+            asp-action="PublishToMercadoLibre"
+            formmethod="post"
+            class="btn btn-success">
+        Publicar en Mercado Libre
+    </button>
+
+    <a asp-action="Index" class="btn btn-outline-secondary">
+        Cancelar
+    </a>
+</div>
                     <a asp-action="Index" class="btn btn-outline-secondary">
                         Cancelar
                     </a>

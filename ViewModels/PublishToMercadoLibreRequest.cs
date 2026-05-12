@@ -4,6 +4,7 @@ namespace MarketplaceSync.Web.ViewModels
 {
     public class PublishToMercadoLibreRequest
     {
+        public List<MercadoLibreAttributeInput> Attributes { get; set; } = new();
         public int ProductId { get; set; }
 
         [Required]

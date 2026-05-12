@@ -59,6 +59,32 @@ public async Task<IActionResult> CategoryPredictor(string title)
 
     return Content(content, "application/json");
 }
+[HttpGet]
+public async Task<IActionResult> CategoryAttributes(string categoryId)
+{
+    if (string.IsNullOrWhiteSpace(categoryId))
+        return BadRequest("CategoryId is required.");
+
+    var token = await _context.MercadoLibreTokens
+        .OrderByDescending(x => x.CreatedAt)
+        .FirstOrDefaultAsync();
+
+    if (token == null || string.IsNullOrWhiteSpace(token.AccessToken))
+        return BadRequest("No Mercado Libre token found. Connect Mercado Libre first.");
+
+    var client = _httpClientFactory.CreateClient();
+
+    var url = $"https://api.mercadolibre.com/categories/{Uri.EscapeDataString(categoryId)}/attributes";
+
+    var request = new HttpRequestMessage(HttpMethod.Get, url);
+    request.Headers.Authorization =
+        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token.AccessToken);
+
+    var response = await client.SendAsync(request);
+    var content = await response.Content.ReadAsStringAsync();
+
+    return Content(content, "application/json");
+}
         [HttpGet]
         public IActionResult Connect()
         {
