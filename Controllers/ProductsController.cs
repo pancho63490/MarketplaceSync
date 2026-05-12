@@ -130,6 +130,8 @@ namespace MarketplaceSync.Web.Controllers
 [ValidateAntiForgeryToken]
 public async Task<IActionResult> LoadMercadoLibreAttributes(PublishToMercadoLibreRequest request)
 {
+    ModelState.Clear();
+
     if (string.IsNullOrWhiteSpace(request.CategoryId))
     {
         ModelState.AddModelError(nameof(request.CategoryId), "Primero ingresa una categoría de Mercado Libre.");
