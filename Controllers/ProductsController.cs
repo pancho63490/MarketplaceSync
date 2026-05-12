@@ -1,7 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-
+using MarketplaceSync.Web.Services;
 using System.Text.Json.Nodes;
 
 using MarketplaceSync.Web.Data;
@@ -18,26 +18,20 @@ namespace MarketplaceSync.Web.Controllers
           private readonly AppDbContext _context;
 
     private readonly MarketplaceDetectorService _detector;
-
+private readonly ProductExtractorService _extractor;
     private readonly IHttpClientFactory _httpClientFactory;
 
-    public ProductsController(
-
-        AppDbContext context,
-
-        MarketplaceDetectorService detector,
-
-        IHttpClientFactory httpClientFactory)
-
-    {
-
-        _context = context;
-
-        _detector = detector;
-
-        _httpClientFactory = httpClientFactory;
-
-    }
+ public ProductsController(
+    AppDbContext context,
+    MarketplaceDetectorService detector,
+    ProductExtractorService extractor,
+    IHttpClientFactory httpClientFactory)
+{
+    _context = context;
+    _detector = detector;
+    _extractor = extractor;
+    _httpClientFactory = httpClientFactory;
+}
         public async Task<IActionResult> Index()
         {
             var products = await _context.Products
@@ -273,54 +267,55 @@ var payload = new
 
     return RedirectToAction(nameof(Index));
 }
-        [HttpGet]
-        public IActionResult CreateFromUrl()
-        {
-            return View(new CreateProductFromUrlViewModel());
-        }
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> CreateFromUrl(CreateProductFromUrlViewModel model)
-        {
-            if (!ModelState.IsValid)
-                return View(model);
-
-            var marketplace = _detector.DetectMarketplace(model.SourceUrl);
-            var sourceProductId = _detector.ExtractSourceProductId(model.SourceUrl);
-
-            if (marketplace == "UNKNOWN")
-            {
-                ModelState.AddModelError(nameof(model.SourceUrl), "No se pudo detectar el marketplace. Usa un link de Amazon, eBay o Mercado Libre.");
-                return View(model);
-            }
-
-            var product = new Product
-            {
-                SourceUrl = model.SourceUrl,
-                SourceMarketplace = marketplace,
-                SourceProductId = sourceProductId,
-                Status = "DRAFT",
-                CreatedAt = DateTime.UtcNow
-            };
-
-            _context.Products.Add(product);
-
-        _context.ImportLogs.Add(new ImportLog
+     
+public IActionResult CreateFromUrl()
 {
-    ProductId = null,
-    SourceUrl = model.SourceUrl,
-    Marketplace = marketplace,
-    Status = "DRAFT_CREATED",
-    Message = $"Producto creado como borrador. SourceProductId: {sourceProductId ?? "N/A"}",
-    CreatedAt = DateTime.UtcNow
-});
+    return View(new CreateProductFromUrlViewModel());
+}
 
-            await _context.SaveChangesAsync();
-
-            return RedirectToAction(nameof(Index));
-        }
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> CreateFromUrl(CreateProductFromUrlViewModel model)
+{
+    if (!ModelState.IsValid)
+    {
+        return View(model);
     }
-    
-    
+
+    if (string.IsNullOrWhiteSpace(model.SourceUrl))
+    {
+        ModelState.AddModelError(nameof(model.SourceUrl), "Ingresa un link válido de Amazon, eBay o Mercado Libre.");
+        return View(model);
+    }
+
+    var extracted = await _extractor.ExtractAsync(model.SourceUrl.Trim());
+
+    var product = new Product
+    {
+        SourceUrl = extracted.SourceUrl,
+        SourceMarketplace = extracted.SourceMarketplace,
+        SourceProductId = extracted.SourceProductId,
+
+        Title = extracted.Title,
+        Description = extracted.Description,
+        SourcePrice = extracted.SourcePrice,
+        SourceCurrency = extracted.SourceCurrency,
+        SourceStock = extracted.SourceStock,
+        ImageUrl = extracted.ImageUrl,
+        Brand = extracted.Brand,
+        Model = extracted.Model,
+
+        SourceStatus = extracted.SourceStatus,
+        LastSourceCheckAt = DateTime.UtcNow,
+
+        Status = "Draft",
+        CreatedAt = DateTime.UtcNow
+    };
+
+    _context.Products.Add(product);
+    await _context.SaveChangesAsync();
+
+    return RedirectToAction(nameof(Index));
+}
+    }
 }
