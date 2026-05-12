@@ -6,10 +6,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-
+builder.Services.AddHttpClient();
 builder.Services.AddScoped<MarketplaceDetectorService>();
 builder.Services.AddScoped<ProductExtractorService>();
-builder.Services.AddHttpClient();
+builder.Services.AddScoped<EbayApiService>();
 
 builder.Services.AddControllersWithViews();
 
