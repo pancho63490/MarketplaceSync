@@ -32,14 +32,7 @@ private readonly ProductExtractorService _extractor;
     _extractor = extractor;
     _httpClientFactory = httpClientFactory;
 }
-        public async Task<IActionResult> Index()
-        {
-            var products = await _context.Products
-                .OrderByDescending(x => x.CreatedAt)
-                .ToListAsync();
-
-            return View(products);
-        }
+        
         private async Task<List<MercadoLibreAttributeInput>> GetRequiredAttributesAsync(string categoryId)
 {
     var result = new List<MercadoLibreAttributeInput>();
@@ -140,6 +133,76 @@ public async Task<IActionResult> LoadMercadoLibreAttributes(PublishToMercadoLibr
     }
 
     return View("PublishToMercadoLibre", request);
+}
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> RefreshSource(int id)
+{
+    var product = await _context.Products
+        .FirstOrDefaultAsync(x => x.Id == id);
+
+    if (product == null)
+    {
+        return NotFound();
+    }
+
+    if (string.IsNullOrWhiteSpace(product.SourceUrl))
+    {
+        TempData["Error"] = "El producto no tiene URL de origen.";
+        return RedirectToAction(nameof(Edit), new { id });
+    }
+
+    try
+    {
+        var extracted = await _extractor.ExtractAsync(product.SourceUrl);
+
+        product.Title = !string.IsNullOrWhiteSpace(extracted.Title)
+            ? extracted.Title
+            : product.Title;
+
+        product.Description = !string.IsNullOrWhiteSpace(extracted.Description)
+            ? extracted.Description
+            : product.Description;
+
+        product.Brand = !string.IsNullOrWhiteSpace(extracted.Brand)
+            ? extracted.Brand
+            : product.Brand;
+
+        product.Model = !string.IsNullOrWhiteSpace(extracted.Model)
+            ? extracted.Model
+            : product.Model;
+
+        product.ImageUrl = !string.IsNullOrWhiteSpace(extracted.ImageUrl)
+            ? extracted.ImageUrl
+            : product.ImageUrl;
+
+        product.SourcePrice = extracted.SourcePrice ?? product.SourcePrice;
+        product.SourceCurrency = extracted.SourceCurrency ?? product.SourceCurrency;
+        product.SourceStock = extracted.SourceStock ?? product.SourceStock;
+        product.SourceStatus = extracted.SourceStatus ?? product.SourceStatus;
+
+        product.LastSourceCheckAt = DateTime.UtcNow;
+        product.UpdatedAt = DateTime.UtcNow;
+
+        if (product.SourceStock.HasValue && product.SourceStock.Value <= 0)
+        {
+            product.Status = "OutOfStock";
+        }
+        else
+        {
+            product.Status = "NeedsReview";
+        }
+
+        await _context.SaveChangesAsync();
+
+        TempData["Success"] = "Información de origen actualizada correctamente.";
+    }
+    catch (Exception ex)
+    {
+        TempData["Error"] = $"Error al refrescar producto: {ex.Message}";
+    }
+
+    return RedirectToAction(nameof(Edit), new { id });
 }
 [HttpGet]
 public async Task<IActionResult> PublishToMercadoLibre(int id)
@@ -272,7 +335,128 @@ public IActionResult CreateFromUrl()
 {
     return View(new CreateProductFromUrlViewModel());
 }
+// GET: /Products
+public async Task<IActionResult> Index()
+{
+    var products = await _context.Products
+        .OrderByDescending(x => x.CreatedAt)
+        .ToListAsync();
 
+    return View(products);
+}
+
+// GET: /Products/Edit/5
+[HttpGet]
+public async Task<IActionResult> Edit(int id)
+{
+    var product = await _context.Products
+        .FirstOrDefaultAsync(x => x.Id == id);
+
+    if (product == null)
+    {
+        return NotFound();
+    }
+
+    return View(product);
+}
+
+// POST: /Products/Edit/5
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> Edit(int id, Product model)
+{
+    if (id != model.Id)
+    {
+        return BadRequest();
+    }
+
+    var product = await _context.Products
+        .FirstOrDefaultAsync(x => x.Id == id);
+
+    if (product == null)
+    {
+        return NotFound();
+    }
+
+    if (!ModelState.IsValid)
+    {
+        return View(model);
+    }
+
+    product.Title = model.Title;
+    product.Description = model.Description;
+    product.Brand = model.Brand;
+    product.Model = model.Model;
+    product.ImageUrl = model.ImageUrl;
+
+    product.SourcePrice = model.SourcePrice;
+    product.SourceCurrency = model.SourceCurrency;
+    product.SourceStock = model.SourceStock;
+    product.SourceStatus = model.SourceStatus;
+    product.SourceAvailabilityText = model.SourceAvailabilityText;
+
+    product.MercadoLibreCategoryId = model.MercadoLibreCategoryId;
+    product.MercadoLibrePrice = model.MercadoLibrePrice;
+    product.MercadoLibreStock = model.MercadoLibreStock;
+    product.MercadoLibreCurrencyId = model.MercadoLibreCurrencyId;
+    product.MercadoLibreListingTypeId = model.MercadoLibreListingTypeId;
+    product.MercadoLibreCondition = model.MercadoLibreCondition;
+
+    product.Status = model.Status;
+    product.UpdatedAt = DateTime.UtcNow;
+
+    await _context.SaveChangesAsync();
+
+    TempData["Success"] = "Producto actualizado correctamente.";
+
+    return RedirectToAction(nameof(Edit), new { id = product.Id });
+}
+
+// POST: /Products/PrepareForMercadoLibre/5
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> PrepareForMercadoLibre(int id)
+{
+    var product = await _context.Products
+        .FirstOrDefaultAsync(x => x.Id == id);
+
+    if (product == null)
+    {
+        return NotFound();
+    }
+
+    product.MercadoLibreCurrencyId = "MXN";
+    product.MercadoLibreCondition = "new";
+    product.MercadoLibreListingTypeId = "gold_special";
+
+    if (product.SourceStock.HasValue)
+    {
+        product.MercadoLibreStock = product.SourceStock.Value;
+    }
+
+    if (product.SourcePrice.HasValue)
+    {
+        if (string.Equals(product.SourceCurrency, "USD", StringComparison.OrdinalIgnoreCase))
+        {
+            // Temporal: tipo de cambio fijo + margen
+            product.MercadoLibrePrice = Math.Round(product.SourcePrice.Value * 18.50m * 1.25m, 2);
+        }
+        else
+        {
+            // Si ya viene en MXN, solo agrega margen
+            product.MercadoLibrePrice = Math.Round(product.SourcePrice.Value * 1.25m, 2);
+        }
+    }
+
+    product.Status = "NeedsReview";
+    product.UpdatedAt = DateTime.UtcNow;
+
+    await _context.SaveChangesAsync();
+
+    TempData["Success"] = "Producto preparado para Mercado Libre. Revisa categoría, precio, stock y atributos.";
+
+    return RedirectToAction(nameof(Edit), new { id = product.Id });
+}
 [HttpPost]
 [ValidateAntiForgeryToken]
 public async Task<IActionResult> CreateFromUrl(CreateProductFromUrlViewModel model)
