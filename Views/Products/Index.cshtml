@@ -252,30 +252,37 @@
                                             }
                                         </td>
 
-                                        <td class="text-end">
-                                            <div class="d-flex flex-column gap-2 align-items-end">
+                                <td class="text-end">
+    <div class="d-flex flex-column gap-2 align-items-end">
 
-                                                <form asp-controller="Products"
-                                                      asp-action="RefreshProduct"
-                                                      asp-route-id="@item.Id"
-                                                      method="post"
-                                                      class="d-inline">
-                                                    @Html.AntiForgeryToken()
+        <a asp-controller="Products"
+           asp-action="Edit"
+           asp-route-id="@item.Id"
+           class="btn btn-outline-secondary btn-sm action-btn">
+            Editar
+        </a>
 
-                                                    <button type="submit" class="btn btn-outline-primary btn-sm action-btn">
-                                                        Actualizar
-                                                    </button>
-                                                </form>
+        <form asp-controller="Products"
+              asp-action="RefreshProduct"
+              asp-route-id="@item.Id"
+              method="post"
+              class="d-inline">
+            @Html.AntiForgeryToken()
 
-                                                <a asp-controller="Products"
-                                                   asp-action="PublishToMercadoLibre"
-                                                   asp-route-id="@item.Id"
-                                                   class="btn btn-success btn-sm action-btn">
-                                                    Publicar ML
-                                                </a>
+            <button type="submit" class="btn btn-outline-primary btn-sm action-btn">
+                Actualizar info
+            </button>
+        </form>
 
-                                            </div>
-                                        </td>
+        <a asp-controller="Products"
+           asp-action="PublishToMercadoLibre"
+           asp-route-id="@item.Id"
+           class="btn btn-success btn-sm action-btn">
+            Publicar ML
+        </a>
+
+    </div>
+</td>
                                     </tr>
                                 }
                             </tbody>
