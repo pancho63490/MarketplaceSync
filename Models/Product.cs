@@ -29,7 +29,7 @@ namespace MarketplaceSync.Web.Models
 
         [MaxLength(20)]
         public string? SourceCurrency { get; set; }
-
+public string? SourceAvailabilityText { get; set; }
         public int? SourceStock { get; set; }
 
         [MaxLength(1000)]

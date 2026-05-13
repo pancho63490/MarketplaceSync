@@ -5,8 +5,21 @@ using MarketplaceSync.Web.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        npgsqlOptions =>
+        {
+            npgsqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorCodesToAdd: null
+            );
+        }
+    )
+);
+
 builder.Services.AddHttpClient();
+
 builder.Services.AddScoped<MarketplaceDetectorService>();
 builder.Services.AddScoped<ProductExtractorService>();
 builder.Services.AddScoped<EbayApiService>();
@@ -36,12 +49,17 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
 app.UseStaticFiles();
 
 app.UseRouting();
 
 app.UseAuthorization();
 
+// API Controllers: /api/import/product
+app.MapControllers();
+
+// MVC Controllers: /Products, /MercadoLibre, /Home, etc.
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
