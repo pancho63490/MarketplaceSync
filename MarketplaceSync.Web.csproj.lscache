@@ -84,6 +84,8 @@ Migrations/
  20260515031014_AddProductErrorTracking.Designer.cs
  20260515031410_AddProductErrorTrackingV2.cs
  20260515031410_AddProductErrorTrackingV2.Designer.cs
+ 20260515043134_AddProductRefreshErrorFields.cs
+ 20260515043134_AddProductRefreshErrorFields.Designer.cs
  AppDbContextModelSnapshot.cs
 Models/
  ErrorViewModel.cs

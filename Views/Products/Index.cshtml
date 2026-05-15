@@ -338,17 +338,19 @@
 </a>
 
 
-                                            <form asp-controller="Products"
-                                                  asp-action="Delete"
-                                                  method="post"
-                                                  class="d-inline"
-                                                  onsubmit="return confirm('¿Seguro que deseas borrar este producto? Esta acción no elimina la publicación de Mercado Libre, solo borra el registro local.');">
-                                                @Html.AntiForgeryToken()
-                                                <input type="hidden" name="id" value="@item.Id" />
-                                                <button type="submit" class="btn btn-sm btn-outline-danger">
-                                                    Borrar
-                                                </button>
-                                            </form>
+                                      <form asp-controller="Products"
+      asp-action="DeleteConfirmed"
+      asp-route-id="@item.Id"
+      method="post"
+      class="d-inline"
+      onsubmit="return confirm('¿Seguro que deseas borrar este producto? Esta acción no elimina la publicación de Mercado Libre, solo borra el registro local.');">
+    @Html.AntiForgeryToken()
+
+    <button type="submit" class="btn btn-sm btn-outline-danger">
+        Borrar
+    </button>
+</form>
+                                            
 
                                         </div>
                                     </td>

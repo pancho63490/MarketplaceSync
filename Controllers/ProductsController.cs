@@ -246,8 +246,7 @@ public async Task<IActionResult> RefreshProduct(int id)
 [ValidateAntiForgeryToken]
 public async Task<IActionResult> RefreshSource(int id)
 {
-    var product = await _context.Products
-        .FirstOrDefaultAsync(x => x.Id == id);
+    var product = await _context.Products.FirstOrDefaultAsync(x => x.Id == id);
 
     if (product == null)
     {
@@ -257,82 +256,61 @@ public async Task<IActionResult> RefreshSource(int id)
 
     if (string.IsNullOrWhiteSpace(product.SourceUrl))
     {
-        TempData["Error"] = "El producto no tiene URL de origen para actualizar.";
-        return RedirectToAction(nameof(Edit), new { id = product.Id });
+        TempData["Error"] = "El producto no tiene URL de origen.";
+        return RedirectToAction(nameof(Index));
     }
 
     try
     {
         var extracted = await _extractor.ExtractAsync(product.SourceUrl.Trim());
 
-        product.SourceMarketplace = !string.IsNullOrWhiteSpace(extracted.SourceMarketplace)
-            ? extracted.SourceMarketplace
-            : product.SourceMarketplace;
+        product.SourceMarketplace = extracted.SourceMarketplace ?? product.SourceMarketplace;
+        product.SourceProductId = extracted.SourceProductId ?? product.SourceProductId;
 
-        product.SourceProductId = !string.IsNullOrWhiteSpace(extracted.SourceProductId)
-            ? extracted.SourceProductId
-            : product.SourceProductId;
-
-        product.Title = !string.IsNullOrWhiteSpace(extracted.Title)
-            ? extracted.Title
-            : product.Title;
-
-        product.Description = !string.IsNullOrWhiteSpace(extracted.Description)
-            ? extracted.Description
-            : product.Description;
-
+        product.Title = extracted.Title ?? product.Title;
+        product.Description = extracted.Description ?? product.Description;
         product.SourcePrice = extracted.SourcePrice ?? product.SourcePrice;
-
-        product.SourceCurrency = !string.IsNullOrWhiteSpace(extracted.SourceCurrency)
-            ? extracted.SourceCurrency
-            : product.SourceCurrency;
-
+        product.SourceCurrency = extracted.SourceCurrency ?? product.SourceCurrency;
         product.SourceStock = extracted.SourceStock ?? product.SourceStock;
+        product.SourceAvailabilityText = extracted.SourceAvailabilityText ?? product.SourceAvailabilityText;
 
-        product.SourceAvailabilityText = !string.IsNullOrWhiteSpace(extracted.SourceAvailabilityText)
-            ? extracted.SourceAvailabilityText
-            : product.SourceAvailabilityText;
+        product.ImageUrl = extracted.ImageUrl ?? product.ImageUrl;
+        product.Brand = extracted.Brand ?? product.Brand;
+        product.Model = extracted.Model ?? product.Model;
 
-        product.ImageUrl = !string.IsNullOrWhiteSpace(extracted.ImageUrl)
-            ? extracted.ImageUrl
-            : product.ImageUrl;
-
-        product.Brand = !string.IsNullOrWhiteSpace(extracted.Brand)
-            ? extracted.Brand
-            : product.Brand;
-
-        product.Model = !string.IsNullOrWhiteSpace(extracted.Model)
-            ? extracted.Model
-            : product.Model;
-
-        product.SourceStatus = !string.IsNullOrWhiteSpace(extracted.SourceStatus)
-            ? extracted.SourceStatus
-            : "Updated";
-
+        product.SourceStatus = extracted.SourceStatus ?? "Updated";
         product.LastSourceCheckAt = DateTime.UtcNow;
         product.UpdatedAt = DateTime.UtcNow;
 
+        product.LastErrorAt = null;
+        product.LastErrorMessage = null;
+
         if (product.SourceStock.HasValue && product.SourceStock.Value <= 0)
-        {
             product.Status = "OutOfStock";
-        }
         else
-        {
-            product.Status = "NeedsReview";
-        }
+            product.Status = "Updated";
 
         await _context.SaveChangesAsync();
 
-        TempData["Success"] = "Información del producto actualizada correctamente.";
+        TempData["Success"] = "Producto actualizado correctamente.";
     }
     catch (Exception ex)
     {
-        TempData["Error"] = $"Error al actualizar información del producto: {ex.Message}";
+        product.LastErrorAt = DateTime.UtcNow;
+        product.LastErrorMessage = ex.Message.Length > 2000
+            ? ex.Message.Substring(0, 2000)
+            : ex.Message;
+
+        product.SourceStatus = "RefreshError";
+        product.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        TempData["Error"] = $"Error al actualizar producto: {ex.Message}";
     }
 
-    return RedirectToAction(nameof(Edit), new { id = product.Id });
-}
-// GET: /Products/Delete/5
+    return RedirectToAction(nameof(Index));
+}// GET: /Products/Delete/5
 [HttpGet]
 public async Task<IActionResult> Delete(int id)
 {
@@ -357,7 +335,7 @@ public async Task<IActionResult> RefreshAllSourceInfo()
 
     if (!products.Any())
     {
-        TempData["Error"] = "No hay productos para actualizar.";
+        TempData["Error"] = "No hay productos con URL de origen para actualizar.";
         return RedirectToAction(nameof(Index));
     }
 
@@ -368,27 +346,46 @@ public async Task<IActionResult> RefreshAllSourceInfo()
     {
         try
         {
-            var extracted = await _extractor.ExtractAsync(product.SourceUrl);
+            var extracted = await _extractor.ExtractAsync(product.SourceUrl.Trim());
 
-            product.SourceMarketplace = extracted.SourceMarketplace;
-            product.SourceProductId = extracted.SourceProductId;
-            product.Title = extracted.Title;
-            product.Description = extracted.Description;
-            product.SourcePrice = extracted.SourcePrice;
-            product.SourceCurrency = extracted.SourceCurrency;
-            product.SourceStock = extracted.SourceStock;
-            product.SourceAvailabilityText = extracted.SourceAvailabilityText;
-            product.ImageUrl = extracted.ImageUrl;
-            product.Brand = extracted.Brand;
-            product.Model = extracted.Model;
-            product.SourceStatus = extracted.SourceStatus;
+            product.SourceMarketplace = extracted.SourceMarketplace ?? product.SourceMarketplace;
+            product.SourceProductId = extracted.SourceProductId ?? product.SourceProductId;
+
+            product.Title = extracted.Title ?? product.Title;
+            product.Description = extracted.Description ?? product.Description;
+            product.SourcePrice = extracted.SourcePrice ?? product.SourcePrice;
+            product.SourceCurrency = extracted.SourceCurrency ?? product.SourceCurrency;
+            product.SourceStock = extracted.SourceStock ?? product.SourceStock;
+            product.SourceAvailabilityText = extracted.SourceAvailabilityText ?? product.SourceAvailabilityText;
+
+            product.ImageUrl = extracted.ImageUrl ?? product.ImageUrl;
+            product.Brand = extracted.Brand ?? product.Brand;
+            product.Model = extracted.Model ?? product.Model;
+
+            product.SourceStatus = extracted.SourceStatus ?? "Updated";
             product.LastSourceCheckAt = DateTime.UtcNow;
             product.UpdatedAt = DateTime.UtcNow;
 
+            product.LastErrorAt = null;
+            product.LastErrorMessage = null;
+
+            if (product.SourceStock.HasValue && product.SourceStock.Value <= 0)
+                product.Status = "OutOfStock";
+            else
+                product.Status = "Updated";
+
             updated++;
         }
-        catch
+        catch (Exception ex)
         {
+            product.LastErrorAt = DateTime.UtcNow;
+            product.LastErrorMessage = ex.Message.Length > 2000
+                ? ex.Message.Substring(0, 2000)
+                : ex.Message;
+
+            product.SourceStatus = "RefreshError";
+            product.UpdatedAt = DateTime.UtcNow;
+
             failed++;
         }
     }
