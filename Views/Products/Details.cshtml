@@ -1,0 +1,398 @@
+@model MarketplaceSync.Web.Models.Product
+
+@{
+    ViewData["Title"] = "Detalle del producto";
+}
+
+<div class="container-fluid px-4 py-4">
+
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+        <div>
+            <p class="text-uppercase text-muted small fw-semibold mb-1">MarketplaceSync</p>
+            <h1 class="fw-bold mb-1">Detalle del producto</h1>
+            <p class="text-muted mb-0">
+                Revisa la información extraída, datos de Mercado Libre y errores del producto.
+            </p>
+        </div>
+
+        <div class="d-flex gap-2 flex-wrap">
+            <a asp-controller="Products"
+               asp-action="Index"
+               class="btn btn-outline-secondary">
+                Volver
+            </a>
+
+            <a asp-controller="Products"
+               asp-action="Edit"
+               asp-route-id="@Model.Id"
+               class="btn btn-outline-primary">
+                Editar
+            </a>
+
+            <form asp-controller="Products"
+                  asp-action="RefreshProduct"
+                  asp-route-id="@Model.Id"
+                  method="post">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-primary">
+                    Actualizar info
+                </button>
+            </form>
+
+            <a asp-controller="Products"
+               asp-action="PublishToMercadoLibre"
+               asp-route-id="@Model.Id"
+               class="btn btn-success">
+                Publicar ML
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success shadow-sm">
+            @TempData["Success"]
+        </div>
+    }
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger shadow-sm">
+            @TempData["Error"]
+        </div>
+    }
+
+    <div class="row g-4">
+
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm detail-card">
+                <div class="card-body">
+
+                    @if (!string.IsNullOrWhiteSpace(Model.ImageUrl))
+                    {
+                        <img src="@Model.ImageUrl"
+                             alt="@Model.Title"
+                             class="product-detail-img mb-3" />
+                    }
+                    else
+                    {
+                        <div class="product-detail-placeholder mb-3">
+                            Sin imagen
+                        </div>
+                    }
+
+                    <h4 class="fw-bold">
+                        @(string.IsNullOrWhiteSpace(Model.Title) ? "Sin título" : Model.Title)
+                    </h4>
+
+                    <p class="text-muted mb-3">
+                        @(string.IsNullOrWhiteSpace(Model.Description) ? "Sin descripción." : Model.Description)
+                    </p>
+
+                    <div class="d-flex gap-2 flex-wrap mb-3">
+                        <span class="badge bg-dark">
+                            @(Model.SourceMarketplace ?? "Unknown")
+                        </span>
+
+                        <span class="badge bg-warning text-dark">
+                            @(Model.Status ?? "Draft")
+                        </span>
+
+                        @if (!string.IsNullOrWhiteSpace(Model.MercadoLibreItemId))
+                        {
+                            <span class="badge bg-success">
+                                Publicado ML
+                            </span>
+                        }
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(Model.SourceUrl))
+                    {
+                        <a href="@Model.SourceUrl"
+                           target="_blank"
+                           class="btn btn-outline-dark w-100">
+                            Abrir producto original
+                        </a>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(Model.MercadoLibrePermalink))
+                    {
+                        <a href="@Model.MercadoLibrePermalink"
+                           target="_blank"
+                           class="btn btn-outline-success w-100 mt-2">
+                            Abrir publicación ML
+                        </a>
+                    }
+
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+
+            <div class="card border-0 shadow-sm detail-card mb-4">
+                <div class="card-header bg-white border-0 pt-4 px-4">
+                    <h5 class="fw-bold mb-0">Información fuente</h5>
+                </div>
+
+                <div class="card-body px-4">
+                    <div class="row g-3">
+
+                        <div class="col-md-6">
+                            <div class="info-box">
+                                <span>Marketplace</span>
+                                <strong>@(Model.SourceMarketplace ?? "N/A")</strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="info-box">
+                                <span>Source Product ID</span>
+                                <strong>@(Model.SourceProductId ?? "N/A")</strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="info-box">
+                                <span>Precio fuente</span>
+                                <strong>
+                                    @(Model.SourcePrice.HasValue ? Model.SourcePrice.Value.ToString("C") : "Sin precio")
+                                </strong>
+                                <small>@(Model.SourceCurrency ?? "MXN")</small>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="info-box">
+                                <span>Stock fuente</span>
+                                <strong>
+                                    @(Model.SourceStock.HasValue ? Model.SourceStock.ToString() : "No detectado")
+                                </strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="info-box">
+                                <span>Disponibilidad</span>
+                                <strong>@(Model.SourceAvailabilityText ?? Model.SourceStatus ?? "N/A")</strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="info-box">
+                                <span>Marca</span>
+                                <strong>@(Model.Brand ?? "N/A")</strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="info-box">
+                                <span>Modelo</span>
+                                <strong>@(Model.Model ?? "N/A")</strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="info-box">
+                                <span>Última revisión fuente</span>
+                                <strong>
+                                    @(Model.LastSourceCheckAt.HasValue
+                                                                        ? Model.LastSourceCheckAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                                                        : "Nunca")
+                                </strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="info-box">
+                                <span>Creado</span>
+                                <strong>@Model.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</strong>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm detail-card mb-4">
+                <div class="card-header bg-white border-0 pt-4 px-4">
+                    <h5 class="fw-bold mb-0">Datos Mercado Libre</h5>
+                </div>
+
+                <div class="card-body px-4">
+                    <div class="row g-3">
+
+                        <div class="col-md-4">
+                            <div class="info-box">
+                                <span>ML Item ID</span>
+                                <strong>@(Model.MercadoLibreItemId ?? "No publicado")</strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="info-box">
+                                <span>Categoría ML</span>
+                                <strong>@(Model.MercadoLibreCategoryId ?? "N/A")</strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="info-box">
+                                <span>Estado ML</span>
+                                <strong>@(Model.MercadoLibreStatus ?? "N/A")</strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="info-box">
+                                <span>Precio ML</span>
+                                <strong>
+                                    @(Model.MercadoLibrePrice.HasValue ? Model.MercadoLibrePrice.Value.ToString("C") : "N/A")
+                                </strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="info-box">
+                                <span>Stock ML</span>
+                                <strong>
+                                    @(Model.MercadoLibreStock.HasValue ? Model.MercadoLibreStock.ToString() : "N/A")
+                                </strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="info-box">
+                                <span>Moneda</span>
+                                <strong>@(Model.MercadoLibreCurrencyId ?? "MXN")</strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="info-box">
+                                <span>Tipo publicación</span>
+                                <strong>@(Model.MercadoLibreListingTypeId ?? "N/A")</strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="info-box">
+                                <span>Condición</span>
+                                <strong>@(Model.MercadoLibreCondition ?? "new")</strong>
+                            </div>
+                        </div>
+
+                        <div class="col-md-12">
+                            <div class="info-box">
+                                <span>Publicado en ML</span>
+                                <strong>
+                                    @(Model.MercadoLibrePublishedAt.HasValue
+                                                                        ? Model.MercadoLibrePublishedAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                                                        : "No publicado")
+                                </strong>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm detail-card">
+                <div class="card-header bg-white border-0 pt-4 px-4">
+                    <h5 class="fw-bold mb-0">Último error registrado</h5>
+                </div>
+
+                <div class="card-body px-4">
+                    @if (string.IsNullOrWhiteSpace(Model.LastErrorMessage))
+                    {
+                        <div class="alert alert-success mb-0">
+                            No hay errores registrados para este producto.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-danger">
+                            <div class="fw-bold mb-2">
+                                @(Model.LastErrorAt.HasValue
+                                                                    ? Model.LastErrorAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                                                    : "Fecha no disponible")
+                            </div>
+
+                            <pre class="error-pre mb-0">@Model.LastErrorMessage</pre>
+                        </div>
+                    }
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<style>
+    .detail-card {
+        border-radius: 18px;
+    }
+
+    .product-detail-img {
+        width: 100%;
+        max-height: 360px;
+        object-fit: contain;
+        border-radius: 18px;
+        border: 1px solid #e5e7eb;
+        background: #fff;
+    }
+
+    .product-detail-placeholder {
+        width: 100%;
+        height: 260px;
+        border-radius: 18px;
+        border: 1px dashed #cbd5e1;
+        background: #f8fafc;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #94a3b8;
+        font-weight: 700;
+    }
+
+    .info-box {
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 16px;
+        min-height: 88px;
+    }
+
+    .info-box span {
+        display: block;
+        color: #64748b;
+        font-size: 0.8rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 6px;
+    }
+
+    .info-box strong {
+        display: block;
+        color: #111827;
+        font-size: 1rem;
+        word-break: break-word;
+    }
+
+    .info-box small {
+        color: #64748b;
+    }
+
+    .error-pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 0.85rem;
+        background: transparent;
+        border: 0;
+        padding: 0;
+        color: #842029;
+    }
+</style>

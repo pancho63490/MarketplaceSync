@@ -29,8 +29,11 @@ namespace MarketplaceSync.Web.Models
 
         [MaxLength(20)]
         public string? SourceCurrency { get; set; }
-public string? SourceAvailabilityText { get; set; }
+
         public int? SourceStock { get; set; }
+
+        [MaxLength(100)]
+        public string? SourceAvailabilityText { get; set; }
 
         [MaxLength(1000)]
         public string? ImageUrl { get; set; }
@@ -56,6 +59,14 @@ public string? SourceAvailabilityText { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public DateTime? UpdatedAt { get; set; }
+
+        // =========================
+        // Control de errores
+        // =========================
+
+        public string? LastErrorMessage { get; set; }
+
+        public DateTime? LastErrorAt { get; set; }
 
         // =========================
         // Datos de publicación en Mercado Libre
@@ -87,5 +98,6 @@ public string? SourceAvailabilityText { get; set; }
         public string? MercadoLibrePermalink { get; set; }
 
         public DateTime? MercadoLibrePublishedAt { get; set; }
+        
     }
 }

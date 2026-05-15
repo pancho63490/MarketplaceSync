@@ -15,9 +15,9 @@ namespace MarketplaceSync.Web.ViewModels
         public decimal? SourcePrice { get; set; }
 
         public string? SourceCurrency { get; set; }
-
+        public DateTime? LastSourceCheckAt { get; set; }
         public int? SourceStock { get; set; }
-
+public string? SourceAvailabilityText { get; set; }
         public string? ImageUrl { get; set; }
 
         public string? SourceStatus { get; set; }

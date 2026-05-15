@@ -1,0 +1,149 @@
+@model MarketplaceSync.Web.Models.Product
+
+@{
+    ViewData["Title"] = "Eliminar producto";
+}
+
+<div class="container-fluid px-4 py-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <div class="text-uppercase text-muted fw-bold small mb-2">MarketplaceSync</div>
+            <h1 class="fw-bold mb-1">Eliminar producto</h1>
+            <p class="text-muted mb-0">
+                Confirma si deseas eliminar este producto del sistema.
+            </p>
+        </div>
+
+        <a asp-controller="Products" asp-action="Details" asp-route-id="@Model.Id" class="btn btn-outline-secondary">
+            Volver
+        </a>
+    </div>
+
+    <div class="alert alert-danger shadow-sm">
+        <h5 class="fw-bold mb-2">¿Seguro que deseas borrar este producto?</h5>
+        <p class="mb-0">
+            Esta acción eliminará el registro local de MarketplaceSync. 
+            No elimina automáticamente la publicación de Mercado Libre si ya fue publicada.
+        </p>
+    </div>
+
+    <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-body p-4">
+
+            <div class="row g-4">
+
+                <div class="col-md-4">
+                    <div class="border rounded-4 p-3 h-100">
+                        @if (!string.IsNullOrWhiteSpace(Model.ImageUrl))
+                        {
+                            <img src="@Model.ImageUrl"
+                                 alt="@Model.Title"
+                                 class="img-fluid rounded-3 mb-3"
+                                 style="max-height: 240px; object-fit: contain; width: 100%;" />
+                        }
+                        else
+                        {
+                            <div class="bg-light rounded-3 d-flex align-items-center justify-content-center mb-3"
+                                 style="height: 220px;">
+                                <span class="text-muted">Sin imagen</span>
+                            </div>
+                        }
+
+                        <h4 class="fw-bold">@(!string.IsNullOrWhiteSpace(Model.Title) ? Model.Title : "Sin título")</h4>
+
+                        <div class="d-flex gap-2 mt-3">
+                            <span class="badge bg-dark">@Model.SourceMarketplace</span>
+                            <span class="badge bg-warning text-dark">@Model.Status</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-8">
+                    <div class="row g-3">
+
+                        <div class="col-md-6">
+                            <div class="bg-light rounded-4 p-3">
+                                <div class="text-muted small fw-bold text-uppercase">ID</div>
+                                <div class="fs-5 fw-bold">@Model.Id</div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="bg-light rounded-4 p-3">
+                                <div class="text-muted small fw-bold text-uppercase">Marketplace</div>
+                                <div class="fs-5 fw-bold">@Model.SourceMarketplace</div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="bg-light rounded-4 p-3">
+                                <div class="text-muted small fw-bold text-uppercase">Source Product ID</div>
+                                <div class="fs-5 fw-bold">@(Model.SourceProductId ?? "N/A")</div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="bg-light rounded-4 p-3">
+                                <div class="text-muted small fw-bold text-uppercase">Precio fuente</div>
+                                <div class="fs-5 fw-bold">
+                                    @(Model.SourcePrice.HasValue ? Model.SourcePrice.Value.ToString("C") : "N/A")
+                                </div>
+                                <div class="text-muted">@Model.SourceCurrency</div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="bg-light rounded-4 p-3">
+                                <div class="text-muted small fw-bold text-uppercase">Stock fuente</div>
+                                <div class="fs-5 fw-bold">@(Model.SourceStock?.ToString() ?? "N/A")</div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="bg-light rounded-4 p-3">
+                                <div class="text-muted small fw-bold text-uppercase">Mercado Libre Item</div>
+                                <div class="fs-5 fw-bold">@(Model.MercadoLibreItemId ?? "No publicado")</div>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="bg-light rounded-4 p-3">
+                                <div class="text-muted small fw-bold text-uppercase">URL origen</div>
+                                @if (!string.IsNullOrWhiteSpace(Model.SourceUrl))
+                                {
+                                    <a href="@Model.SourceUrl" target="_blank" class="text-decoration-none">
+                                        Abrir producto original
+                                    </a>
+                                }
+                                else
+                                {
+                                    <span>N/A</span>
+                                }
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+
+            <hr class="my-4" />
+
+            <form asp-controller="Products" asp-action="DeleteConfirmed" asp-route-id="@Model.Id" method="post">
+                @Html.AntiForgeryToken()
+
+                <div class="d-flex justify-content-end gap-2">
+                    <a asp-controller="Products" asp-action="Details" asp-route-id="@Model.Id" class="btn btn-outline-secondary">
+                        Cancelar
+                    </a>
+
+                    <button type="submit" class="btn btn-danger">
+                        Sí, eliminar producto
+                    </button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>

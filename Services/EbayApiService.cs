@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using MarketplaceSync.Web.ViewModels;
 
@@ -8,18 +10,105 @@ namespace MarketplaceSync.Web.Services
 {
     public class EbayApiService
     {
-        private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
+        private readonly IHttpClientFactory _httpClientFactory;
 
         public EbayApiService(
-            IHttpClientFactory httpClientFactory,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IHttpClientFactory httpClientFactory)
         {
-            _httpClientFactory = httpClientFactory;
             _configuration = configuration;
+            _httpClientFactory = httpClientFactory;
         }
 
-        public async Task<string> GetApplicationTokenAsync()
+        public async Task<ExtractedProductInfo> ExtractFromUrlOrSearchAsync(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                throw new ArgumentException("El link o texto de búsqueda está vacío.");
+
+            var legacyItemId = ExtractLegacyItemId(input);
+
+            if (!string.IsNullOrWhiteSpace(legacyItemId))
+            {
+                return await GetItemByLegacyIdAsync(legacyItemId, input);
+            }
+
+            return await SearchFirstItemAsync(input);
+        }
+
+        public async Task<ExtractedProductInfo> SearchFirstItemAsync(string searchText)
+        {
+            if (string.IsNullOrWhiteSpace(searchText))
+                throw new ArgumentException("El texto de búsqueda está vacío.");
+
+            var token = await GetApplicationTokenAsync();
+
+            var client = _httpClientFactory.CreateClient();
+
+            var query = Uri.EscapeDataString(searchText.Trim());
+
+            var url =
+                $"https://api.ebay.com/buy/browse/v1/item_summary/search" +
+                $"?q={query}" +
+                $"&limit=1" +
+                $"&filter=buyingOptions:%7BFIXED_PRICE%7D";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("X-EBAY-C-MARKETPLACE-ID", "EBAY_US");
+
+            using var response = await client.SendAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+                throw new Exception($"Error buscando producto en eBay: {content}");
+
+            var result = JsonSerializer.Deserialize<EbaySearchResponse>(
+                content,
+                JsonOptions());
+
+            var item = result?.ItemSummaries?.FirstOrDefault();
+
+            if (item == null)
+                throw new Exception("No se encontró ningún producto en eBay.");
+
+            return MapSummaryToExtractedProductInfo(item, searchText);
+        }
+
+        public async Task<ExtractedProductInfo> GetItemByLegacyIdAsync(string legacyItemId, string originalUrl)
+        {
+            if (string.IsNullOrWhiteSpace(legacyItemId))
+                throw new ArgumentException("El eBay item ID está vacío.");
+
+            var token = await GetApplicationTokenAsync();
+
+            var client = _httpClientFactory.CreateClient();
+
+            var url =
+                $"https://api.ebay.com/buy/browse/v1/item/get_item_by_legacy_id" +
+                $"?legacy_item_id={Uri.EscapeDataString(legacyItemId)}";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("X-EBAY-C-MARKETPLACE-ID", "EBAY_US");
+
+            using var response = await client.SendAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+                throw new Exception($"Error obteniendo producto eBay por ID {legacyItemId}: {content}");
+
+            var item = JsonSerializer.Deserialize<EbayItemResponse>(
+                content,
+                JsonOptions());
+
+            if (item == null)
+                throw new Exception("No se pudo leer la respuesta del producto de eBay.");
+
+            return MapItemToExtractedProductInfo(item, originalUrl);
+        }
+
+        private async Task<string> GetApplicationTokenAsync()
         {
             var clientId = _configuration["Ebay:ClientId"];
             var clientSecret = _configuration["Ebay:ClientSecret"];
@@ -30,202 +119,162 @@ namespace MarketplaceSync.Web.Services
             if (string.IsNullOrWhiteSpace(clientSecret))
                 throw new InvalidOperationException("Falta Ebay:ClientSecret.");
 
-            var client = _httpClientFactory.CreateClient();
-
-            var basicToken = Convert.ToBase64String(
+            var credentials = Convert.ToBase64String(
                 Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}")
             );
 
-            var request = new HttpRequestMessage(
+            var client = _httpClientFactory.CreateClient();
+
+            using var request = new HttpRequestMessage(
                 HttpMethod.Post,
                 "https://api.ebay.com/identity/v1/oauth2/token"
             );
 
-            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", basicToken);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", credentials);
 
             request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["grant_type"] = "client_credentials",
-                ["scope"] = "https://api.ebay.com/oauth/api_scope"
+                { "grant_type", "client_credentials" },
+                { "scope", "https://api.ebay.com/oauth/api_scope" }
             });
 
-            var response = await client.SendAsync(request);
+            using var response = await client.SendAsync(request);
             var content = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
-                throw new Exception($"Error obteniendo token de eBay: {content}");
+                throw new Exception($"Error generando token de eBay: {content}");
 
-            using var doc = JsonDocument.Parse(content);
+            var tokenResponse = JsonSerializer.Deserialize<EbayTokenResponse>(
+                content,
+                JsonOptions());
 
-            return doc.RootElement.GetProperty("access_token").GetString()
-                ?? throw new Exception("eBay no regresó access_token.");
+            if (string.IsNullOrWhiteSpace(tokenResponse?.AccessToken))
+                throw new Exception($"eBay no regresó access_token válido: {content}");
+
+            return tokenResponse.AccessToken;
         }
 
-        public async Task<ExtractedProductInfo> ExtractFromUrlOrSearchAsync(string input)
+        private ExtractedProductInfo MapItemToExtractedProductInfo(EbayItemResponse item, string originalUrl)
         {
-            var legacyItemId = ExtractLegacyItemId(input);
+            var availability = item.EstimatedAvailabilities?.FirstOrDefault();
 
-            if (!string.IsNullOrWhiteSpace(legacyItemId))
-            {
-                return await GetItemByLegacyIdAsync(legacyItemId, input);
-            }
+            var sourceStock = GetBestStock(
+                availability?.EstimatedAvailableQuantity,
+                availability?.EstimatedAvailabilityStatus);
 
-            var keyword = CleanKeyword(input);
+            var availabilityText = GetAvailabilityText(
+                availability?.EstimatedAvailabilityStatus,
+                availability?.EstimatedAvailableQuantity,
+                availability?.EstimatedSoldQuantity);
 
-            return await SearchFirstItemAsync(keyword);
-        }
-
-        public async Task<ExtractedProductInfo> GetItemByLegacyIdAsync(string legacyItemId, string originalUrl)
-        {
-            var token = await GetApplicationTokenAsync();
-            var marketplaceId = _configuration["Ebay:MarketplaceId"] ?? "EBAY_US";
-
-            var url =
-                $"https://api.ebay.com/buy/browse/v1/item/get_item_by_legacy_id?legacy_item_id={Uri.EscapeDataString(legacyItemId)}";
-
-            var client = _httpClientFactory.CreateClient();
-
-            var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            request.Headers.Add("X-EBAY-C-MARKETPLACE-ID", marketplaceId);
-
-            var response = await client.SendAsync(request);
-            var content = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return new ExtractedProductInfo
-                {
-                    SourceMarketplace = "eBay",
-                    SourceUrl = originalUrl,
-                    SourceProductId = legacyItemId,
-                    Title = "Producto eBay detectado, pero no se pudo obtener detalle",
-                    SourceStock = 1,
-                    SourceStatus = "EbayApiDetailError",
-                    Description = content
-                };
-            }
-
-            using var doc = JsonDocument.Parse(content);
-            var item = doc.RootElement;
-
-            return MapItemToExtractedProduct(item, originalUrl, legacyItemId, "ExtractedByEbayApi");
-        }
-
-        public async Task<ExtractedProductInfo> SearchFirstItemAsync(string searchText)
-        {
-            var token = await GetApplicationTokenAsync();
-
-            var marketplaceId = _configuration["Ebay:MarketplaceId"] ?? "EBAY_US";
-            var query = Uri.EscapeDataString(searchText);
-
-            var url =
-                $"https://api.ebay.com/buy/browse/v1/item_summary/search?q={query}&limit=1&filter=buyingOptions:%7BFIXED_PRICE%7D";
-
-            var client = _httpClientFactory.CreateClient();
-
-            var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            request.Headers.Add("X-EBAY-C-MARKETPLACE-ID", marketplaceId);
-
-            var response = await client.SendAsync(request);
-            var content = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return new ExtractedProductInfo
-                {
-                    SourceMarketplace = "eBay",
-                    SourceUrl = searchText,
-                    Title = "Producto eBay no encontrado",
-                    SourceStock = 1,
-                    SourceStatus = "EbayApiSearchError",
-                    Description = content
-                };
-            }
-
-            using var doc = JsonDocument.Parse(content);
-
-            if (!doc.RootElement.TryGetProperty("itemSummaries", out var items) ||
-                items.GetArrayLength() == 0)
-            {
-                return new ExtractedProductInfo
-                {
-                    SourceMarketplace = "eBay",
-                    SourceUrl = searchText,
-                    Title = "Producto eBay no encontrado",
-                    SourceStock = 1,
-                    SourceStatus = "NotFound",
-                    Description = "eBay Browse API no regresó resultados."
-                };
-            }
-
-            var item = items[0];
-
-            return MapItemToExtractedProduct(item, searchText, null, "ExtractedByEbayApi");
-        }
-
-        private ExtractedProductInfo MapItemToExtractedProduct(
-            JsonElement item,
-            string fallbackUrl,
-            string? fallbackProductId,
-            string sourceStatus)
-        {
-            string? title = item.TryGetProperty("title", out var titleProp)
-                ? titleProp.GetString()
-                : null;
-
-            string? itemWebUrl = item.TryGetProperty("itemWebUrl", out var urlProp)
-                ? urlProp.GetString()
-                : fallbackUrl;
-
-            string? itemId = item.TryGetProperty("itemId", out var idProp)
-                ? idProp.GetString()
-                : fallbackProductId;
-
-            string? imageUrl = null;
-
-            if (item.TryGetProperty("image", out var imageProp) &&
-                imageProp.TryGetProperty("imageUrl", out var imageUrlProp))
-            {
-                imageUrl = imageUrlProp.GetString();
-            }
-
-            decimal? price = null;
-            string? currency = null;
-
-            if (item.TryGetProperty("price", out var priceProp))
-            {
-                if (priceProp.TryGetProperty("value", out var valueProp) &&
-                    decimal.TryParse(valueProp.GetString(), out var parsedPrice))
-                {
-                    price = parsedPrice;
-                }
-
-                if (priceProp.TryGetProperty("currency", out var currencyProp))
-                {
-                    currency = currencyProp.GetString();
-                }
-            }
-
-            string? condition = item.TryGetProperty("condition", out var conditionProp)
-                ? conditionProp.GetString()
-                : null;
+            var price = ParseDecimal(item.Price?.Value);
 
             return new ExtractedProductInfo
             {
+                SourceUrl = !string.IsNullOrWhiteSpace(originalUrl)
+                    ? originalUrl
+                    : item.ItemWebUrl ?? string.Empty,
+
                 SourceMarketplace = "eBay",
-                SourceUrl = itemWebUrl ?? fallbackUrl,
-                SourceProductId = itemId,
-                Title = title ?? "Producto eBay",
-                ImageUrl = imageUrl,
+                SourceProductId = item.LegacyItemId ?? item.ItemId,
+                Title = item.Title ?? "Producto eBay",
+                Description = "Producto obtenido desde eBay Browse API.",
                 SourcePrice = price,
-                SourceCurrency = currency ?? "USD",
-                SourceStock = 1,
-                SourceStatus = sourceStatus,
-                Condition = condition,
-                Description = "Producto obtenido desde eBay Browse API."
+                SourceCurrency = item.Price?.Currency,
+                SourceStock = sourceStock,
+                SourceAvailabilityText = availabilityText,
+                ImageUrl = item.Image?.ImageUrl,
+                Brand = GetAspectValue(item, "Brand", "Marca"),
+                Model = GetAspectValue(item, "Model", "Modelo", "Manufacturer Part Number", "MPN"),
+                SourceStatus = "ExtractedByEbayApi",
+                LastSourceCheckAt = DateTime.UtcNow
             };
+        }
+
+        private ExtractedProductInfo MapSummaryToExtractedProductInfo(EbayItemSummary item, string originalInput)
+        {
+            var availability = item.EstimatedAvailabilities?.FirstOrDefault();
+
+            var sourceStock = GetBestStock(
+                availability?.EstimatedAvailableQuantity,
+                availability?.EstimatedAvailabilityStatus);
+
+            var availabilityText = GetAvailabilityText(
+                availability?.EstimatedAvailabilityStatus,
+                availability?.EstimatedAvailableQuantity,
+                availability?.EstimatedSoldQuantity);
+
+            var price = ParseDecimal(item.Price?.Value);
+
+            return new ExtractedProductInfo
+            {
+                SourceUrl = item.ItemWebUrl ?? originalInput,
+                SourceMarketplace = "eBay",
+                SourceProductId = item.LegacyItemId ?? item.ItemId,
+                Title = item.Title ?? "Producto eBay",
+                Description = "Producto obtenido desde eBay Browse API.",
+                SourcePrice = price,
+                SourceCurrency = item.Price?.Currency,
+                SourceStock = sourceStock,
+                SourceAvailabilityText = availabilityText,
+                ImageUrl = item.Image?.ImageUrl,
+                Brand = item.Brand,
+                Model = null,
+                SourceStatus = "ExtractedByEbayApi",
+                LastSourceCheckAt = DateTime.UtcNow
+            };
+        }
+
+        private int? GetBestStock(int? quantity, string? status)
+        {
+            if (quantity.HasValue)
+                return quantity.Value;
+
+            if (string.Equals(status, "IN_STOCK", StringComparison.OrdinalIgnoreCase))
+                return 1;
+
+            if (string.Equals(status, "LIMITED_STOCK", StringComparison.OrdinalIgnoreCase))
+                return 1;
+
+            if (string.Equals(status, "OUT_OF_STOCK", StringComparison.OrdinalIgnoreCase))
+                return 0;
+
+            return null;
+        }
+
+        private string GetAvailabilityText(string? status, int? quantity, int? soldQuantity)
+        {
+            var soldText = soldQuantity.HasValue
+                ? $" / {soldQuantity.Value} sold"
+                : string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                return status.ToUpperInvariant() switch
+                {
+                    "IN_STOCK" => quantity.HasValue
+                        ? $"In Stock - {quantity.Value} available{soldText}"
+                        : $"In Stock{soldText}",
+
+                    "OUT_OF_STOCK" => $"Out of Stock{soldText}",
+
+                    "LIMITED_STOCK" => quantity.HasValue
+                        ? $"Limited Stock - {quantity.Value} available{soldText}"
+                        : $"Limited Stock{soldText}",
+
+                    _ => $"{status}{soldText}"
+                };
+            }
+
+            if (quantity.HasValue && quantity.Value > 0)
+                return $"In Stock - {quantity.Value} available{soldText}";
+
+            if (quantity.HasValue && quantity.Value == 0)
+                return $"Out of Stock{soldText}";
+
+            return !string.IsNullOrWhiteSpace(soldText)
+                ? $"Availability not provided by eBay{soldText}"
+                : "Availability not provided by eBay";
         }
 
         private string? ExtractLegacyItemId(string input)
@@ -233,44 +282,179 @@ namespace MarketplaceSync.Web.Services
             if (string.IsNullOrWhiteSpace(input))
                 return null;
 
-            var patterns = new[]
-            {
-                @"/itm/(?:.*?/)?(\d{9,15})",
-                @"[?&]itm=(\d{9,15})",
-                @"[?&]item=(\d{9,15})",
-                @"\b(\d{9,15})\b"
-            };
+            var decoded = Uri.UnescapeDataString(input);
 
-            foreach (var pattern in patterns)
-            {
-                var match = Regex.Match(input, pattern, RegexOptions.IgnoreCase);
+            var match = Regex.Match(
+                decoded,
+                @"(?:/itm/[^/?#]*?/|/itm/|item=|itm/)(\d{9,15})",
+                RegexOptions.IgnoreCase);
 
-                if (match.Success)
-                    return match.Groups[1].Value;
+            if (match.Success)
+                return match.Groups[1].Value;
+
+            var simpleNumber = Regex.Match(decoded, @"\b\d{9,15}\b");
+
+            if (simpleNumber.Success)
+                return simpleNumber.Value;
+
+            return null;
+        }
+
+        private decimal? ParseDecimal(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            if (decimal.TryParse(
+                    value,
+                    NumberStyles.Any,
+                    CultureInfo.InvariantCulture,
+                    out var result))
+            {
+                return result;
             }
 
             return null;
         }
 
-        private string CleanKeyword(string input)
+        private string? GetAspectValue(EbayItemResponse item, params string[] names)
         {
-            if (string.IsNullOrWhiteSpace(input))
-                return "phone case";
+            if (item.LocalizedAspects == null || item.LocalizedAspects.Count == 0)
+                return null;
 
-            if (!Uri.TryCreate(input, UriKind.Absolute, out var uri))
-                return input.Trim();
-
-            var text = uri.AbsolutePath;
-
-            text = Regex.Replace(text, @"/itm/|/sch/|/p/", " ", RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"[-_/]+", " ");
-            text = Regex.Replace(text, @"\d{9,15}", " ");
-            text = Regex.Replace(text, @"\s+", " ").Trim();
-
-            if (string.IsNullOrWhiteSpace(text))
-                return "phone case";
-
-            return text;
+            return item.LocalizedAspects
+                .FirstOrDefault(x =>
+                    !string.IsNullOrWhiteSpace(x.Name) &&
+                    names.Any(name => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase)))
+                ?.Value;
         }
+
+        private static JsonSerializerOptions JsonOptions()
+        {
+            return new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+        }
+    }
+
+    public class EbayTokenResponse
+    {
+        [JsonPropertyName("access_token")]
+        public string? AccessToken { get; set; }
+
+        [JsonPropertyName("expires_in")]
+        public int ExpiresIn { get; set; }
+
+        [JsonPropertyName("token_type")]
+        public string? TokenType { get; set; }
+    }
+
+    public class EbaySearchResponse
+    {
+        [JsonPropertyName("itemSummaries")]
+        public List<EbayItemSummary>? ItemSummaries { get; set; }
+
+        [JsonPropertyName("total")]
+        public int Total { get; set; }
+
+        [JsonPropertyName("href")]
+        public string? Href { get; set; }
+    }
+
+    public class EbayItemSummary
+    {
+        [JsonPropertyName("itemId")]
+        public string? ItemId { get; set; }
+
+        [JsonPropertyName("legacyItemId")]
+        public string? LegacyItemId { get; set; }
+
+        [JsonPropertyName("title")]
+        public string? Title { get; set; }
+
+        [JsonPropertyName("price")]
+        public EbayPrice? Price { get; set; }
+
+        [JsonPropertyName("image")]
+        public EbayImage? Image { get; set; }
+
+        [JsonPropertyName("itemWebUrl")]
+        public string? ItemWebUrl { get; set; }
+
+        [JsonPropertyName("condition")]
+        public string? Condition { get; set; }
+
+        [JsonPropertyName("brand")]
+        public string? Brand { get; set; }
+
+        [JsonPropertyName("estimatedAvailabilities")]
+        public List<EbayAvailability>? EstimatedAvailabilities { get; set; }
+    }
+
+    public class EbayItemResponse
+    {
+        [JsonPropertyName("itemId")]
+        public string? ItemId { get; set; }
+
+        [JsonPropertyName("legacyItemId")]
+        public string? LegacyItemId { get; set; }
+
+        [JsonPropertyName("title")]
+        public string? Title { get; set; }
+
+        [JsonPropertyName("price")]
+        public EbayPrice? Price { get; set; }
+
+        [JsonPropertyName("image")]
+        public EbayImage? Image { get; set; }
+
+        [JsonPropertyName("itemWebUrl")]
+        public string? ItemWebUrl { get; set; }
+
+        [JsonPropertyName("condition")]
+        public string? Condition { get; set; }
+
+        [JsonPropertyName("estimatedAvailabilities")]
+        public List<EbayAvailability>? EstimatedAvailabilities { get; set; }
+
+        [JsonPropertyName("localizedAspects")]
+        public List<EbayLocalizedAspect>? LocalizedAspects { get; set; }
+    }
+
+    public class EbayPrice
+    {
+        [JsonPropertyName("value")]
+        public string? Value { get; set; }
+
+        [JsonPropertyName("currency")]
+        public string? Currency { get; set; }
+    }
+
+    public class EbayImage
+    {
+        [JsonPropertyName("imageUrl")]
+        public string? ImageUrl { get; set; }
+    }
+
+    public class EbayAvailability
+    {
+        [JsonPropertyName("estimatedAvailabilityStatus")]
+        public string? EstimatedAvailabilityStatus { get; set; }
+
+        [JsonPropertyName("estimatedAvailableQuantity")]
+        public int? EstimatedAvailableQuantity { get; set; }
+
+        [JsonPropertyName("estimatedSoldQuantity")]
+        public int? EstimatedSoldQuantity { get; set; }
+    }
+
+    public class EbayLocalizedAspect
+    {
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("value")]
+        public string? Value { get; set; }
     }
 }

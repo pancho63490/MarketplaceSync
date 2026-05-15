@@ -136,6 +136,160 @@ public async Task<IActionResult> LoadMercadoLibreAttributes(PublishToMercadoLibr
 }
 [HttpPost]
 [ValidateAntiForgeryToken]
+public async Task<IActionResult> RefreshProduct(int id)
+{
+    var product = await _context.Products.FindAsync(id);
+
+    if (product == null)
+    {
+        TempData["Error"] = "Producto no encontrado.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    if (string.IsNullOrWhiteSpace(product.SourceUrl))
+    {
+        TempData["Error"] = "El producto no tiene URL de origen para actualizar.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    try
+    {
+        var extracted = await _extractor.ExtractAsync(product.SourceUrl.Trim());
+
+        product.SourceMarketplace = extracted.SourceMarketplace ?? product.SourceMarketplace;
+        product.SourceProductId = extracted.SourceProductId ?? product.SourceProductId;
+
+        product.Title = extracted.Title ?? product.Title;
+        product.Description = extracted.Description ?? product.Description;
+
+        product.SourcePrice = extracted.SourcePrice ?? product.SourcePrice;
+        product.SourceCurrency = extracted.SourceCurrency ?? product.SourceCurrency;
+        product.SourceStock = extracted.SourceStock ?? product.SourceStock;
+
+        product.ImageUrl = extracted.ImageUrl ?? product.ImageUrl;
+        product.Brand = extracted.Brand ?? product.Brand;
+        product.Model = extracted.Model ?? product.Model;
+
+        product.SourceStatus = extracted.SourceStatus ?? "Updated";
+        product.LastSourceCheckAt = DateTime.UtcNow;
+        product.UpdatedAt = DateTime.UtcNow;
+
+        product.Status = "Updated";
+
+        await _context.SaveChangesAsync();
+
+        TempData["Success"] = "Información del producto actualizada correctamente.";
+    }
+    catch (Exception ex)
+    {
+        TempData["Error"] = $"Error al actualizar producto: {ex.Message}";
+    }
+
+    return RedirectToAction(nameof(Index));
+}
+// GET: /Products/Delete/5
+[HttpGet]
+public async Task<IActionResult> Delete(int id)
+{
+    var product = await _context.Products
+        .FirstOrDefaultAsync(p => p.Id == id);
+
+    if (product == null)
+    {
+        return NotFound();
+    }
+
+    return View(product);
+}
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> RefreshAllSourceInfo()
+{
+    var products = await _context.Products
+        .Where(x => !string.IsNullOrWhiteSpace(x.SourceUrl))
+        .OrderByDescending(x => x.CreatedAt)
+        .ToListAsync();
+
+    if (!products.Any())
+    {
+        TempData["Error"] = "No hay productos para actualizar.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    var updated = 0;
+    var failed = 0;
+
+    foreach (var product in products)
+    {
+        try
+        {
+            var extracted = await _extractor.ExtractAsync(product.SourceUrl);
+
+            product.SourceMarketplace = extracted.SourceMarketplace;
+            product.SourceProductId = extracted.SourceProductId;
+            product.Title = extracted.Title;
+            product.Description = extracted.Description;
+            product.SourcePrice = extracted.SourcePrice;
+            product.SourceCurrency = extracted.SourceCurrency;
+            product.SourceStock = extracted.SourceStock;
+            product.SourceAvailabilityText = extracted.SourceAvailabilityText;
+            product.ImageUrl = extracted.ImageUrl;
+            product.Brand = extracted.Brand;
+            product.Model = extracted.Model;
+            product.SourceStatus = extracted.SourceStatus;
+            product.LastSourceCheckAt = DateTime.UtcNow;
+            product.UpdatedAt = DateTime.UtcNow;
+
+            updated++;
+        }
+        catch
+        {
+            failed++;
+        }
+    }
+
+    await _context.SaveChangesAsync();
+
+    TempData["Success"] = $"Actualización finalizada. Actualizados: {updated}. Fallidos: {failed}.";
+
+    return RedirectToAction(nameof(Index));
+}
+// POST: /Products/Delete/5
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> DeleteConfirmed(int id)
+{
+    var product = await _context.Products
+        .FirstOrDefaultAsync(p => p.Id == id);
+
+    if (product == null)
+    {
+        return NotFound();
+    }
+
+    _context.Products.Remove(product);
+    await _context.SaveChangesAsync();
+
+    TempData["SuccessMessage"] = "Producto eliminado correctamente.";
+
+    return RedirectToAction(nameof(Index));
+}
+[HttpGet]
+public async Task<IActionResult> Details(int id)
+{
+    var product = await _context.Products
+        .FirstOrDefaultAsync(x => x.Id == id);
+
+    if (product == null)
+    {
+        TempData["Error"] = "Producto no encontrado.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    return View(product);
+}
+[HttpPost]
+[ValidateAntiForgeryToken]
 public async Task<IActionResult> RefreshSource(int id)
 {
     var product = await _context.Products
