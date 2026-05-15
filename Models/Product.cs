@@ -99,5 +99,6 @@ namespace MarketplaceSync.Web.Models
 
         public DateTime? MercadoLibrePublishedAt { get; set; }
         
+        
     }
 }

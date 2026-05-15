@@ -23,7 +23,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<MarketplaceDetectorService>();
 builder.Services.AddScoped<ProductExtractorService>();
 builder.Services.AddScoped<EbayApiService>();
-
+builder.Services.AddScoped<MercadoLibreCategoryService>();
 builder.Services.AddControllersWithViews();
 
 var app = builder.Build();

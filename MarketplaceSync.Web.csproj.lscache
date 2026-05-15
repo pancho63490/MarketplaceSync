@@ -100,6 +100,7 @@ Program.cs
 Services/
  EbayApiService.cs
  MarketplaceDetectorService.cs
+ MercadoLibreCategoryService.cs
  ProductExtractorService.cs
 ViewModels/
  CreateProductFromUrlViewModel.cs

@@ -4,164 +4,171 @@
     ViewData["Title"] = "Publicar en Mercado Libre";
 }
 
-<div class="container mt-4">
-    <div class="card shadow-sm border-0">
-        <div class="card-body p-4">
-            <h1 class="fw-bold mb-3">Publicar en Mercado Libre</h1>
-            <p class="text-muted">
-                Completa los datos requeridos antes de enviar la publicación.
+<div class="container py-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="fw-bold mb-1">Publicar en Mercado Libre</h1>
+            <p class="text-muted mb-0">
+                Revisa los datos antes de enviar la publicación.
             </p>
+        </div>
 
-            @if (!ViewData.ModelState.IsValid)
-            {
-                <div class="alert alert-danger">
-                    <div asp-validation-summary="All"></div>
-                </div>
-            }
+        <a asp-controller="Products" asp-action="Details" asp-route-id="@Model.ProductId" class="btn btn-outline-secondary">
+            Regresar
+        </a>
+    </div>
 
-            <form asp-action="PublishToMercadoLibre" method="post">
-                @Html.AntiForgeryToken()
-
-                <input type="hidden" asp-for="ProductId" />
-
-                <div class="mb-3">
-                    <label asp-for="Title" class="form-label"></label>
-                    <input asp-for="Title" class="form-control" maxlength="60" />
-                    <small class="text-muted">Mercado Libre suele limitar títulos. Usa un título claro.</small>
-                    <span asp-validation-for="Title" class="text-danger"></span>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <label asp-for="Price" class="form-label"></label>
-                        <input asp-for="Price" class="form-control" type="number" step="0.01" />
-                        <span asp-validation-for="Price" class="text-danger"></span>
-                    </div>
-
-                    <div class="col-md-4 mb-3">
-                        <label asp-for="Stock" class="form-label"></label>
-                        <input asp-for="Stock" class="form-control" type="number" />
-                        <span asp-validation-for="Stock" class="text-danger"></span>
-                    </div>
-
-                    <div class="col-md-4 mb-3">
-                        <label asp-for="CurrencyId" class="form-label"></label>
-                        <select asp-for="CurrencyId" class="form-select">
-                            <option value="MXN">MXN</option>
-                            <option value="USD">USD</option>
-                        </select>
-                        <span asp-validation-for="CurrencyId" class="text-danger"></span>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label asp-for="CategoryId" class="form-label"></label>
-                    <input asp-for="CategoryId" class="form-control" placeholder="Ejemplo: MLM1747" />
-                    <small class="text-muted">
-                        Por ahora ingresa manualmente la categoría. Después agregamos predictor de categoría.
-                    </small>
-                    <span asp-validation-for="CategoryId" class="text-danger"></span>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label asp-for="Condition" class="form-label"></label>
-                        <select asp-for="Condition" class="form-select">
-                            <option value="new">Nuevo</option>
-                            <option value="used">Usado</option>
-                        </select>
-                        <span asp-validation-for="Condition" class="text-danger"></span>
-                    </div>
-
-                    <div class="col-md-6 mb-3">
-                        <label asp-for="ListingTypeId" class="form-label"></label>
-                        <select asp-for="ListingTypeId" class="form-select">
-                            <option value="gold_special">Clásica</option>
-                            <option value="gold_pro">Premium</option>
-                            <option value="free">Gratis</option>
-                        </select>
-                        <span asp-validation-for="ListingTypeId" class="text-danger"></span>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label asp-for="PictureUrl" class="form-label"></label>
-                    <input asp-for="PictureUrl" class="form-control" />
-                    <span asp-validation-for="PictureUrl" class="text-danger"></span>
-                </div>
-
-                @if (!string.IsNullOrWhiteSpace(Model.PictureUrl))
-                {
-                    <div class="mb-3">
-                        <img src="@Model.PictureUrl" style="max-width: 180px; border-radius: 8px;" />
-                    </div>
-                }
-
-                <div class="d-flex gap-2">
-                 @if (Model.Attributes != null && Model.Attributes.Any())
-{
-    <hr />
-
-    <h5 class="fw-bold mb-3">Atributos requeridos por Mercado Libre</h5>
-
-    @for (var i = 0; i < Model.Attributes.Count; i++)
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
     {
-        <div class="mb-3">
-            <input type="hidden" asp-for="Attributes[i].Id" />
-            <input type="hidden" asp-for="Attributes[i].Name" />
-            <input type="hidden" asp-for="Attributes[i].Required" />
-            <input type="hidden" asp-for="Attributes[i].ValueType" />
-
-            <label class="form-label">
-                @Model.Attributes[i].Name
-                @if (Model.Attributes[i].Required)
-                {
-                    <span class="text-danger">*</span>
-                }
-            </label>
-
-            @if (Model.Attributes[i].Values != null && Model.Attributes[i].Values.Any())
-            {
-                <select asp-for="Attributes[i].ValueName" class="form-select">
-                    <option value="">Selecciona una opción</option>
-                    @foreach (var option in Model.Attributes[i].Values)
-                    {
-                        <option value="@option.Name">@option.Name</option>
-                    }
-                </select>
-            }
-            else
-            {
-                <input asp-for="Attributes[i].ValueName" class="form-control" />
-            }
+        <div class="alert alert-danger">
+            <strong>Error de Mercado Libre:</strong>
+            <pre class="mb-0 mt-2">@Model.ErrorMessage</pre>
         </div>
     }
-}
 
-<div class="d-flex gap-2">
-    <button type="submit"
-            asp-action="LoadMercadoLibreAttributes"
-            formmethod="post"
-            class="btn btn-outline-primary">
-        Cargar atributos
-    </button>
+    <form asp-action="PublishToMercadoLibre" method="post">
+        @Html.AntiForgeryToken()
 
-    <button type="submit"
-            asp-action="PublishToMercadoLibre"
-            formmethod="post"
-            class="btn btn-success">
-        Publicar en Mercado Libre
-    </button>
+        <input type="hidden" asp-for="ProductId" />
 
-    <a asp-action="Index" class="btn btn-outline-secondary">
-        Cancelar
-    </a>
-</div>
-                    <a asp-action="Index" class="btn btn-outline-secondary">
-                        Cancelar
-                    </a>
+        <div class="row g-4">
+
+            <div class="col-lg-8">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0 fw-bold">Datos de publicación</h5>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="mb-3">
+                            <label asp-for="Title" class="form-label fw-semibold">Título</label>
+                            <input asp-for="Title" class="form-control" maxlength="60" />
+                            <span asp-validation-for="Title" class="text-danger"></span>
+                            <div class="form-text">Mercado Libre normalmente permite hasta 60 caracteres.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="Description" class="form-label fw-semibold">Descripción</label>
+                            <textarea asp-for="Description" class="form-control" rows="5"></textarea>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label asp-for="Price" class="form-label fw-semibold">Precio</label>
+                                <input asp-for="Price" class="form-control" type="number" step="0.01" min="1" />
+                                <span asp-validation-for="Price" class="text-danger"></span>
+                            </div>
+
+                            <div class="col-md-4 mb-3">
+                                <label asp-for="Stock" class="form-label fw-semibold">Stock</label>
+                                <input asp-for="Stock" class="form-control" type="number" min="1" />
+                                <span asp-validation-for="Stock" class="text-danger"></span>
+                            </div>
+
+                            <div class="col-md-4 mb-3">
+                                <label asp-for="CurrencyId" class="form-label fw-semibold">Moneda</label>
+                                <input asp-for="CurrencyId" class="form-control" />
+                                <span asp-validation-for="CurrencyId" class="text-danger"></span>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="CategoryId" class="form-label fw-semibold">Categoría Mercado Libre</label>
+                            <input asp-for="CategoryId" class="form-control" placeholder="Ejemplo: MLM189898" />
+                            <span asp-validation-for="CategoryId" class="text-danger"></span>
+                            <div class="form-text">
+                                Por ahora se ingresa manual. Después agregamos predictor automático de categoría.
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label asp-for="Condition" class="form-label fw-semibold">Condición</label>
+                                <select asp-for="Condition" class="form-select">
+                                    <option value="new">Nuevo</option>
+                                    <option value="used">Usado</option>
+                                </select>
+                                <span asp-validation-for="Condition" class="text-danger"></span>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label asp-for="ListingTypeId" class="form-label fw-semibold">Tipo de publicación</label>
+                                <select asp-for="ListingTypeId" class="form-select">
+                                    <option value="gold_special">Clásica</option>
+                                    <option value="gold_pro">Premium</option>
+                                </select>
+                                <span asp-validation-for="ListingTypeId" class="text-danger"></span>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="ImageUrl" class="form-label fw-semibold">Imagen</label>
+                            <input asp-for="ImageUrl" class="form-control" />
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label asp-for="Brand" class="form-label fw-semibold">Marca</label>
+                                <input asp-for="Brand" class="form-control" />
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label asp-for="Model" class="form-label fw-semibold">Modelo</label>
+                                <input asp-for="Model" class="form-control" />
+                            </div>
+                        </div>
+
+                    </div>
                 </div>
-            </form>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0 fw-bold">Vista previa</h5>
+                    </div>
+
+                    <div class="card-body">
+                        @if (!string.IsNullOrWhiteSpace(Model.ImageUrl))
+                        {
+                            <img src="@Model.ImageUrl" class="img-fluid rounded border mb-3" style="max-height: 260px; object-fit: contain; width: 100%;" />
+                        }
+                        else
+                        {
+                            <div class="border rounded bg-light text-muted text-center py-5 mb-3">
+                                Sin imagen
+                            </div>
+                        }
+
+                        <h6 class="fw-bold">@Model.Title</h6>
+                        <p class="text-muted small mb-2">@Model.Brand @Model.Model</p>
+                        <h4 class="fw-bold text-success">$@Model.Price @Model.CurrencyId</h4>
+                        <p class="mb-0">
+                            <span class="badge bg-primary">Stock: @Model.Stock</span>
+                            <span class="badge bg-secondary">@Model.Condition</span>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <button type="submit" class="btn btn-success w-100 fw-bold">
+                            Publicar en Mercado Libre
+                        </button>
+
+                        <div class="text-muted small mt-3">
+                            Si Mercado Libre responde con atributos requeridos, los agregamos al formulario.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
-    </div>
+    </form>
 </div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

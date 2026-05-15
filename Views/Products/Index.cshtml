@@ -319,23 +319,24 @@
                                                 Editar
                                             </a>
 
-                                            <form asp-controller="Products"
-                                                  asp-action="RefreshSourceInfo"
-                                                  method="post"
-                                                  class="d-inline">
-                                                @Html.AntiForgeryToken()
-                                                <input type="hidden" name="id" value="@item.Id" />
-                                                <button type="submit" class="btn btn-sm btn-outline-primary">
-                                                    Actualizar
-                                                </button>
-                                            </form>
+                                        <form asp-controller="Products"
+      asp-action="RefreshSource"
+      asp-route-id="@item.Id"
+      method="post"
+      class="d-inline">
+    @Html.AntiForgeryToken()
 
-                                            <a asp-controller="Products"
-                                               asp-action="PublishToMercadoLibre"
-                                               asp-route-id="@item.Id"
-                                               class="btn btn-sm btn-success">
-                                                Publicar ML
-                                            </a>
+    <button type="submit" class="btn btn-sm btn-outline-primary">
+        Actualizar info
+    </button>
+</form>
+<a asp-controller="Products"
+   asp-action="PublishToMercadoLibre"
+   asp-route-id="@item.Id"
+   class="btn btn-success">
+    Publicar en Mercado Libre
+</a>
+
 
                                             <form asp-controller="Products"
                                                   asp-action="Delete"
