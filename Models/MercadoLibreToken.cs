@@ -6,10 +6,8 @@ namespace MarketplaceSync.Web.Models
     {
         public int Id { get; set; }
 
-        [MaxLength(100)]
         public string? UserId { get; set; }
 
-        [MaxLength(200)]
         public string? Nickname { get; set; }
 
         [Required]
@@ -17,7 +15,6 @@ namespace MarketplaceSync.Web.Models
 
         public string? RefreshToken { get; set; }
 
-        [MaxLength(50)]
         public string? TokenType { get; set; }
 
         public int ExpiresIn { get; set; }
