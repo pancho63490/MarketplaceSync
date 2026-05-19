@@ -92,6 +92,8 @@ Migrations/
  20260519040937_FixMercadoLibreTokenLongFields.Designer.cs
  20260519041424_FixLongTextColumns.cs
  20260519041424_FixLongTextColumns.Designer.cs
+ 20260519042001_FixMercadoLibreTokenColumnsToText.cs
+ 20260519042001_FixMercadoLibreTokenColumnsToText.Designer.cs
  AppDbContextModelSnapshot.cs
 Models/
  ErrorViewModel.cs
