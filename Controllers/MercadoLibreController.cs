@@ -5,6 +5,7 @@ using MarketplaceSync.Web.Models;
 using MarketplaceSync.Web.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json.Serialization;
 
 namespace MarketplaceSync.Web.Controllers
 {
@@ -294,18 +295,24 @@ namespace MarketplaceSync.Web.Controllers
         }
     }
 
-    public class MercadoLibreTokenResponse
-    {
-        public string? AccessToken { get; set; }
+  public class MercadoLibreTokenResponse
+{
+    [JsonPropertyName("access_token")]
+    public string? AccessToken { get; set; }
 
-        public string? TokenType { get; set; }
+    [JsonPropertyName("token_type")]
+    public string? TokenType { get; set; }
 
-        public int ExpiresIn { get; set; }
+    [JsonPropertyName("expires_in")]
+    public int ExpiresIn { get; set; }
 
-        public string? Scope { get; set; }
+    [JsonPropertyName("scope")]
+    public string? Scope { get; set; }
 
-        public long UserId { get; set; }
+    [JsonPropertyName("user_id")]
+    public long UserId { get; set; }
 
-        public string? RefreshToken { get; set; }
-    }
+    [JsonPropertyName("refresh_token")]
+    public string? RefreshToken { get; set; }
+}
 }
