@@ -17,14 +17,14 @@ namespace MarketplaceSync.Web.Models
 
         public string? RefreshToken { get; set; }
 
-        [MaxLength(100)]
+        [MaxLength(50)]
         public string? TokenType { get; set; }
-
-        public string? Scope { get; set; }
 
         public int ExpiresIn { get; set; }
 
         public DateTime? ExpiresAt { get; set; }
+
+        public string? Scope { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

@@ -88,6 +88,8 @@ Migrations/
  20260515043134_AddProductRefreshErrorFields.Designer.cs
  20260519040424_AddMercadoLibreTokenTypeAndScope.cs
  20260519040424_AddMercadoLibreTokenTypeAndScope.Designer.cs
+ 20260519040937_FixMercadoLibreTokenLongFields.cs
+ 20260519040937_FixMercadoLibreTokenLongFields.Designer.cs
  AppDbContextModelSnapshot.cs
 Models/
  ErrorViewModel.cs
