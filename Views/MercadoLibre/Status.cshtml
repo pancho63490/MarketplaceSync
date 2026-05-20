@@ -1,8 +1,15 @@
 @model IEnumerable<MarketplaceSync.Web.Models.MercadoLibreToken>
 
 @{
-    ViewData["Title"] = "Mercado Libre";
-    var tokens = Model?.ToList() ?? new List<MarketplaceSync.Web.Models.MercadoLibreToken>();
+    ViewData["Title"] = "Mercado Libre - Estado";
+
+    var sessionUserId = Context.Session.GetString("ML_USER_ID");
+    var sessionNickname = Context.Session.GetString("ML_NICKNAME");
+    var sessionTokenId = Context.Session.GetInt32("ML_TOKEN_ID");
+
+    var tokens = Model?.OrderByDescending(x => x.UpdatedAt).ToList()
+        ?? new List<MarketplaceSync.Web.Models.MercadoLibreToken>();
+
     var activeToken = tokens.FirstOrDefault(x => x.IsActive);
 }
 
@@ -28,23 +35,29 @@
         <div>
             <h1 class="fw-bold mb-1">Mercado Libre</h1>
             <p class="text-muted mb-0">
-                Administra las cuentas conectadas de Mercado Libre para publicar productos.
+                Administra la conexión OAuth, cuenta activa y tokens disponibles.
             </p>
         </div>
 
         <div class="d-flex flex-wrap gap-2">
             <a asp-controller="MercadoLibre"
                asp-action="Connect"
-               class="btn btn-primary">
-                Conectar cuenta Mercado Libre
+               class="btn btn-success">
+                Conectar Mercado Libre
             </a>
 
-            <a asp-controller="MercadoLibre"
-               asp-action="Me"
-               target="_blank"
-               class="btn btn-outline-secondary">
-                Probar token / Me
-            </a>
+            @if (!string.IsNullOrWhiteSpace(sessionUserId))
+            {
+                <form asp-controller="MercadoLibre"
+                      asp-action="Disconnect"
+                      method="post"
+                      class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-danger">
+                        Desconectar sesión
+                    </button>
+                </form>
+            }
         </div>
     </div>
 
@@ -62,17 +75,24 @@
         <div class="col-md-3">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
-                    <div class="text-muted small">Cuenta activa</div>
+                    <div class="text-muted small">Cuentas activas</div>
+                    <div class="fs-3 fw-bold">@tokens.Count(x => x.IsActive)</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Sesión actual</div>
                     <div class="fs-5 fw-bold">
-                        @if (activeToken != null)
+                        @if (!string.IsNullOrWhiteSpace(sessionNickname))
                         {
-                            @(string.IsNullOrWhiteSpace(activeToken.Nickname)
-                                ? activeToken.UserId
-                                : activeToken.Nickname)
+                            @sessionNickname
                         }
                         else
                         {
-                            <span class="text-muted">Ninguna</span>
+                            <span class="text-muted">Sin sesión</span>
                         }
                     </div>
                 </div>
@@ -82,29 +102,11 @@
         <div class="col-md-3">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
-                    <div class="text-muted small">Tokens activos</div>
-                    <div class="fs-3 fw-bold">
-                        @tokens.Count(x => x.IsActive)
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small">Próximo vencimiento</div>
-                    <div class="fs-6 fw-bold">
-                        @{
-                            var nextExpiration = tokens
-                                .Where(x => x.ExpiresAt.HasValue && x.IsActive)
-                                .OrderBy(x => x.ExpiresAt)
-                                .FirstOrDefault();
-                        }
-
-                        @if (nextExpiration?.ExpiresAt != null)
+                    <div class="text-muted small">Token activo</div>
+                    <div class="fs-5 fw-bold">
+                        @if (activeToken != null)
                         {
-                            @nextExpiration.ExpiresAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                            <span>#@activeToken.Id</span>
                         }
                         else
                         {
@@ -117,56 +119,171 @@
 
     </div>
 
-    @if (!tokens.Any())
-    {
-        <div class="card border-0 shadow-sm">
-            <div class="card-body text-center py-5">
-                <div class="display-5 mb-3">🛒</div>
-                <h4 class="fw-bold">No hay cuentas conectadas</h4>
-                <p class="text-muted mb-4">
-                    Conecta una cuenta de Mercado Libre para poder publicar productos desde MarketplaceSync.
-                </p>
+    <div class="row g-4">
 
-                <a asp-controller="MercadoLibre"
-                   asp-action="Connect"
-                   class="btn btn-primary">
-                    Conectar Mercado Libre
-                </a>
-            </div>
-        </div>
-    }
-    else
-    {
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-0 py-3">
-                <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="fw-bold mb-0">Cuentas Mercado Libre</h5>
-                    <span class="text-muted small">
-                        Última consulta: @DateTime.Now.ToString("yyyy-MM-dd HH:mm")
-                    </span>
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="fw-bold mb-0">Sesión actual</h5>
+                </div>
+
+                <div class="card-body">
+                    @if (!string.IsNullOrWhiteSpace(sessionUserId))
+                    {
+                        <div class="alert alert-success mb-3">
+                            <div class="fw-bold">Mercado Libre conectado</div>
+                            <div>Usuario: @(sessionNickname ?? "N/A")</div>
+                            <div>User ID: @sessionUserId</div>
+                            <div>Token local ID: @(sessionTokenId?.ToString() ?? "N/A")</div>
+                        </div>
+
+                        <form asp-controller="MercadoLibre"
+                              asp-action="Disconnect"
+                              method="post">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-outline-danger w-100">
+                                Desconectar esta sesión
+                            </button>
+                        </form>
+                    }
+                    else
+                    {
+                        <div class="alert alert-warning">
+                            No hay cuenta de Mercado Libre conectada en esta sesión.
+                        </div>
+
+                        <a asp-controller="MercadoLibre"
+                           asp-action="Connect"
+                           class="btn btn-success w-100">
+                            Conectar Mercado Libre
+                        </a>
+                    }
                 </div>
             </div>
+        </div>
 
-            <div class="card-body p-0">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="fw-bold mb-0">Cuenta activa para publicar</h5>
+                </div>
+
+                <div class="card-body">
+                    @if (activeToken != null)
+                    {
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <div class="border rounded p-3 bg-light">
+                                    <div class="text-muted small">Nickname</div>
+                                    <div class="fw-bold">
+                                        @(activeToken.Nickname ?? "Sin nickname")
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="border rounded p-3 bg-light">
+                                    <div class="text-muted small">User ID</div>
+                                    <div class="fw-bold">
+                                        @(activeToken.UserId ?? "N/A")
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="border rounded p-3 bg-light">
+                                    <div class="text-muted small">Expira</div>
+                                    <div class="fw-bold">
+                                        @if (activeToken.ExpiresAt.HasValue)
+                                        {
+                                            @activeToken.ExpiresAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                        }
+                                        else
+                                        {
+                                            <span>N/A</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="border rounded p-3 bg-light">
+                                    <div class="text-muted small">Última actualización</div>
+                                    <div class="fw-bold">
+                                        @activeToken.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <a asp-controller="MercadoLibre"
+                               asp-action="Me"
+                               target="_blank"
+                               class="btn btn-outline-primary">
+                                Probar /users/me
+                            </a>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-secondary mb-0">
+                            No hay token activo. Conecta una cuenta de Mercado Libre para poder publicar productos.
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="card border-0 shadow-sm mt-4">
+        <div class="card-header bg-white border-0 py-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0">Tokens / cuentas registradas</h5>
+                <span class="text-muted small">
+                    Total: @tokens.Count
+                </span>
+            </div>
+        </div>
+
+        <div class="card-body p-0">
+            @if (!tokens.Any())
+            {
+                <div class="text-center py-5 px-3">
+                    <div class="display-5 mb-3">🔌</div>
+                    <h5 class="fw-bold">No hay cuentas conectadas</h5>
+                    <p class="text-muted">
+                        Conecta una cuenta de Mercado Libre para empezar a publicar.
+                    </p>
+                    <a asp-controller="MercadoLibre"
+                       asp-action="Connect"
+                       class="btn btn-success">
+                        Conectar Mercado Libre
+                    </a>
+                </div>
+            }
+            else
+            {
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th style="width: 80px;">ID</th>
+                                <th>ID</th>
                                 <th>Usuario</th>
-                                <th style="width: 130px;">Estado</th>
-                                <th style="width: 190px;">Expira</th>
-                                <th style="width: 190px;">Creado</th>
-                                <th style="width: 190px;">Actualizado</th>
-                                <th style="width: 160px;">Token</th>
+                                <th>User ID</th>
+                                <th>Estado</th>
+                                <th>Token Type</th>
+                                <th>Expira</th>
+                                <th>Creado</th>
+                                <th>Actualizado</th>
+                                <th>Access Token</th>
                             </tr>
                         </thead>
 
                         <tbody>
                             @foreach (var token in tokens)
                             {
-                                var isExpired = token.ExpiresAt.HasValue && token.ExpiresAt.Value <= DateTime.UtcNow;
-
                                 <tr>
                                     <td class="fw-semibold">
                                         @token.Id
@@ -174,45 +291,63 @@
 
                                     <td>
                                         <div class="fw-semibold">
-                                            @if (!string.IsNullOrWhiteSpace(token.Nickname))
-                                            {
-                                                @token.Nickname
-                                            }
-                                            else
-                                            {
-                                                <span class="text-muted">Sin nickname</span>
-                                            }
+                                            @(token.Nickname ?? "Sin nickname")
                                         </div>
 
-                                        <div class="text-muted small">
-                                            User ID: @(token.UserId ?? "N/A")
-                                        </div>
+                                        @if (sessionTokenId == token.Id)
+                                        {
+                                            <span class="badge bg-primary">
+                                                Sesión actual
+                                            </span>
+                                        }
                                     </td>
 
                                     <td>
-                                        @if (token.IsActive && !isExpired)
+                                        @(token.UserId ?? "N/A")
+                                    </td>
+
+                                    <td>
+                                        @if (token.IsActive)
                                         {
-                                            <span class="badge bg-success">Activo</span>
-                                        }
-                                        else if (isExpired)
-                                        {
-                                            <span class="badge bg-danger">Expirado</span>
+                                            <span class="badge bg-success">
+                                                Activo
+                                            </span>
                                         }
                                         else
                                         {
-                                            <span class="badge bg-secondary">Inactivo</span>
+                                            <span class="badge bg-secondary">
+                                                Inactivo
+                                            </span>
                                         }
+                                    </td>
+
+                                    <td>
+                                        @(token.TokenType ?? "N/A")
                                     </td>
 
                                     <td>
                                         @if (token.ExpiresAt.HasValue)
                                         {
-                                            <div>
-                                                @token.ExpiresAt.Value.ToLocalTime().ToString("yyyy-MM-dd")
-                                            </div>
-                                            <div class="text-muted small">
-                                                @token.ExpiresAt.Value.ToLocalTime().ToString("HH:mm")
-                                            </div>
+                                            var expired = token.ExpiresAt.Value < DateTime.UtcNow;
+
+                                            if (expired)
+                                            {
+                                                <span class="badge bg-danger">
+                                                    Expirado
+                                                </span>
+                                                <div class="small text-muted">
+                                                    @token.ExpiresAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-success">
+                                                    Vigente
+                                                </span>
+                                                <div class="small text-muted">
+                                                    @token.ExpiresAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                                </div>
+                                            }
                                         }
                                         else
                                         {
@@ -221,35 +356,23 @@
                                     </td>
 
                                     <td>
-                                        <div>
-                                            @token.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")
-                                        </div>
-                                        <div class="text-muted small">
-                                            @token.CreatedAt.ToLocalTime().ToString("HH:mm")
-                                        </div>
+                                        @token.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
                                     </td>
 
                                     <td>
-                                        <div>
-                                            @token.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd")
-                                        </div>
-                                        <div class="text-muted small">
-                                            @token.UpdatedAt.ToLocalTime().ToString("HH:mm")
-                                        </div>
+                                        @token.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
                                     </td>
 
                                     <td>
                                         @if (!string.IsNullOrWhiteSpace(token.AccessToken))
                                         {
-                                            <span class="badge bg-dark">
-                                                Guardado
-                                            </span>
+                                            <code>
+                                                @token.AccessToken.Substring(0, Math.Min(18, token.AccessToken.Length))...
+                                            </code>
                                         }
                                         else
                                         {
-                                            <span class="badge bg-danger">
-                                                Sin token
-                                            </span>
+                                            <span class="text-muted">N/A</span>
                                         }
                                     </td>
                                 </tr>
@@ -257,8 +380,8 @@
                         </tbody>
                     </table>
                 </div>
-            </div>
+            }
         </div>
-    }
+    </div>
 
 </div>

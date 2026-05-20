@@ -2,364 +2,415 @@
 
 @{
     ViewData["Title"] = "Productos";
+
+    var products = Model?.ToList() ?? new List<MarketplaceSync.Web.Models.Product>();
+
+    var totalProducts = products.Count;
+    var ebayCount = products.Count(x => string.Equals(x.SourceMarketplace, "eBay", StringComparison.OrdinalIgnoreCase));
+    var amazonCount = products.Count(x => string.Equals(x.SourceMarketplace, "Amazon", StringComparison.OrdinalIgnoreCase));
+    var mlPublishedCount = products.Count(x => !string.IsNullOrWhiteSpace(x.MercadoLibreItemId));
+    var outOfStockCount = products.Count(x => x.SourceStock.HasValue && x.SourceStock.Value <= 0);
+    var needsReviewCount = products.Count(x => string.Equals(x.Status, "NeedsReview", StringComparison.OrdinalIgnoreCase));
 }
 
-<div class="container-fluid px-4 py-4">
-
-    @if (TempData["Success"] != null)
-    {
-        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
-            @TempData["Success"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    }
-
-    @if (TempData["Error"] != null)
-    {
-        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
-            @TempData["Error"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    }
-
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-        <div>
-            <h1 class="fw-bold mb-1">Productos</h1>
-            <p class="text-muted mb-0">
-                Administra productos importados desde eBay, Amazon o Mercado Libre.
-            </p>
-        </div>
-
-        <div class="d-flex flex-wrap gap-2">
-            <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-primary">
-                + Agregar producto por link
-            </a>
-
-            <form asp-controller="Products" asp-action="RefreshAllSourceInfo" method="post" class="d-inline">
-                @Html.AntiForgeryToken()
-                <button type="submit" class="btn btn-outline-primary">
-                    Actualizar todos
-                </button>
-            </form>
-        </div>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <div class="text-uppercase text-muted fw-bold small mb-2">MarketplaceSync</div>
+        <h1 class="fw-bold display-6 mb-2">Productos</h1>
+        <p class="text-muted mb-0">
+            Administra productos importados, revisa precio/stock y prepara publicaciones para Mercado Libre.
+        </p>
     </div>
 
-    <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small">Total productos</div>
-                    <div class="fs-3 fw-bold">@Model.Count()</div>
-                </div>
-            </div>
-        </div>
+    <div class="d-flex flex-wrap gap-2">
+        <form asp-controller="Products"
+              asp-action="RefreshAllSourceInfo"
+              method="post"
+              class="d-inline"
+              onsubmit="return confirm('¿Deseas actualizar la información de todos los productos?');">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-outline-primary">
+                Actualizar todos
+            </button>
+        </form>
 
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small">eBay</div>
-                    <div class="fs-3 fw-bold">
-                        @Model.Count(x => x.SourceMarketplace == "eBay")
-                    </div>
-                </div>
-            </div>
-        </div>
+        <a asp-controller="Products"
+           asp-action="CreateFromUrl"
+           class="btn btn-primary">
+            + Agregar por link
+        </a>
+    </div>
+</div>
 
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small">Amazon</div>
-                    <div class="fs-3 fw-bold">
-                        @Model.Count(x => x.SourceMarketplace == "Amazon")
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small">Publicados ML</div>
-                    <div class="fs-3 fw-bold">
-                        @Model.Count(x => !string.IsNullOrWhiteSpace(x.MercadoLibreItemId))
-                    </div>
-                </div>
+<div class="row g-3 mb-4">
+    <div class="col-12 col-sm-6 col-xl-2">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Total</div>
+                <div class="fs-3 fw-bold">@totalProducts</div>
+                <div class="small text-muted">productos registrados</div>
             </div>
         </div>
     </div>
 
-    <div class="card border-0 shadow-sm">
-        <div class="card-header bg-white border-0 py-3">
-            <div class="d-flex justify-content-between align-items-center">
-                <h5 class="fw-bold mb-0">Listado de productos</h5>
-                <span class="text-muted small">
-                    Última actualización: @DateTime.Now.ToString("yyyy-MM-dd HH:mm")
-                </span>
+    <div class="col-12 col-sm-6 col-xl-2">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">eBay</div>
+                <div class="fs-3 fw-bold">@ebayCount</div>
+                <div class="small text-muted">productos fuente</div>
             </div>
         </div>
+    </div>
 
-        <div class="card-body p-0">
-            @if (!Model.Any())
-            {
-                <div class="text-center py-5 px-3">
-                    <div class="mb-3">
-                        <span class="display-5">📦</span>
-                    </div>
-                    <h5 class="fw-bold">Todavía no hay productos</h5>
-                    <p class="text-muted mb-4">
-                        Agrega tu primer producto usando un link de eBay, Amazon o Mercado Libre.
-                    </p>
-                    <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-primary">
-                        Agregar producto
-                    </a>
+    <div class="col-12 col-sm-6 col-xl-2">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Amazon</div>
+                <div class="fs-3 fw-bold">@amazonCount</div>
+                <div class="small text-muted">pendiente API oficial</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl-2">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Publicados ML</div>
+                <div class="fs-3 fw-bold text-success">@mlPublishedCount</div>
+                <div class="small text-muted">con item publicado</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl-2">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Sin stock</div>
+                <div class="fs-3 fw-bold text-danger">@outOfStockCount</div>
+                <div class="small text-muted">requieren revisión</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl-2">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Needs Review</div>
+                <div class="fs-3 fw-bold text-warning">@needsReviewCount</div>
+                <div class="small text-muted">preparación pendiente</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white border-0 py-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <h5 class="fw-bold mb-1">Listado de productos</h5>
+                <div class="text-muted small">
+                    Última carga de pantalla: @DateTime.Now.ToString("yyyy-MM-dd HH:mm")
                 </div>
-            }
-            else
-            {
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead class="table-light">
+            </div>
+
+            <div class="d-flex flex-wrap gap-2">
+                <span class="badge bg-primary">eBay</span>
+                <span class="badge bg-warning text-dark">Amazon</span>
+                <span class="badge bg-success">Mercado Libre</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-body p-0">
+        @if (!products.Any())
+        {
+            <div class="text-center py-5 px-3">
+                <div class="display-5 mb-3">📦</div>
+                <h5 class="fw-bold">Todavía no hay productos</h5>
+                <p class="text-muted mb-4">
+                    Agrega tu primer producto usando un link de eBay, Amazon o Mercado Libre.
+                </p>
+                <a asp-controller="Products"
+                   asp-action="CreateFromUrl"
+                   class="btn btn-primary">
+                    Agregar producto
+                </a>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 70px;">ID</th>
+                            <th style="width: 90px;">Imagen</th>
+                            <th>Producto</th>
+                            <th style="width: 130px;">Fuente</th>
+                            <th style="width: 130px;">Precio</th>
+                            <th style="width: 160px;">Stock</th>
+                            <th style="width: 150px;">Estado</th>
+                            <th style="width: 160px;">Revisión</th>
+                            <th style="width: 330px;">Acciones</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var item in products)
+                        {
+                            var marketplace = item.SourceMarketplace ?? "N/A";
+                            var status = item.Status ?? "N/A";
+                            var isPublished = !string.IsNullOrWhiteSpace(item.MercadoLibreItemId);
+                            var hasStock = item.SourceStock.HasValue && item.SourceStock.Value > 0;
+                            var noStock = item.SourceStock.HasValue && item.SourceStock.Value <= 0;
+
                             <tr>
-                                <th style="width: 70px;">ID</th>
-                                <th style="width: 90px;">Imagen</th>
-                                <th>Producto</th>
-                                <th style="width: 130px;">Marketplace</th>
-                                <th style="width: 120px;">Precio</th>
-                                <th style="width: 150px;">Stock</th>
-                                <th style="width: 130px;">Estado</th>
-                                <th style="width: 170px;">Última revisión</th>
-                                <th style="width: 280px;">Acciones</th>
-                            </tr>
-                        </thead>
+                                <td class="fw-bold">
+                                    @item.Id
+                                </td>
 
-                        <tbody>
-                            @foreach (var item in Model)
-                            {
-                                <tr>
-                                    <td class="fw-semibold">
-                                        @item.Id
-                                    </td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+                                    {
+                                        <img src="@item.ImageUrl"
+                                             alt="@item.Title"
+                                             class="rounded border bg-light"
+                                             style="width:64px;height:64px;object-fit:cover;" />
+                                    }
+                                    else
+                                    {
+                                        <div class="rounded border bg-light d-flex align-items-center justify-content-center"
+                                             style="width:64px;height:64px;">
+                                            <span class="small text-muted">N/A</span>
+                                        </div>
+                                    }
+                                </td>
 
-                                    <td>
-                                        @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+                                <td>
+                                    <div class="fw-bold mb-1">
+                                        @(string.IsNullOrWhiteSpace(item.Title) ? "Sin título" : item.Title)
+                                    </div>
+
+                                    <div class="small text-muted">
+                                        Source ID:
+                                        <span class="fw-semibold">
+                                            @(string.IsNullOrWhiteSpace(item.SourceProductId) ? "N/A" : item.SourceProductId)
+                                        </span>
+                                    </div>
+
+                                    <div class="small text-muted">
+                                        @if (!string.IsNullOrWhiteSpace(item.Brand))
                                         {
-                                            <img src="@item.ImageUrl"
-                                                 alt="@item.Title"
-                                                 class="rounded border"
-                                                 style="width: 64px; height: 64px; object-fit: cover;" />
+                                            <span>Marca: @item.Brand</span>
                                         }
-                                        else
+
+                                        @if (!string.IsNullOrWhiteSpace(item.Model))
                                         {
-                                            <div class="rounded border bg-light d-flex align-items-center justify-content-center"
-                                                 style="width: 64px; height: 64px;">
-                                                <span class="text-muted small">N/A</span>
-                                            </div>
+                                            <span class="ms-2">Modelo: @item.Model</span>
                                         }
-                                    </td>
+                                    </div>
 
-                                    <td>
-                                        <div class="fw-semibold">
-                                            @(string.IsNullOrWhiteSpace(item.Title) ? "Sin título" : item.Title)
-                                        </div>
-
-                                        <div class="text-muted small">
-                                            @if (!string.IsNullOrWhiteSpace(item.Brand))
-                                            {
-                                                <span>Marca: @item.Brand</span>
-                                            }
-
-                                            @if (!string.IsNullOrWhiteSpace(item.Model))
-                                            {
-                                                <span class="ms-2">Modelo: @item.Model</span>
-                                            }
-                                        </div>
-
-                                        <div class="text-muted small">
-                                            Source ID: @(item.SourceProductId ?? "N/A")
-                                        </div>
-
+                                    <div class="small mt-1">
                                         @if (!string.IsNullOrWhiteSpace(item.SourceUrl))
                                         {
-                                            <a href="@item.SourceUrl" target="_blank" class="small text-decoration-none">
+                                            <a href="@item.SourceUrl" target="_blank" class="text-decoration-none">
                                                 Abrir origen
                                             </a>
                                         }
 
                                         @if (!string.IsNullOrWhiteSpace(item.MercadoLibrePermalink))
                                         {
-                                            <span class="mx-1 text-muted">|</span>
-                                            <a href="@item.MercadoLibrePermalink" target="_blank" class="small text-decoration-none">
-                                                Ver en Mercado Libre
+                                            <span class="text-muted mx-1">|</span>
+                                            <a href="@item.MercadoLibrePermalink" target="_blank" class="text-decoration-none">
+                                                Ver ML
                                             </a>
                                         }
-                                    </td>
+                                    </div>
+                                </td>
 
-                                    <td>
-                                        @if (item.SourceMarketplace == "eBay")
-                                        {
-                                            <span class="badge bg-primary">eBay</span>
-                                        }
-                                        else if (item.SourceMarketplace == "Amazon")
-                                        {
-                                            <span class="badge bg-warning text-dark">Amazon</span>
-                                        }
-                                        else if (item.SourceMarketplace == "MercadoLibre")
-                                        {
-                                            <span class="badge bg-info text-dark">Mercado Libre</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-secondary">
-                                                @(string.IsNullOrWhiteSpace(item.SourceMarketplace) ? "N/A" : item.SourceMarketplace)
-                                            </span>
-                                        }
-                                    </td>
+                                <td>
+                                    @if (string.Equals(marketplace, "eBay", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span class="badge bg-primary">eBay</span>
+                                    }
+                                    else if (string.Equals(marketplace, "Amazon", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span class="badge bg-warning text-dark">Amazon</span>
+                                    }
+                                    else if (string.Equals(marketplace, "MercadoLibre", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span class="badge bg-info text-dark">Mercado Libre</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">@marketplace</span>
+                                    }
 
-                                    <td>
-                                        @if (item.SourcePrice.HasValue)
-                                        {
-                                            <div class="fw-semibold">
-                                                @item.SourcePrice.Value.ToString("N2")
-                                            </div>
-                                            <div class="text-muted small">
-                                                @(item.SourceCurrency ?? "")
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted">N/A</span>
-                                        }
-                                    </td>
+                                    @if (!string.IsNullOrWhiteSpace(item.SourceStatus))
+                                    {
+                                        <div class="small text-muted mt-1">
+                                            @item.SourceStatus
+                                        </div>
+                                    }
+                                </td>
 
-                                    <td>
-                                        @if (item.SourceStock.HasValue)
-                                        {
-                                            if (item.SourceStock.Value > 0)
-                                            {
-                                                <span class="badge bg-success">
-                                                    @item.SourceStock.Value
-                                                </span>
-                                            }
-                                            else
-                                            {
-                                                <span class="badge bg-danger">
-                                                    0
-                                                </span>
-                                            }
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-secondary">
-                                                N/A
-                                            </span>
-                                        }
+                                <td>
+                                    @if (item.SourcePrice.HasValue)
+                                    {
+                                        <div class="fw-bold">
+                                            @item.SourcePrice.Value.ToString("N2")
+                                        </div>
+                                        <div class="small text-muted">
+                                            @(item.SourceCurrency ?? "")
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">N/A</span>
+                                    }
 
-                                        @if (!string.IsNullOrWhiteSpace(item.SourceAvailabilityText))
-                                        {
-                                            <div class="small text-muted mt-1">
-                                                @item.SourceAvailabilityText
-                                            </div>
-                                        }
-                                    </td>
+                                    @if (item.MercadoLibrePrice.HasValue)
+                                    {
+                                        <div class="small text-success mt-1">
+                                            ML: @item.MercadoLibrePrice.Value.ToString("N2") @(item.MercadoLibreCurrencyId ?? "MXN")
+                                        </div>
+                                    }
+                                </td>
 
-                                    <td>
-                                        @if (!string.IsNullOrWhiteSpace(item.MercadoLibreItemId))
-                                        {
-                                            <span class="badge bg-success">Publicado ML</span>
-                                        }
-                                        else if (item.Status == "Draft")
-                                        {
-                                            <span class="badge bg-warning text-dark">Draft</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-secondary">
-                                                @(item.Status ?? "N/A")
-                                            </span>
-                                        }
+                                <td>
+                                    @if (hasStock)
+                                    {
+                                        <span class="badge bg-success">
+                                            @item.SourceStock
+                                        </span>
+                                    }
+                                    else if (noStock)
+                                    {
+                                        <span class="badge bg-danger">
+                                            0
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">
+                                            N/A
+                                        </span>
+                                    }
 
-                                        @if (!string.IsNullOrWhiteSpace(item.SourceStatus))
-                                        {
-                                            <div class="small text-muted mt-1">
-                                                @item.SourceStatus
-                                            </div>
-                                        }
-                                    </td>
+                                    @if (!string.IsNullOrWhiteSpace(item.SourceAvailabilityText))
+                                    {
+                                        <div class="small text-muted mt-1">
+                                            @item.SourceAvailabilityText
+                                        </div>
+                                    }
 
-                                    <td>
-                                        @if (item.LastSourceCheckAt.HasValue)
-                                        {
-                                            <div>
-                                                @item.LastSourceCheckAt.Value.ToLocalTime().ToString("yyyy-MM-dd")
-                                            </div>
-                                            <div class="text-muted small">
-                                                @item.LastSourceCheckAt.Value.ToLocalTime().ToString("HH:mm")
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted">Sin revisar</span>
-                                        }
-                                    </td>
+                                    @if (item.MercadoLibreStock.HasValue)
+                                    {
+                                        <div class="small text-success mt-1">
+                                            ML stock: @item.MercadoLibreStock
+                                        </div>
+                                    }
+                                </td>
 
-                                    <td>
-                                        <div class="d-flex flex-wrap gap-1">
+                                <td>
+                                    @if (isPublished)
+                                    {
+                                        <span class="badge bg-success">Publicado ML</span>
+                                    }
+                                    else if (string.Equals(status, "Draft", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span class="badge bg-warning text-dark">Draft</span>
+                                    }
+                                    else if (string.Equals(status, "NeedsReview", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span class="badge bg-info text-dark">Needs Review</span>
+                                    }
+                                    else if (string.Equals(status, "OutOfStock", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span class="badge bg-danger">Sin stock</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">@status</span>
+                                    }
 
-                                            <a asp-controller="Products"
-                                               asp-action="Details"
-                                               asp-route-id="@item.Id"
-                                               class="btn btn-sm btn-outline-secondary">
-                                                Ver
-                                            </a>
+                                    @if (!string.IsNullOrWhiteSpace(item.MercadoLibreItemId))
+                                    {
+                                        <div class="small text-muted mt-1">
+                                            ML: @item.MercadoLibreItemId
+                                        </div>
+                                    }
+                                </td>
 
-                                            <a asp-controller="Products"
-                                               asp-action="Edit"
-                                               asp-route-id="@item.Id"
-                                               class="btn btn-sm btn-outline-dark">
-                                                Editar
-                                            </a>
+                                <td>
+                                    @if (item.LastSourceCheckAt.HasValue)
+                                    {
+                                        <div class="fw-semibold">
+                                            @item.LastSourceCheckAt.Value.ToLocalTime().ToString("yyyy-MM-dd")
+                                        </div>
+                                        <div class="small text-muted">
+                                            @item.LastSourceCheckAt.Value.ToLocalTime().ToString("HH:mm")
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">Sin revisar</span>
+                                    }
+                                </td>
+
+                                <td>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        <a asp-controller="Products"
+                                           asp-action="Details"
+                                           asp-route-id="@item.Id"
+                                           class="btn btn-sm btn-outline-secondary">
+                                            Ver
+                                        </a>
+
+                                        <a asp-controller="Products"
+                                           asp-action="Edit"
+                                           asp-route-id="@item.Id"
+                                           class="btn btn-sm btn-outline-dark">
+                                            Editar
+                                        </a>
 
                                         <form asp-controller="Products"
-      asp-action="RefreshSource"
-      asp-route-id="@item.Id"
-      method="post"
-      class="d-inline">
-    @Html.AntiForgeryToken()
+                                              asp-action="RefreshSource"
+                                              asp-route-id="@item.Id"
+                                              method="post"
+                                              class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                                Actualizar
+                                            </button>
+                                        </form>
 
-    <button type="submit" class="btn btn-sm btn-outline-primary">
-        Actualizar info
-    </button>
-</form>
-<a asp-controller="Products"
-   asp-action="PublishToMercadoLibre"
-   asp-route-id="@item.Id"
-   class="btn btn-success">
-    Publicar en Mercado Libre
-</a>
+                                        <a asp-controller="Products"
+                                           asp-action="PublishToMercadoLibre"
+                                           asp-route-id="@item.Id"
+                                           class="btn btn-sm btn-success">
+                                            Publicar ML
+                                        </a>
 
-
-                                      <form asp-controller="Products"
-      asp-action="DeleteConfirmed"
-      asp-route-id="@item.Id"
-      method="post"
-      class="d-inline"
-      onsubmit="return confirm('¿Seguro que deseas borrar este producto? Esta acción no elimina la publicación de Mercado Libre, solo borra el registro local.');">
-    @Html.AntiForgeryToken()
-
-    <button type="submit" class="btn btn-sm btn-outline-danger">
-        Borrar
-    </button>
-</form>
-                                            
-
-                                        </div>
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            }
-        </div>
+                                        <form asp-controller="Products"
+                                              asp-action="DeleteConfirmed"
+                                              asp-route-id="@item.Id"
+                                              method="post"
+                                              class="d-inline"
+                                              onsubmit="return confirm('¿Seguro que deseas borrar este producto? Solo se borrará de MarketplaceSync, no de Mercado Libre.');">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                Borrar
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
     </div>
 </div>

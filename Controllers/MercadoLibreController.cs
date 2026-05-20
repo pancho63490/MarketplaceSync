@@ -64,138 +64,198 @@ namespace MarketplaceSync.Web.Controllers
             return Redirect(url);
         }
 
-        [HttpGet]
-        public async Task<IActionResult> Callback(
-            string? code,
-            string? state,
-            string? error,
-            string? error_description)
+    [HttpGet]
+public async Task<IActionResult> Callback(string? code, string? state, string? error, string? error_description)
+{
+    if (!string.IsNullOrWhiteSpace(error))
+    {
+        TempData["Error"] = $"Mercado Libre regresó error: {error} {error_description}";
+        return RedirectToAction(nameof(Status));
+    }
+
+    if (string.IsNullOrWhiteSpace(code))
+    {
+        TempData["Error"] = "Mercado Libre no regresó código de autorización.";
+        return RedirectToAction(nameof(Status));
+    }
+
+    var clientId = _configuration["MercadoLibre:ClientId"];
+    var clientSecret = _configuration["MercadoLibre:ClientSecret"];
+    var redirectUri = _configuration["MercadoLibre:RedirectUri"];
+    var tokenUrl = _configuration["MercadoLibre:TokenUrl"];
+
+    if (string.IsNullOrWhiteSpace(clientId))
+    {
+        TempData["Error"] = "Falta MercadoLibre:ClientId.";
+        return RedirectToAction(nameof(Status));
+    }
+
+    if (string.IsNullOrWhiteSpace(clientSecret))
+    {
+        TempData["Error"] = "Falta MercadoLibre:ClientSecret.";
+        return RedirectToAction(nameof(Status));
+    }
+
+    if (string.IsNullOrWhiteSpace(redirectUri))
+    {
+        TempData["Error"] = "Falta MercadoLibre:RedirectUri.";
+        return RedirectToAction(nameof(Status));
+    }
+
+    if (string.IsNullOrWhiteSpace(tokenUrl))
+    {
+        tokenUrl = "https://api.mercadolibre.com/oauth/token";
+    }
+
+    var client = _httpClientFactory.CreateClient();
+
+    using var tokenRequest = new HttpRequestMessage(HttpMethod.Post, tokenUrl);
+
+    tokenRequest.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+    {
+        { "grant_type", "authorization_code" },
+        { "client_id", clientId },
+        { "client_secret", clientSecret },
+        { "code", code },
+        { "redirect_uri", redirectUri }
+    });
+
+    using var tokenResponseHttp = await client.SendAsync(tokenRequest);
+    var tokenContent = await tokenResponseHttp.Content.ReadAsStringAsync();
+
+    if (!tokenResponseHttp.IsSuccessStatusCode)
+    {
+        TempData["Error"] = $"Error obteniendo token de Mercado Libre: {tokenContent}";
+        return RedirectToAction(nameof(Status));
+    }
+
+    var tokenResponse = JsonSerializer.Deserialize<MercadoLibreTokenResponse>(
+        tokenContent,
+        new JsonSerializerOptions
         {
-            if (!string.IsNullOrWhiteSpace(error))
+            PropertyNameCaseInsensitive = true
+        });
+
+    if (tokenResponse == null || string.IsNullOrWhiteSpace(tokenResponse.AccessToken))
+    {
+        TempData["Error"] = $"Mercado Libre no regresó access_token: {tokenContent}";
+        return RedirectToAction(nameof(Status));
+    }
+
+    string? nickname = null;
+
+    try
+    {
+        using var meRequest = new HttpRequestMessage(
+            HttpMethod.Get,
+            "https://api.mercadolibre.com/users/me");
+
+        meRequest.Headers.Authorization =
+            new AuthenticationHeaderValue("Bearer", tokenResponse.AccessToken);
+
+        using var meResponse = await client.SendAsync(meRequest);
+        var meContent = await meResponse.Content.ReadAsStringAsync();
+
+        if (meResponse.IsSuccessStatusCode)
+        {
+            using var meDocument = JsonDocument.Parse(meContent);
+            var root = meDocument.RootElement;
+
+            if (root.TryGetProperty("nickname", out var nicknameElement))
             {
-                TempData["Error"] = $"Mercado Libre regresó error: {error} {error_description}";
-                return RedirectToAction(nameof(Status));
+                nickname = nicknameElement.GetString();
             }
-
-            if (string.IsNullOrWhiteSpace(code))
-            {
-                TempData["Error"] = "Mercado Libre no regresó código de autorización.";
-                return RedirectToAction(nameof(Status));
-            }
-
-            var expectedState = HttpContext.Session.GetString("ML_OAUTH_STATE");
-
-            if (!string.IsNullOrWhiteSpace(expectedState))
-            {
-                if (string.IsNullOrWhiteSpace(state) || state != expectedState)
-                {
-                    TempData["Error"] = "State inválido. Por seguridad se canceló la autorización.";
-                    return RedirectToAction(nameof(Status));
-                }
-            }
-
-            var clientId = _configuration["MercadoLibre:ClientId"];
-            var clientSecret = _configuration["MercadoLibre:ClientSecret"];
-            var redirectUri = _configuration["MercadoLibre:RedirectUri"];
-            var tokenUrl = _configuration["MercadoLibre:TokenUrl"];
-
-            if (string.IsNullOrWhiteSpace(clientId))
-            {
-                TempData["Error"] = "Falta MercadoLibre:ClientId.";
-                return RedirectToAction(nameof(Status));
-            }
-
-            if (string.IsNullOrWhiteSpace(clientSecret))
-            {
-                TempData["Error"] = "Falta MercadoLibre:ClientSecret.";
-                return RedirectToAction(nameof(Status));
-            }
-
-            if (string.IsNullOrWhiteSpace(redirectUri))
-            {
-                TempData["Error"] = "Falta MercadoLibre:RedirectUri.";
-                return RedirectToAction(nameof(Status));
-            }
-
-            if (string.IsNullOrWhiteSpace(tokenUrl))
-                tokenUrl = "https://api.mercadolibre.com/oauth/token";
-
-            var client = _httpClientFactory.CreateClient();
-
-            using var request = new HttpRequestMessage(HttpMethod.Post, tokenUrl);
-
-            request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                { "grant_type", "authorization_code" },
-                { "client_id", clientId },
-                { "client_secret", clientSecret },
-                { "code", code },
-                { "redirect_uri", redirectUri }
-            });
-
-            using var response = await client.SendAsync(request);
-            var content = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                TempData["Error"] = $"Error obteniendo token de Mercado Libre: {content}";
-                return RedirectToAction(nameof(Status));
-            }
-
-            var tokenResponse = JsonSerializer.Deserialize<MercadoLibreTokenResponse>(
-                content,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-
-            if (tokenResponse == null || string.IsNullOrWhiteSpace(tokenResponse.AccessToken))
-            {
-                TempData["Error"] = $"Mercado Libre no regresó access_token: {content}";
-                return RedirectToAction(nameof(Status));
-            }
-
-            var expiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
-
-            var existingToken = await _context.MercadoLibreTokens
-                .FirstOrDefaultAsync(x => x.UserId == tokenResponse.UserId.ToString());
-
-            if (existingToken == null)
-            {
-                existingToken = new MercadoLibreToken
-                {
-                    UserId = tokenResponse.UserId.ToString(),
-                    AccessToken = tokenResponse.AccessToken,
-                    RefreshToken = tokenResponse.RefreshToken,
-                    TokenType = tokenResponse.TokenType,
-                    Scope = tokenResponse.Scope,
-                    ExpiresIn = tokenResponse.ExpiresIn,
-                    ExpiresAt = expiresAt,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-
-                _context.MercadoLibreTokens.Add(existingToken);
-            }
-            else
-            {
-                existingToken.AccessToken = tokenResponse.AccessToken;
-                existingToken.RefreshToken = tokenResponse.RefreshToken;
-                existingToken.TokenType = tokenResponse.TokenType;
-                existingToken.Scope = tokenResponse.Scope;
-                existingToken.ExpiresIn = tokenResponse.ExpiresIn;
-                existingToken.ExpiresAt = expiresAt;
-                existingToken.UpdatedAt = DateTime.UtcNow;
-            }
-
-            await _context.SaveChangesAsync();
-
-            HttpContext.Session.Remove("ML_OAUTH_STATE");
-
-            TempData["Success"] = "Cuenta de Mercado Libre conectada correctamente.";
-
-            return RedirectToAction(nameof(Status));
         }
+    }
+    catch
+    {
+        nickname = null;
+    }
+
+    var userId = tokenResponse.UserId.ToString();
+    var expiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
+
+    var existingToken = await _context.MercadoLibreTokens
+        .FirstOrDefaultAsync(x => x.UserId == userId);
+
+    var oldActiveTokens = await _context.MercadoLibreTokens
+        .Where(x => x.IsActive)
+        .ToListAsync();
+
+    foreach (var oldToken in oldActiveTokens)
+    {
+        oldToken.IsActive = false;
+    }
+
+    if (existingToken == null)
+    {
+        existingToken = new MercadoLibreToken
+        {
+            UserId = userId,
+            Nickname = nickname,
+            AccessToken = tokenResponse.AccessToken,
+            RefreshToken = tokenResponse.RefreshToken,
+            TokenType = tokenResponse.TokenType,
+            Scope = tokenResponse.Scope,
+            ExpiresIn = tokenResponse.ExpiresIn,
+            ExpiresAt = expiresAt,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        _context.MercadoLibreTokens.Add(existingToken);
+    }
+    else
+    {
+        existingToken.Nickname = nickname;
+        existingToken.AccessToken = tokenResponse.AccessToken;
+        existingToken.RefreshToken = tokenResponse.RefreshToken;
+        existingToken.TokenType = tokenResponse.TokenType;
+        existingToken.Scope = tokenResponse.Scope;
+        existingToken.ExpiresIn = tokenResponse.ExpiresIn;
+        existingToken.ExpiresAt = expiresAt;
+        existingToken.IsActive = true;
+        existingToken.UpdatedAt = DateTime.UtcNow;
+    }
+
+    await _context.SaveChangesAsync();
+
+    HttpContext.Session.SetString("ML_USER_ID", userId);
+    HttpContext.Session.SetString("ML_NICKNAME", nickname ?? userId);
+    HttpContext.Session.SetInt32("ML_TOKEN_ID", existingToken.Id);
+
+    TempData["Success"] = $"Cuenta de Mercado Libre conectada correctamente: {nickname ?? userId}";
+
+    return RedirectToAction(nameof(Status));
+}
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> Disconnect()
+{
+    var tokenId = HttpContext.Session.GetInt32("ML_TOKEN_ID");
+
+    if (tokenId.HasValue)
+    {
+        var token = await _context.MercadoLibreTokens
+            .FirstOrDefaultAsync(x => x.Id == tokenId.Value);
+
+        if (token != null)
+        {
+            token.IsActive = false;
+            token.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    HttpContext.Session.Remove("ML_USER_ID");
+    HttpContext.Session.Remove("ML_NICKNAME");
+    HttpContext.Session.Remove("ML_TOKEN_ID");
+
+    TempData["Success"] = "Cuenta de Mercado Libre desconectada de esta sesión.";
+
+    return RedirectToAction(nameof(Status));
+}
 
         [HttpGet]
         public async Task<IActionResult> Me()
