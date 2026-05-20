@@ -1,11 +1,10 @@
 using System.Diagnostics;
 using MarketplaceSync.Web.Data;
 using MarketplaceSync.Web.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authorization;
 
-using Microsoft.AspNetCore.Mvc;
 namespace MarketplaceSync.Web.Controllers
 {
     [Authorize]
@@ -29,46 +28,25 @@ namespace MarketplaceSync.Web.Controllers
                 .Take(8)
                 .ToListAsync();
 
-            var totalProducts = await _context.Products.CountAsync();
-
-            var ebayProducts = await _context.Products
-                .CountAsync(x => x.SourceMarketplace == "eBay");
-
-            var amazonProducts = await _context.Products
-                .CountAsync(x => x.SourceMarketplace == "Amazon");
-
-            var mercadoLibreProducts = await _context.Products
-                .CountAsync(x => !string.IsNullOrWhiteSpace(x.MercadoLibreItemId));
-
-            var draftProducts = await _context.Products
-                .CountAsync(x => x.Status == "Draft");
-
-            var needsReviewProducts = await _context.Products
-                .CountAsync(x => x.Status == "NeedsReview");
-
-            var outOfStockProducts = await _context.Products
-                .CountAsync(x => x.Status == "OutOfStock" || x.SourceStock == 0);
-
-            var mlConnectedAccounts = await _context.MercadoLibreTokens
-                .CountAsync(x => x.IsActive);
-
-            ViewBag.TotalProducts = totalProducts;
-            ViewBag.EbayProducts = ebayProducts;
-            ViewBag.AmazonProducts = amazonProducts;
-            ViewBag.MercadoLibreProducts = mercadoLibreProducts;
-            ViewBag.DraftProducts = draftProducts;
-            ViewBag.NeedsReviewProducts = needsReviewProducts;
-            ViewBag.OutOfStockProducts = outOfStockProducts;
-            ViewBag.MLConnectedAccounts = mlConnectedAccounts;
+            ViewBag.TotalProducts = await _context.Products.CountAsync();
+            ViewBag.EbayProducts = await _context.Products.CountAsync(x => x.SourceMarketplace == "eBay");
+            ViewBag.AmazonProducts = await _context.Products.CountAsync(x => x.SourceMarketplace == "Amazon");
+            ViewBag.MercadoLibreProducts = await _context.Products.CountAsync(x => !string.IsNullOrWhiteSpace(x.MercadoLibreItemId));
+            ViewBag.DraftProducts = await _context.Products.CountAsync(x => x.Status == "Draft");
+            ViewBag.NeedsReviewProducts = await _context.Products.CountAsync(x => x.Status == "NeedsReview");
+            ViewBag.OutOfStockProducts = await _context.Products.CountAsync(x => x.Status == "OutOfStock" || x.SourceStock == 0);
+            ViewBag.MLConnectedAccounts = await _context.MercadoLibreTokens.CountAsync(x => x.IsActive);
 
             return View(products);
         }
 
+        [AllowAnonymous]
         public IActionResult Privacy()
         {
             return View();
         }
 
+        [AllowAnonymous]
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error()
         {
