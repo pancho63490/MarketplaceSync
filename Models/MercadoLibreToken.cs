@@ -6,6 +6,11 @@ namespace MarketplaceSync.Web.Models
     {
         public int Id { get; set; }
 
+        // Usuario interno de tu app
+        [MaxLength(200)]
+        public string? AppUserName { get; set; }
+
+        // Usuario real de Mercado Libre
         [MaxLength(200)]
         public string? UserId { get; set; }
 
@@ -28,7 +33,7 @@ namespace MarketplaceSync.Web.Models
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? UpdatedAt { get; set; } = DateTime.UtcNow;
 
         public bool IsActive { get; set; } = true;
     }

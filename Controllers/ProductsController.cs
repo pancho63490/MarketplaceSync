@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using MarketplaceSync.Web.Services;
 using System.Text.Json.Nodes;
-
+using Microsoft.AspNetCore.Authorization;
 using MarketplaceSync.Web.Data;
 using MarketplaceSync.Web.Models;
 using MarketplaceSync.Web.Services;
@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MarketplaceSync.Web.Controllers
 {
+    [Authorize]
     public class ProductsController : Controller
     {
           private readonly AppDbContext _context;
@@ -472,9 +473,17 @@ public async Task<IActionResult> PublishToMercadoLibre(PublishToMercadoLibreRequ
     if (!ModelState.IsValid)
         return View(model);
 
-    var token = await _context.MercadoLibreTokens
-        .OrderByDescending(x => x.UpdatedAt)
-        .FirstOrDefaultAsync();
+var appUserName = User.Identity?.Name;
+
+if (string.IsNullOrWhiteSpace(appUserName))
+{
+    return RedirectToAction("Login", "Account");
+}
+
+var token = await _context.MercadoLibreTokens
+    .Where(x => x.AppUserName == appUserName && x.IsActive)
+    .OrderByDescending(x => x.UpdatedAt)
+    .FirstOrDefaultAsync();
 
     if (token == null || string.IsNullOrWhiteSpace(token.AccessToken))
     {

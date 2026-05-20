@@ -1,4 +1,22 @@
-﻿<!DOCTYPE html>
+﻿@{
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString();
+    var currentAction = ViewContext.RouteData.Values["action"]?.ToString();
+
+    bool isAuthenticated = User.Identity != null && User.Identity.IsAuthenticated;
+
+    string IsActive(string controller, string? action = null)
+    {
+        if (!string.Equals(currentController, controller, StringComparison.OrdinalIgnoreCase))
+            return "";
+
+        if (action != null && !string.Equals(currentAction, action, StringComparison.OrdinalIgnoreCase))
+            return "";
+
+        return "active";
+    }
+}
+
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="utf-8" />
@@ -8,252 +26,500 @@
 
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/MarketplaceSync.Web.styles.css" asp-append-version="true" />
 
     <style>
         :root {
-            --ms-primary: #0d6efd;
-            --ms-dark: #20242a;
-            --ms-muted: #6c757d;
-            --ms-bg: #f6f8fb;
-            --ms-card: #ffffff;
-            --ms-border: #e5e7eb;
-            --ms-success: #198754;
-            --ms-warning: #ffc107;
-            --ms-danger: #dc3545;
-        }
-
-        html, body {
-            height: 100%;
+            --app-bg: #f5f7fb;
+            --sidebar-bg: #0f172a;
+            --sidebar-hover: #1e293b;
+            --sidebar-active: #2563eb;
+            --card-border: #e5e7eb;
+            --text-main: #111827;
+            --text-muted: #6b7280;
+            --topbar-bg: rgba(255, 255, 255, 0.88);
         }
 
         body {
-            background: var(--ms-bg);
-            color: var(--ms-dark);
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            margin: 0;
+            background: var(--app-bg);
+            color: var(--text-main);
+            font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
 
         .app-shell {
             min-height: 100vh;
             display: flex;
+            background:
+                radial-gradient(circle at top left, rgba(37, 99, 235, 0.10), transparent 35%),
+                radial-gradient(circle at top right, rgba(124, 58, 237, 0.10), transparent 30%),
+                var(--app-bg);
+        }
+
+        .app-sidebar {
+            width: 280px;
+            background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+            color: white;
+            position: fixed;
+            inset: 0 auto 0 0;
+            padding: 22px 18px;
+            display: flex;
+            flex-direction: column;
+            z-index: 1000;
+            box-shadow: 18px 0 45px rgba(15, 23, 42, 0.14);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: white;
+            margin-bottom: 28px;
+            padding: 8px 10px;
+        }
+
+        .brand-logo {
+            width: 44px;
+            height: 44px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            box-shadow: 0 12px 28px rgba(37, 99, 235, 0.35);
+        }
+
+        .brand-title {
+            font-size: 1.05rem;
+            font-weight: 800;
+            line-height: 1.1;
+        }
+
+        .brand-subtitle {
+            font-size: 0.74rem;
+            color: #94a3b8;
+            margin-top: 2px;
+        }
+
+        .sidebar-section-title {
+            font-size: 0.72rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 700;
+            margin: 18px 10px 8px;
+        }
+
+        .sidebar-link {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            padding: 11px 12px;
+            border-radius: 14px;
+            color: #cbd5e1;
+            text-decoration: none;
+            font-weight: 650;
+            margin-bottom: 5px;
+            transition: all 0.16s ease-in-out;
+        }
+
+        .sidebar-link:hover {
+            background: var(--sidebar-hover);
+            color: white;
+            transform: translateX(2px);
+        }
+
+        .sidebar-link.active {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            color: white;
+            box-shadow: 0 12px 26px rgba(37, 99, 235, 0.28);
+        }
+
+        .sidebar-icon {
+            width: 24px;
+            text-align: center;
+            font-size: 1rem;
+        }
+
+        .sidebar-footer {
+            margin-top: auto;
+            padding: 14px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+        }
+
+        .sidebar-footer-title {
+            font-size: 0.85rem;
+            font-weight: 800;
+            color: white;
+        }
+
+        .sidebar-footer-text {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
+        .app-main {
+            margin-left: 280px;
+            width: calc(100% - 280px);
+            min-height: 100vh;
+            display: flex;
             flex-direction: column;
         }
 
-        .top-navbar {
-            background: #ffffff;
-            border-bottom: 1px solid var(--ms-border);
-            box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+        .topbar {
+            height: 76px;
+            background: var(--topbar-bg);
+            backdrop-filter: blur(14px);
+            border-bottom: 1px solid rgba(229, 231, 235, 0.85);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 30px;
+            position: sticky;
+            top: 0;
+            z-index: 900;
         }
 
-        .brand-mark {
+        .topbar-title {
+            font-size: 1.05rem;
+            font-weight: 800;
+            margin: 0;
+        }
+
+        .topbar-subtitle {
+            color: var(--text-muted);
+            font-size: 0.84rem;
+            margin-top: 2px;
+        }
+
+        .topbar-actions {
             display: flex;
             align-items: center;
             gap: 10px;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            color: var(--ms-dark);
-            text-decoration: none;
         }
 
-        .brand-icon {
-            width: 36px;
-            height: 36px;
-            border-radius: 12px;
-            background: linear-gradient(135deg, #0d6efd, #20c997);
-            color: white;
+        .user-badge {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            background: white;
+            border: 1px solid var(--card-border);
+            border-radius: 999px;
+            padding: 7px 13px;
+            font-size: 0.86rem;
+            font-weight: 700;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+        }
+
+        .user-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #dbeafe;
+            color: #1d4ed8;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 900;
         }
 
-        .nav-link {
-            font-weight: 600;
-            color: #4b5563 !important;
-            border-radius: 10px;
-            padding: 8px 12px !important;
-        }
-
-        .nav-link:hover {
-            background: #f1f5f9;
-            color: #111827 !important;
-        }
-
-        .nav-link.active-link {
-            background: #e7f1ff;
-            color: #0d6efd !important;
-        }
-
-        .main-content {
+        .content-wrap {
+            padding: 28px 30px 36px;
             flex: 1;
-            padding-top: 32px;
-            padding-bottom: 48px;
         }
 
-        .page-container {
-            max-width: 1500px;
-            margin: 0 auto;
-            padding-left: 24px;
-            padding-right: 24px;
+        .app-footer {
+            padding: 16px 30px;
+            color: var(--text-muted);
+            font-size: 0.84rem;
+            border-top: 1px solid rgba(229, 231, 235, 0.8);
+            background: rgba(255, 255, 255, 0.65);
         }
 
-        .footer {
-            background: #ffffff;
-            border-top: 1px solid var(--ms-border);
-            padding: 18px 0;
-            color: var(--ms-muted);
-            font-size: 14px;
+        .mobile-navbar {
+            display: none;
         }
 
-        .btn {
-            border-radius: 10px;
-            font-weight: 600;
-        }
-
-        .card {
-            border-radius: 18px;
-            border: 1px solid var(--ms-border);
-        }
-
-        .badge {
-            border-radius: 8px;
-            padding: 6px 9px;
-        }
-
-        .table {
-            vertical-align: middle;
-        }
-
-        .table thead th {
-            font-size: 13px;
-            text-transform: uppercase;
-            letter-spacing: .04em;
-            color: #64748b;
-            font-weight: 800;
-            border-bottom: 1px solid var(--ms-border);
-        }
-
-        .form-control,
-        .form-select {
-            border-radius: 10px;
-            min-height: 44px;
-        }
-
-        .form-label {
+        .btn-app-primary {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            border: none;
+            color: white;
             font-weight: 700;
+            border-radius: 999px;
+            padding: 8px 16px;
+            box-shadow: 0 10px 22px rgba(37, 99, 235, 0.22);
+        }
+
+        .btn-app-primary:hover {
+            color: white;
+            filter: brightness(0.96);
+        }
+
+        .btn-app-light {
+            background: white;
+            border: 1px solid var(--card-border);
             color: #374151;
+            font-weight: 700;
+            border-radius: 999px;
+            padding: 8px 16px;
         }
 
-        .alert {
-            border-radius: 14px;
+        .btn-app-light:hover {
+            background: #f9fafb;
+            border-color: #d1d5db;
         }
 
-        @@media (max-width: 768px) {
-            .page-container {
-                padding-left: 16px;
-                padding-right: 16px;
+        @@media (max-width: 991px) {
+            .app-sidebar {
+                display: none;
             }
 
-            .main-content {
-                padding-top: 20px;
+            .app-main {
+                margin-left: 0;
+                width: 100%;
+            }
+
+            .mobile-navbar {
+                display: block;
+                background: white;
+                border-bottom: 1px solid var(--card-border);
+                position: sticky;
+                top: 0;
+                z-index: 1200;
+            }
+
+            .topbar {
+                height: auto;
+                padding: 18px 18px;
+                position: static;
+                align-items: flex-start;
+                gap: 14px;
+                flex-direction: column;
+            }
+
+            .content-wrap {
+                padding: 18px;
+            }
+
+            .app-footer {
+                padding: 14px 18px;
             }
         }
     </style>
 </head>
 
 <body>
-    <div class="app-shell">
 
-        <header class="top-navbar sticky-top">
-            <nav class="navbar navbar-expand-lg navbar-light">
-                <div class="container-fluid page-container">
+<div class="app-shell">
 
-                    <a class="brand-mark" asp-controller="Home" asp-action="Index">
-                        <span class="brand-icon">M</span>
-                        <span>MarketplaceSync</span>
+    <aside class="app-sidebar">
+        <a class="brand" asp-controller="Home" asp-action="Index">
+            <div class="brand-logo">MS</div>
+            <div>
+                <div class="brand-title">MarketplaceSync</div>
+                <div class="brand-subtitle">Sync · Publish · Monitor</div>
+            </div>
+        </a>
+
+        <div class="sidebar-section-title">Principal</div>
+
+        <a class="sidebar-link @IsActive("Home", "Index")"
+           asp-controller="Home"
+           asp-action="Index">
+            <span class="sidebar-icon">🏠</span>
+            <span>Dashboard</span>
+        </a>
+
+        @if (isAuthenticated)
+        {
+            <a class="sidebar-link @IsActive("Products", "Index")"
+               asp-controller="Products"
+               asp-action="Index">
+                <span class="sidebar-icon">📦</span>
+                <span>Productos</span>
+            </a>
+
+            <a class="sidebar-link @IsActive("Products", "CreateFromUrl")"
+               asp-controller="Products"
+               asp-action="CreateFromUrl">
+                <span class="sidebar-icon">🔗</span>
+                <span>Agregar por link</span>
+            </a>
+
+            <div class="sidebar-section-title">Integraciones</div>
+
+            <a class="sidebar-link @IsActive("MercadoLibre", "Status")"
+               asp-controller="MercadoLibre"
+               asp-action="Status">
+                <span class="sidebar-icon">🛒</span>
+                <span>Mercado Libre</span>
+            </a>
+
+            <a class="sidebar-link @IsActive("Products")"
+               asp-controller="Products"
+               asp-action="Index">
+                <span class="sidebar-icon">🌎</span>
+                <span>eBay / Amazon</span>
+            </a>
+
+            <div class="sidebar-section-title">Operación</div>
+
+            <a class="sidebar-link"
+               asp-controller="Products"
+               asp-action="Index">
+                <span class="sidebar-icon">🔄</span>
+                <span>Monitoreo stock</span>
+            </a>
+        }
+        else
+        {
+            <div class="sidebar-section-title">Acceso</div>
+
+            <a class="sidebar-link @IsActive("Account", "Login")"
+               asp-controller="Account"
+               asp-action="Login">
+                <span class="sidebar-icon">🔐</span>
+                <span>Iniciar sesión</span>
+            </a>
+
+            <a class="sidebar-link @IsActive("Account", "Register")"
+               asp-controller="Account"
+               asp-action="Register">
+                <span class="sidebar-icon">✨</span>
+                <span>Crear cuenta</span>
+            </a>
+        }
+
+        <div class="sidebar-footer">
+            <div class="sidebar-footer-title">Estado del sistema</div>
+            <div class="sidebar-footer-text">
+                Plataforma lista para sincronizar productos, revisar stock y preparar publicaciones.
+            </div>
+        </div>
+    </aside>
+
+    <div class="app-main">
+
+        <nav class="navbar navbar-expand-lg mobile-navbar">
+            <div class="container-fluid">
+                <a class="navbar-brand fw-bold" asp-controller="Home" asp-action="Index">
+                    MarketplaceSync
+                </a>
+
+                <button class="navbar-toggler"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#mobileMenu">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <div class="collapse navbar-collapse" id="mobileMenu">
+                    <ul class="navbar-nav mt-3">
+                        <li class="nav-item">
+                            <a class="nav-link" asp-controller="Home" asp-action="Index">Dashboard</a>
+                        </li>
+
+                        @if (isAuthenticated)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Products" asp-action="Index">Productos</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Products" asp-action="CreateFromUrl">Agregar por link</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="MercadoLibre" asp-action="Status">Mercado Libre</a>
+                            </li>
+                        }
+                        else
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Account" asp-action="Login">Iniciar sesión</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Account" asp-action="Register">Crear cuenta</a>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </nav>
+
+        <header class="topbar">
+            <div>
+                <h1 class="topbar-title">
+                    @(ViewData["Title"] ?? "Dashboard")
+                </h1>
+                <div class="topbar-subtitle">
+                    Administra productos, conexiones y publicaciones desde un solo panel.
+                </div>
+            </div>
+
+            <div class="topbar-actions">
+                @if (isAuthenticated)
+                {
+                    <div class="user-badge">
+                        <div class="user-avatar">
+                            @(User.Identity?.Name?.Substring(0, 1).ToUpper() ?? "U")
+                        </div>
+                        <span>@User.Identity?.Name</span>
+                    </div>
+
+                    <form asp-controller="Account"
+                          asp-action="Logout"
+                          method="post"
+                          class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-outline-danger rounded-pill px-3 fw-semibold">
+                            Salir
+                        </button>
+                    </form>
+                }
+                else
+                {
+                    <a class="btn btn-app-light"
+                       asp-controller="Account"
+                       asp-action="Login">
+                        Iniciar sesión
                     </a>
 
-                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar"
-                            aria-controls="mainNavbar" aria-expanded="false" aria-label="Abrir navegación">
-                        <span class="navbar-toggler-icon"></span>
-                    </button>
-
-                    <div class="collapse navbar-collapse" id="mainNavbar">
-                        <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-1 mt-3 mt-lg-0">
-
-                            <li class="nav-item">
-                                <a class="nav-link"
-                                   asp-controller="Home"
-                                   asp-action="Index">
-                                    Inicio
-                                </a>
-                            </li>
-
-                            <li class="nav-item">
-                                <a class="nav-link"
-                                   asp-controller="Products"
-                                   asp-action="Index">
-                                    Productos
-                                </a>
-                            </li>
-
-                            <li class="nav-item">
-                                <a class="nav-link"
-                                   asp-controller="Products"
-                                   asp-action="CreateFromUrl">
-                                    Agregar por link
-                                </a>
-                            </li>
-
-                            <li class="nav-item">
-                                <a class="nav-link"
-                                   asp-controller="MercadoLibre"
-                                   asp-action="Status">
-                                    Mercado Libre
-                                </a>
-                            </li>
-
-                        </ul>
-                    </div>
-                </div>
-            </nav>
+                    <a class="btn btn-app-primary"
+                       asp-controller="Account"
+                       asp-action="Register">
+                        Crear cuenta
+                    </a>
+                }
+            </div>
         </header>
 
-        <main class="main-content">
-            <div class="page-container">
-
-                @if (TempData["Success"] != null)
-                {
-                    <div class="alert alert-success alert-dismissible fade show shadow-sm mb-4" role="alert">
-                        @TempData["Success"]
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                }
-
-                @if (TempData["Error"] != null)
-                {
-                    <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-4" role="alert">
-                        @TempData["Error"]
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                }
-
-                @RenderBody()
-            </div>
+        <main class="content-wrap">
+            @RenderBody()
         </main>
 
-        <footer class="footer">
-            <div class="page-container d-flex flex-wrap justify-content-between gap-2">
-                <span>&copy; @DateTime.Now.Year - MarketplaceSync</span>
-                <span class="text-muted">Automatización de productos, stock y publicación.</span>
+        <footer class="app-footer">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <strong>MarketplaceSync</strong> © @DateTime.Now.Year
+                </div>
+                <div>
+                    eBay · Amazon · Mercado Libre · Stock monitor · Product automation
+                </div>
             </div>
         </footer>
 
     </div>
+</div>
 
-    <script src="~/lib/jquery/dist/jquery.min.js"></script>
-    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="~/js/site.js" asp-append-version="true"></script>
+<script src="~/lib/jquery/dist/jquery.min.js"></script>
+<script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+<script src="~/js/site.js" asp-append-version="true"></script>
 
-    @await RenderSectionAsync("Scripts", required: false)
+@await RenderSectionAsync("Scripts", required: false)
+
 </body>
 </html>

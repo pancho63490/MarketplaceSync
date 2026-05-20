@@ -6,9 +6,11 @@ using MarketplaceSync.Web.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
-
+using Microsoft.AspNetCore.Authorization;
 namespace MarketplaceSync.Web.Controllers
 {
+
+    [Authorize]
     public class MercadoLibreController : Controller
     {
         private readonly IConfiguration _configuration;
@@ -25,15 +27,23 @@ namespace MarketplaceSync.Web.Controllers
             _httpClientFactory = httpClientFactory;
         }
 
-        [HttpGet]
-        public async Task<IActionResult> Status()
-        {
-            var tokens = await _context.MercadoLibreTokens
-                .OrderByDescending(x => x.UpdatedAt)
-                .ToListAsync();
+ [HttpGet]
+public async Task<IActionResult> Status()
+{
+    var appUserName = User.Identity?.Name;
 
-            return View(tokens);
-        }
+    if (string.IsNullOrWhiteSpace(appUserName))
+    {
+        return RedirectToAction("Login", "Account");
+    }
+
+    var tokens = await _context.MercadoLibreTokens
+        .Where(x => x.AppUserName == appUserName)
+        .OrderByDescending(x => x.UpdatedAt)
+        .ToListAsync();
+
+    return View(tokens);
+}
 
         [HttpGet]
         public IActionResult Connect()
@@ -63,8 +73,7 @@ namespace MarketplaceSync.Web.Controllers
 
             return Redirect(url);
         }
-
-    [HttpGet]
+[HttpGet]
 public async Task<IActionResult> Callback(string? code, string? state, string? error, string? error_description)
 {
     if (!string.IsNullOrWhiteSpace(error))
@@ -77,6 +86,14 @@ public async Task<IActionResult> Callback(string? code, string? state, string? e
     {
         TempData["Error"] = "Mercado Libre no regresó código de autorización.";
         return RedirectToAction(nameof(Status));
+    }
+
+    var appUserName = User.Identity?.Name;
+
+    if (string.IsNullOrWhiteSpace(appUserName))
+    {
+        TempData["Error"] = "Primero debes iniciar sesión en MarketplaceSync antes de conectar Mercado Libre.";
+        return RedirectToAction("Login", "Account");
     }
 
     var clientId = _configuration["MercadoLibre:ClientId"];
@@ -109,9 +126,9 @@ public async Task<IActionResult> Callback(string? code, string? state, string? e
 
     var client = _httpClientFactory.CreateClient();
 
-    using var tokenRequest = new HttpRequestMessage(HttpMethod.Post, tokenUrl);
+    using var request = new HttpRequestMessage(HttpMethod.Post, tokenUrl);
 
-    tokenRequest.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+    request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
     {
         { "grant_type", "authorization_code" },
         { "client_id", clientId },
@@ -120,17 +137,17 @@ public async Task<IActionResult> Callback(string? code, string? state, string? e
         { "redirect_uri", redirectUri }
     });
 
-    using var tokenResponseHttp = await client.SendAsync(tokenRequest);
-    var tokenContent = await tokenResponseHttp.Content.ReadAsStringAsync();
+    using var response = await client.SendAsync(request);
+    var content = await response.Content.ReadAsStringAsync();
 
-    if (!tokenResponseHttp.IsSuccessStatusCode)
+    if (!response.IsSuccessStatusCode)
     {
-        TempData["Error"] = $"Error obteniendo token de Mercado Libre: {tokenContent}";
+        TempData["Error"] = $"Error obteniendo token de Mercado Libre: {content}";
         return RedirectToAction(nameof(Status));
     }
 
     var tokenResponse = JsonSerializer.Deserialize<MercadoLibreTokenResponse>(
-        tokenContent,
+        content,
         new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
@@ -138,60 +155,26 @@ public async Task<IActionResult> Callback(string? code, string? state, string? e
 
     if (tokenResponse == null || string.IsNullOrWhiteSpace(tokenResponse.AccessToken))
     {
-        TempData["Error"] = $"Mercado Libre no regresó access_token: {tokenContent}";
+        TempData["Error"] = $"Mercado Libre no regresó access_token: {content}";
         return RedirectToAction(nameof(Status));
     }
 
-    string? nickname = null;
-
-    try
-    {
-        using var meRequest = new HttpRequestMessage(
-            HttpMethod.Get,
-            "https://api.mercadolibre.com/users/me");
-
-        meRequest.Headers.Authorization =
-            new AuthenticationHeaderValue("Bearer", tokenResponse.AccessToken);
-
-        using var meResponse = await client.SendAsync(meRequest);
-        var meContent = await meResponse.Content.ReadAsStringAsync();
-
-        if (meResponse.IsSuccessStatusCode)
-        {
-            using var meDocument = JsonDocument.Parse(meContent);
-            var root = meDocument.RootElement;
-
-            if (root.TryGetProperty("nickname", out var nicknameElement))
-            {
-                nickname = nicknameElement.GetString();
-            }
-        }
-    }
-    catch
-    {
-        nickname = null;
-    }
-
-    var userId = tokenResponse.UserId.ToString();
+    var mlUserId = tokenResponse.UserId.ToString();
     var expiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
 
+    var nickname = await GetMercadoLibreNicknameAsync(tokenResponse.AccessToken);
+
     var existingToken = await _context.MercadoLibreTokens
-        .FirstOrDefaultAsync(x => x.UserId == userId);
-
-    var oldActiveTokens = await _context.MercadoLibreTokens
-        .Where(x => x.IsActive)
-        .ToListAsync();
-
-    foreach (var oldToken in oldActiveTokens)
-    {
-        oldToken.IsActive = false;
-    }
+        .FirstOrDefaultAsync(x =>
+            x.AppUserName == appUserName &&
+            x.UserId == mlUserId);
 
     if (existingToken == null)
     {
         existingToken = new MercadoLibreToken
         {
-            UserId = userId,
+            AppUserName = appUserName,
+            UserId = mlUserId,
             Nickname = nickname,
             AccessToken = tokenResponse.AccessToken,
             RefreshToken = tokenResponse.RefreshToken,
@@ -199,9 +182,9 @@ public async Task<IActionResult> Callback(string? code, string? state, string? e
             Scope = tokenResponse.Scope,
             ExpiresIn = tokenResponse.ExpiresIn,
             ExpiresAt = expiresAt,
-            IsActive = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
+            IsActive = true
         };
 
         _context.MercadoLibreTokens.Add(existingToken);
@@ -215,19 +198,50 @@ public async Task<IActionResult> Callback(string? code, string? state, string? e
         existingToken.Scope = tokenResponse.Scope;
         existingToken.ExpiresIn = tokenResponse.ExpiresIn;
         existingToken.ExpiresAt = expiresAt;
-        existingToken.IsActive = true;
         existingToken.UpdatedAt = DateTime.UtcNow;
+        existingToken.IsActive = true;
     }
 
     await _context.SaveChangesAsync();
 
-    HttpContext.Session.SetString("ML_USER_ID", userId);
-    HttpContext.Session.SetString("ML_NICKNAME", nickname ?? userId);
-    HttpContext.Session.SetInt32("ML_TOKEN_ID", existingToken.Id);
-
-    TempData["Success"] = $"Cuenta de Mercado Libre conectada correctamente: {nickname ?? userId}";
+    TempData["Success"] = $"Cuenta de Mercado Libre conectada correctamente para el usuario {appUserName}.";
 
     return RedirectToAction(nameof(Status));
+}
+private async Task<string?> GetMercadoLibreNicknameAsync(string accessToken)
+{
+    try
+    {
+        var client = _httpClientFactory.CreateClient();
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            "https://api.mercadolibre.com/users/me"
+        );
+
+        request.Headers.Authorization =
+            new AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var response = await client.SendAsync(request);
+        var content = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        using var document = JsonDocument.Parse(content);
+        var root = document.RootElement;
+
+        if (root.TryGetProperty("nickname", out var nicknameElement))
+        {
+            return nicknameElement.GetString();
+        }
+
+        return null;
+    }
+    catch
+    {
+        return null;
+    }
 }
 [HttpPost]
 [ValidateAntiForgeryToken]

@@ -54,6 +54,7 @@ TemporaryDependencyNodeTargetIdentifier=net8.0
 
 [sourceFiles]
 Controllers/
+ AccountController.cs
  AdminController.cs
  EbayController.cs
  HomeController.cs
@@ -96,6 +97,10 @@ Migrations/
  20260519042001_FixMercadoLibreTokenColumnsToText.Designer.cs
  20260520034657_AddMercadoLibreSessionFields.cs
  20260520034657_AddMercadoLibreSessionFields.Designer.cs
+ 20260520035801_AddIdentityUsers.cs
+ 20260520035801_AddIdentityUsers.Designer.cs
+ 20260520041258_LinkMercadoLibreTokenToAppUser.cs
+ 20260520041258_LinkMercadoLibreTokenToAppUser.Designer.cs
  AppDbContextModelSnapshot.cs
 Models/
  ErrorViewModel.cs
@@ -117,9 +122,11 @@ Services/
 ViewModels/
  CreateProductFromUrlViewModel.cs
  ExtractedProductInfo.cs
+ LoginViewModel.cs
  MercadoLibreAttributeInput.cs
  MercadoLibreTokenResponse.cs
  PublishToMercadoLibreRequest.cs
+ RegisterViewModel.cs
 
 [metadataReferences]
 <NUGET>/microsoft.aspnetcore.app.ref/8.0.26/ref/net8.0/
@@ -262,6 +269,7 @@ ViewModels/
  System.Security.Cryptography.Xml.dll
  System.Threading.RateLimiting.dll
 <NUGET>/
+ microsoft.aspnetcore.identity.entityframeworkcore/8.0.11/lib/net8.0/Microsoft.AspNetCore.Identity.EntityFrameworkCore.dll
  microsoft.entityframeworkcore.abstractions/8.0.11/lib/net8.0/Microsoft.EntityFrameworkCore.Abstractions.dll
  microsoft.entityframeworkcore.relational/8.0.11/lib/net8.0/Microsoft.EntityFrameworkCore.Relational.dll
  microsoft.entityframeworkcore/8.0.11/lib/net8.0/Microsoft.EntityFrameworkCore.dll
@@ -468,6 +476,9 @@ ViewModels/
 obj/Debug/net8.0/MarketplaceSync.Web.GeneratedMSBuildEditorConfig.editorconfig
 
 [additionalFiles]
+Views/Account/
+ Login.cshtml
+ Register.cshtml
 Views/Home/
  Index.cshtml
  Privacy.cshtml
@@ -488,6 +499,9 @@ Views/
  _ViewStart.cshtml
 
 [dynamicFiles]
+Views/Account/
+ Login.cshtml
+ Register.cshtml
 Views/Home/
  Index.cshtml
  Privacy.cshtml

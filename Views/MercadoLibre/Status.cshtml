@@ -210,7 +210,7 @@
                                 <div class="border rounded p-3 bg-light">
                                     <div class="text-muted small">Última actualización</div>
                                     <div class="fw-bold">
-                                        @activeToken.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                        @activeToken.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
                                     </div>
                                 </div>
                             </div>
@@ -360,7 +360,7 @@
                                     </td>
 
                                     <td>
-                                        @token.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                        @token.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
                                     </td>
 
                                     <td>

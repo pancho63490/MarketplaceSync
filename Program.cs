@@ -1,53 +1,26 @@
 using MarketplaceSync.Web.Data;
-using Microsoft.EntityFrameworkCore;
 using MarketplaceSync.Web.Services;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
-        npgsqlOptions =>
-        {
-            npgsqlOptions.EnableRetryOnFailure(
-                maxRetryCount: 5,
-                maxRetryDelay: TimeSpan.FromSeconds(10),
-                errorCodesToAdd: null
-            );
-        }
-    )
-);
+builder.Services.AddControllersWithViews();
 
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// IMPORTANTE: necesario para IHttpClientFactory
 builder.Services.AddHttpClient();
 
+// Servicios de tu app
 builder.Services.AddScoped<MarketplaceDetectorService>();
 builder.Services.AddScoped<ProductExtractorService>();
 builder.Services.AddScoped<EbayApiService>();
 builder.Services.AddScoped<MercadoLibreCategoryService>();
-builder.Services.AddControllersWithViews();
-builder.Services.AddDistributedMemoryCache();
 
-builder.Services.AddSession(options =>
-{
-    options.IdleTimeout = TimeSpan.FromMinutes(30);
-    options.Cookie.HttpOnly = true;
-    options.Cookie.IsEssential = true;
-});
+builder.Services.AddSession();
+
 var app = builder.Build();
-
-// TEMPORALMENTE DESACTIVADO PARA EVITAR QUE RENDER SE CAIGA AL ARRANCAR
-// try
-// {
-//     using var scope = app.Services.CreateScope();
-//     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-//     dbContext.Database.Migrate();
-// }
-// catch (Exception ex)
-// {
-//     Console.WriteLine("ERROR APPLYING MIGRATIONS:");
-//     Console.WriteLine(ex.ToString());
-//     throw;
-// }
 
 if (!app.Environment.IsDevelopment())
 {
@@ -56,20 +29,16 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
 app.UseStaticFiles();
 
 app.UseRouting();
-
 
 app.UseSession();
 
 app.UseAuthorization();
 
-// API Controllers: /api/import/product
 app.MapControllers();
 
-// MVC Controllers: /Products, /MercadoLibre, /Home, etc.
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");

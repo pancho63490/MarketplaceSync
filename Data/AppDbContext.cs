@@ -1,18 +1,22 @@
 using MarketplaceSync.Web.Models;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace MarketplaceSync.Web.Data
 {
-    public class AppDbContext : DbContext
+    public class AppDbContext : IdentityDbContext
     {
         public AppDbContext(DbContextOptions<AppDbContext> options)
             : base(options)
         {
         }
 
-        public DbSet<Product> Products => Set<Product>();
-        public DbSet<ProductImage> ProductImages => Set<ProductImage>();
-        public DbSet<MercadoLibreToken> MercadoLibreTokens => Set<MercadoLibreToken>();
-        public DbSet<ImportLog> ImportLogs => Set<ImportLog>();
+        public DbSet<Product> Products { get; set; }
+        public DbSet<MercadoLibreToken> MercadoLibreTokens { get; set; }
+
+        protected override void OnModelCreating(ModelBuilder builder)
+        {
+            base.OnModelCreating(builder);
+        }
     }
 }

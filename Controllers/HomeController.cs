@@ -3,9 +3,12 @@ using MarketplaceSync.Web.Data;
 using MarketplaceSync.Web.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 
+using Microsoft.AspNetCore.Mvc;
 namespace MarketplaceSync.Web.Controllers
 {
+    [Authorize]
     public class HomeController : Controller
     {
         private readonly ILogger<HomeController> _logger;
