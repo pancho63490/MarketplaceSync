@@ -105,6 +105,10 @@ Migrations/
  20260520043654_AddIdentityUsersv2.Designer.cs
  20260520044300_AddIdentityUsersv3.cs
  20260520044300_AddIdentityUsersv3.Designer.cs
+ 20260521041150_LinkProductsAndMercadoLibreTokensToAppUser.cs
+ 20260521041150_LinkProductsAndMercadoLibreTokensToAppUser.Designer.cs
+ 20260521041347_LinkProductsAndMercadoLibreTokensToAppUserv2.cs
+ 20260521041347_LinkProductsAndMercadoLibreTokensToAppUserv2.Designer.cs
  AppDbContextModelSnapshot.cs
 Models/
  ErrorViewModel.cs

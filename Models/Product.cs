@@ -1,10 +1,23 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.AspNetCore.Identity;
 
 namespace MarketplaceSync.Web.Models
 {
     public class Product
     {
         public int Id { get; set; }
+
+        // =========================
+        // Usuario dueño del producto
+        // =========================
+
+        [Required]
+        [MaxLength(450)]
+        public string UserId { get; set; } = string.Empty;
+
+        [ForeignKey(nameof(UserId))]
+        public IdentityUser? User { get; set; }
 
         // =========================
         // Fuente original: Amazon/eBay/etc.
@@ -98,7 +111,11 @@ namespace MarketplaceSync.Web.Models
         public string? MercadoLibrePermalink { get; set; }
 
         public DateTime? MercadoLibrePublishedAt { get; set; }
-        
-        
+        // =========================
+// Usuario dueño del producto
+// =========================
+
+[MaxLength(450)]
+public string? AppUserId { get; set; }
     }
 }

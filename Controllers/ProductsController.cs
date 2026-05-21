@@ -10,7 +10,7 @@ using MarketplaceSync.Web.Services;
 using MarketplaceSync.Web.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-
+using System.Security.Claims;
 namespace MarketplaceSync.Web.Controllers
 {
     [Authorize]
@@ -315,8 +315,10 @@ public async Task<IActionResult> RefreshSource(int id)
 [HttpGet]
 public async Task<IActionResult> Delete(int id)
 {
-    var product = await _context.Products
-        .FirstOrDefaultAsync(p => p.Id == id);
+  var appUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+var product = await _context.Products
+    .FirstOrDefaultAsync(x => x.Id == id && x.AppUserId == appUserId);
 
     if (product == null)
     {
@@ -419,9 +421,10 @@ public async Task<IActionResult> DeleteConfirmed(int id)
 }
 [HttpGet]
 public async Task<IActionResult> Details(int id)
-{
-    var product = await _context.Products
-        .FirstOrDefaultAsync(x => x.Id == id);
+{var appUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+var product = await _context.Products
+    .FirstOrDefaultAsync(x => x.Id == id && x.AppUserId == appUserId);
 
     if (product == null)
     {
@@ -435,7 +438,10 @@ public async Task<IActionResult> Details(int id)
 [HttpGet]
 public async Task<IActionResult> PublishToMercadoLibre(int id)
 {
-    var product = await _context.Products.FirstOrDefaultAsync(x => x.Id == id);
+   var appUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+var product = await _context.Products
+    .FirstOrDefaultAsync(x => x.Id == id && x.AppUserId == appUserId);
 
     if (product == null)
         return NotFound();
@@ -480,10 +486,12 @@ if (string.IsNullOrWhiteSpace(appUserName))
     return RedirectToAction("Login", "Account");
 }
 
+var appUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
 var token = await _context.MercadoLibreTokens
-    .Where(x => x.AppUserName == appUserName && x.IsActive)
+    .Where(x => x.AppUserId == appUserId && x.IsActive)
     .OrderByDescending(x => x.UpdatedAt)
-    .FirstOrDefaultAsync();
+    .FirstOrDefaultAsync();    
 
     if (token == null || string.IsNullOrWhiteSpace(token.AccessToken))
     {
@@ -590,7 +598,10 @@ public IActionResult CreateFromUrl()
 // GET: /Products
 public async Task<IActionResult> Index()
 {
+    var appUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
     var products = await _context.Products
+        .Where(x => x.AppUserId == appUserId)
         .OrderByDescending(x => x.CreatedAt)
         .ToListAsync();
 
@@ -601,8 +612,10 @@ public async Task<IActionResult> Index()
 [HttpGet]
 public async Task<IActionResult> Edit(int id)
 {
-    var product = await _context.Products
-        .FirstOrDefaultAsync(x => x.Id == id);
+   var appUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+var product = await _context.Products
+    .FirstOrDefaultAsync(x => x.Id == id && x.AppUserId == appUserId);
 
     if (product == null)
     {
@@ -745,7 +758,8 @@ public async Task<IActionResult> CreateFromUrl(CreateProductFromUrlViewModel mod
         LastSourceCheckAt = DateTime.UtcNow,
 
         Status = "Draft",
-        CreatedAt = DateTime.UtcNow
+        CreatedAt = DateTime.UtcNow,
+        AppUserId = User.FindFirstValue(ClaimTypes.NameIdentifier),
     };
 
     _context.Products.Add(product);

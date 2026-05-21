@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 namespace MarketplaceSync.Web.Controllers
 {
 
@@ -30,15 +31,15 @@ namespace MarketplaceSync.Web.Controllers
  [HttpGet]
 public async Task<IActionResult> Status()
 {
-    var appUserName = User.Identity?.Name;
+var appUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-    if (string.IsNullOrWhiteSpace(appUserName))
+    if (string.IsNullOrWhiteSpace(appUserId))
     {
         return RedirectToAction("Login", "Account");
     }
 
     var tokens = await _context.MercadoLibreTokens
-        .Where(x => x.AppUserName == appUserName)
+        .Where(x => x.AppUserName == appUserId)
         .OrderByDescending(x => x.UpdatedAt)
         .ToListAsync();
 
@@ -76,6 +77,7 @@ public async Task<IActionResult> Status()
 [HttpGet]
 public async Task<IActionResult> Callback(string? code, string? state, string? error, string? error_description)
 {
+    var appUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
     if (!string.IsNullOrWhiteSpace(error))
     {
         TempData["Error"] = $"Mercado Libre regresó error: {error} {error_description}";
@@ -164,10 +166,9 @@ public async Task<IActionResult> Callback(string? code, string? state, string? e
 
     var nickname = await GetMercadoLibreNicknameAsync(tokenResponse.AccessToken);
 
-    var existingToken = await _context.MercadoLibreTokens
-        .FirstOrDefaultAsync(x =>
-            x.AppUserName == appUserName &&
-            x.UserId == mlUserId);
+   var existingToken = await _context.MercadoLibreTokens
+    .FirstOrDefaultAsync(x => x.UserId == tokenResponse.UserId.ToString()
+                           && x.AppUserId == appUserId);
 
     if (existingToken == null)
     {
@@ -184,7 +185,8 @@ public async Task<IActionResult> Callback(string? code, string? state, string? e
             ExpiresAt = expiresAt,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
-            IsActive = true
+            IsActive = true,
+            AppUserId = appUserId
         };
 
         _context.MercadoLibreTokens.Add(existingToken);
