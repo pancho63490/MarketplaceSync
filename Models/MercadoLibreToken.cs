@@ -7,7 +7,7 @@ namespace MarketplaceSync.Web.Models
         public int Id { get; set; }
 [Required]
 [MaxLength(450)]
-public string AppUserId { get; set; } = string.Empty;
+public string? AppUserId { get; set; } = string.Empty;
         // Usuario interno de tu app
         [MaxLength(200)]
         public string? AppUserName { get; set; }

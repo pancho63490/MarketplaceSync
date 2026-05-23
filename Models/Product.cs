@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.AspNetCore.Identity;
-
+using MarketplaceSync.Web.Models.Marketplace;
 namespace MarketplaceSync.Web.Models
 {
     public class Product
@@ -14,7 +14,7 @@ namespace MarketplaceSync.Web.Models
 
         [Required]
         [MaxLength(450)]
-        public string UserId { get; set; } = string.Empty;
+        public string? UserId { get; set; } = string.Empty;
 
         [ForeignKey(nameof(UserId))]
         public IdentityUser? User { get; set; }
@@ -117,5 +117,9 @@ namespace MarketplaceSync.Web.Models
 
 [MaxLength(450)]
 public string? AppUserId { get; set; }
+public ICollection<MarketplacePublication>
+    MarketplacePublications { get; set; }
+    = new List<MarketplacePublication>();
     }
+    
 }

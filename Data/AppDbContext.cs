@@ -1,7 +1,7 @@
 using MarketplaceSync.Web.Models;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-
+using MarketplaceSync.Web.Models.Marketplace;
 namespace MarketplaceSync.Web.Data
 {
     public class AppDbContext : IdentityDbContext
@@ -10,6 +10,8 @@ namespace MarketplaceSync.Web.Data
             : base(options)
         {
         }
+        public DbSet<MarketplacePublication>
+    MarketplacePublications { get; set; }
 
         public DbSet<Product> Products { get; set; }
         public DbSet<MercadoLibreToken> MercadoLibreTokens { get; set; }
