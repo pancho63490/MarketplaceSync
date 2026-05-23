@@ -1,10 +1,28 @@
-# Database Model
+# MarketplaceSync Database Documentation
 
-MarketplaceSync uses Entity Framework Core with PostgreSQL.
+# Overview
 
-The main database context is `AppDbContext`.
+MarketplaceSync uses PostgreSQL with Entity Framework Core.
 
-## Registered DbSets
+The database layer manages:
+
+- Product persistence
+- Marketplace synchronization data
+- Mercado Libre publication tracking
+- OAuth credential storage
+- Import and synchronization logs
+
+---
+
+# Database Engine
+
+- PostgreSQL
+- Entity Framework Core
+- Npgsql Provider
+
+---
+
+# Main Database Context
 
 ```csharp
 public DbSet<Product> Products => Set<Product>();
@@ -13,7 +31,9 @@ public DbSet<MercadoLibreToken> MercadoLibreTokens => Set<MercadoLibreToken>();
 public DbSet<ImportLog> ImportLogs => Set<ImportLog>();
 ```
 
-## Entity Relationship Diagram
+---
+
+# Entity Relationship Diagram
 
 ```mermaid
 erDiagram
@@ -23,29 +43,10 @@ erDiagram
         string SourceMarketplace
         string SourceProductId
         string Title
-        string Description
         decimal SourcePrice
-        string SourceCurrency
-        string SourceAvailabilityText
         int SourceStock
-        string ImageUrl
-        string Brand
-        string Model
-        string SourceStatus
-        datetime LastSourceCheckAt
         string Status
         datetime CreatedAt
-        datetime UpdatedAt
-        string MercadoLibreItemId
-        string MercadoLibreCategoryId
-        decimal MercadoLibrePrice
-        int MercadoLibreStock
-        string MercadoLibreCurrencyId
-        string MercadoLibreListingTypeId
-        string MercadoLibreCondition
-        string MercadoLibreStatus
-        string MercadoLibrePermalink
-        datetime MercadoLibrePublishedAt
     }
 
     ProductImage {
@@ -56,15 +57,9 @@ erDiagram
 
     MercadoLibreToken {
         int Id
-        string UserId
         string AccessToken
         string RefreshToken
-        string TokenType
-        string Scope
-        int ExpiresIn
         datetime ExpiresAt
-        datetime CreatedAt
-        datetime UpdatedAt
     }
 
     ImportLog {
@@ -77,56 +72,157 @@ erDiagram
     Product ||--o{ ProductImage : has
 ```
 
-## Product Entity Purpose
+---
 
-The `Product` entity works as the central bridge between the source marketplace and Mercado Libre.
+# Products Table
 
-It stores:
+The Product entity is the core business entity.
 
-1. Original source data.
-2. Internal application status.
-3. Mercado Libre publication data.
+Responsibilities:
 
-## Source Marketplace Fields
+- Store imported products
+- Store normalized product information
+- Store Mercado Libre publication data
+- Track synchronization states
 
-| Field | Purpose |
-|---|---|
-| `SourceUrl` | Original product URL. |
-| `SourceMarketplace` | Detected marketplace, such as Amazon, eBay, or Mercado Libre. |
-| `SourceProductId` | Source product identifier, such as ASIN, eBay Item ID, or MLM ID. |
-| `SourcePrice` | Price detected from the source marketplace. |
-| `SourceCurrency` | Source price currency. |
-| `SourceStock` | Source stock if available. |
-| `SourceStatus` | Extraction or source state. |
-| `LastSourceCheckAt` | Last time source information was refreshed. |
+---
 
-## Mercado Libre Fields
+# Source Marketplace Fields
 
 | Field | Purpose |
 |---|---|
-| `MercadoLibreItemId` | Mercado Libre publication ID after successful publication. |
-| `MercadoLibreCategoryId` | Selected Mercado Libre category. |
-| `MercadoLibrePrice` | Final price to publish. |
-| `MercadoLibreStock` | Final stock to publish. |
-| `MercadoLibreCurrencyId` | Currency, usually `MXN`. |
-| `MercadoLibreListingTypeId` | Listing type, currently defaults to `gold_special`. |
-| `MercadoLibreCondition` | Product condition, currently defaults to `new`. |
-| `MercadoLibreStatus` | Publication status returned by Mercado Libre. |
-| `MercadoLibrePermalink` | Public Mercado Libre listing URL. |
-| `MercadoLibrePublishedAt` | Publication timestamp. |
+| SourceUrl | Original marketplace URL |
+| SourceMarketplace | Marketplace source |
+| SourceProductId | Marketplace product ID |
+| SourcePrice | Imported source price |
+| SourceCurrency | Imported currency |
+| SourceStock | Imported stock |
+| SourceStatus | Extraction status |
 
-## Migration Note
+---
 
-Automatic migrations are currently disabled in `Program.cs` to avoid startup failures in the hosting environment.
+# Mercado Libre Fields
 
-Recommended approaches:
+| Field | Purpose |
+|---|---|
+| MercadoLibreItemId | Published item ID |
+| MercadoLibreCategoryId | Selected category |
+| MercadoLibrePrice | Publication price |
+| MercadoLibreStock | Publication stock |
+| MercadoLibreCurrencyId | Currency code |
+| MercadoLibreListingTypeId | Listing type |
+| MercadoLibreCondition | Item condition |
+| MercadoLibreStatus | Publication status |
+| MercadoLibrePermalink | Public listing URL |
 
-### Local development
+---
+
+# ProductImages Table
+
+Stores product image relationships.
+
+Responsibilities:
+
+- Multiple images per product
+- Marketplace image persistence
+- Future image synchronization
+
+---
+
+# MercadoLibreTokens Table
+
+Stores Mercado Libre OAuth information.
+
+Responsibilities:
+
+- OAuth access token persistence
+- Refresh token storage
+- Expiration management
+
+Security recommendation:
+
+- Encrypt sensitive credentials
+- Never expose tokens in logs
+
+---
+
+# ImportLogs Table
+
+Stores synchronization and extraction events.
+
+Responsibilities:
+
+- Import diagnostics
+- Synchronization auditing
+- Error tracking
+- Operational visibility
+
+---
+
+# Recommended Future Tables
+
+Recommended enterprise entities:
+
+- Users
+- Roles
+- Permissions
+- SyncJobs
+- ProductAttributes
+- ProductVariants
+- MarketplaceAccounts
+- PublicationHistory
+- ErrorLogs
+- AuditLogs
+
+---
+
+# Database Recommendations
+
+## Performance
+
+Recommended:
+
+- Add indexes for searches
+- Optimize publication queries
+- Use pagination
+- Add query caching
+
+---
+
+## Security
+
+Recommended:
+
+- Encrypt OAuth credentials
+- Secure environment variables
+- Limit database permissions
+- Add audit logging
+
+---
+
+## Scalability
+
+Recommended:
+
+- Queue-based synchronization
+- Partition large log tables
+- Add Redis caching
+- Add asynchronous workers
+
+---
+
+# Migration Strategy
+
+Automatic migrations are currently disabled to avoid startup failures.
+
+Recommended deployment flow:
+
+## Development
 
 ```bash
 dotnet ef database update
 ```
 
-### Production
+## Production
 
-Use a controlled deployment step or CI/CD pipeline to apply migrations before starting the web application.
+Use controlled CI/CD migration execution before application startup.
