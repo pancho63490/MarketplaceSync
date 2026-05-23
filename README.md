@@ -1,34 +1,74 @@
 # MarketplaceSync
 
-MarketplaceSync is an ASP.NET Core MVC application designed to import, review, and publish products from external marketplaces into Mercado Libre.
+MarketplaceSync is a scalable ASP.NET Core MVC platform designed to import, manage, review, synchronize, and publish products from external marketplaces into Mercado Libre.
 
-The project currently supports product creation from marketplace URLs, basic marketplace detection, eBay product extraction using the eBay Browse API, product persistence in PostgreSQL, Mercado Libre OAuth connection, category helper endpoints, and publication to Mercado Libre.
+The application centralizes product extraction, product normalization, marketplace synchronization, and Mercado Libre publication workflows using a modular service-oriented architecture.
 
-## Main Features
+---
 
-- Create products from source marketplace URLs.
-- Detect source marketplace: Amazon, eBay, Mercado Libre, or unknown.
-- Extract product information from eBay using eBay Browse API.
-- Store products in PostgreSQL using Entity Framework Core.
-- Review and edit product information before publishing.
-- Prepare price, stock, currency, condition, and listing type for Mercado Libre.
-- Connect Mercado Libre account using OAuth.
-- Predict Mercado Libre categories based on product title.
-- Load required attributes for Mercado Libre categories.
-- Publish products to Mercado Libre.
+# Features
 
-## Tech Stack
+## Marketplace Import
 
-- ASP.NET Core MVC
-- C#
-- Entity Framework Core
-- PostgreSQL
-- Razor Views
-- IHttpClientFactory
-- eBay Browse API
-- Mercado Libre API
+- Import products from external marketplace URLs
+- Marketplace detection support
+- eBay product extraction using eBay Browse API
+- Product normalization pipeline
+- Product image extraction
 
-## High-Level Architecture
+---
+
+## Product Management
+
+- Product CRUD operations
+- Product review workflow
+- Draft and publication states
+- Product editing before publication
+- Inventory preparation
+- Price preparation
+- Listing type management
+
+---
+
+## Mercado Libre Integration
+
+- OAuth authentication flow
+- Mercado Libre publication support
+- Category prediction
+- Attribute loading
+- Product publishing
+- Publication status tracking
+
+---
+
+## Database Persistence
+
+- PostgreSQL persistence using Entity Framework Core
+- Product storage
+- Product image storage
+- Import logs
+- OAuth token persistence
+
+---
+
+# Technology Stack
+
+| Technology | Purpose |
+|---|---|
+| ASP.NET Core MVC | Web Framework |
+| C# | Backend Language |
+| Entity Framework Core | ORM |
+| PostgreSQL | Database |
+| Razor Views | Frontend Rendering |
+| Docker | Containerization |
+| GitHub | Source Control |
+| Mercado Libre API | Marketplace Publishing |
+| eBay Browse API | Product Extraction |
+| IHttpClientFactory | API Communication |
+
+---
+
+# High-Level Architecture
 
 ```mermaid
 flowchart LR
@@ -37,25 +77,25 @@ flowchart LR
     MVC --> ProductsController[ProductsController]
     MVC --> MercadoLibreController[MercadoLibreController]
 
-    ProductsController --> Extractor[ProductExtractorService]
-    Extractor --> Detector[MarketplaceDetectorService]
-    Extractor --> EbayService[EbayApiService]
+    ProductsController --> ProductService[ProductService]
+    MercadoLibreController --> MercadoLibreService[MercadoLibreService]
 
-    ProductsController --> DB[(PostgreSQL)]
-    MercadoLibreController --> DB
+    ProductService --> Extractor[ProductExtractorService]
+    Extractor --> Detector[MarketplaceDetectorService]
+    Extractor --> EbayService[eBayApiService]
+
+    ProductService --> Repository[Repository Layer]
+    MercadoLibreService --> Repository
+
+    Repository --> DB[(PostgreSQL)]
 
     EbayService --> EbayAPI[eBay Browse API]
-    MercadoLibreController --> MLAuth[Mercado Libre OAuth]
-    MercadoLibreController --> MLAPI[Mercado Libre API]
-    ProductsController --> MLAPI
-
-    DB --> Products[Products]
-    DB --> ProductImages[ProductImages]
-    DB --> MercadoLibreTokens[MercadoLibreTokens]
-    DB --> ImportLogs[ImportLogs]
+    MercadoLibreService --> MLAPI[Mercado Libre API]
 ```
 
-## Product Flow
+---
+
+# Product Synchronization Flow
 
 ```mermaid
 sequenceDiagram
@@ -66,31 +106,139 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant ML as Mercado Libre API
 
-    User->>UI: Submit source product URL
+    User->>UI: Submit marketplace URL
     UI->>PC: POST /Products/CreateFromUrl
-    PC->>EX: ExtractAsync(sourceUrl)
-    EX-->>PC: Extracted product information
-    PC->>DB: Save product as Draft
 
-    User->>PC: Prepare for Mercado Libre
-    PC->>DB: Update product as NeedsReview
+    PC->>EX: ExtractAsync(url)
+    EX-->>PC: Product Data
 
-    User->>PC: Publish to Mercado Libre
+    PC->>DB: Save Product Draft
+
+    User->>PC: Review Product
+    PC->>DB: Update Product
+
+    User->>PC: Publish Product
     PC->>ML: POST /items
-    ML-->>PC: Item ID, permalink, status
-    PC->>DB: Update product as Published
+
+    ML-->>PC: Publication Result
+    PC->>DB: Update Publication Status
 ```
 
-## Main Documentation
+---
 
-- [Architecture](docs/architecture.md)
-- [Application Flows](docs/flows.md)
-- [Database Model](docs/database.md)
-- [Mercado Libre Integration](docs/mercadolibre.md)
-- [eBay Integration](docs/ebay.md)
-- [Recommended Improvements](docs/recommendations.md)
+# Project Structure
 
-## Configuration Example
+```text
+MarketplaceSync/
+│
+├── Controllers/
+├── Services/
+├── Models/
+├── Repositories/
+├── DTOs/
+├── ViewModels/
+├── Interfaces/
+├── Middleware/
+├── Helpers/
+├── Data/
+├── docs/
+├── wwwroot/
+├── Docker/
+└── Tests/
+```
+
+---
+
+# Current Modules
+
+## Products Module
+
+Responsibilities:
+
+- Create products
+- Edit products
+- Delete products
+- Review products
+- Manage product states
+- Prepare products for publication
+
+---
+
+## Marketplace Detection Module
+
+Responsibilities:
+
+- Detect source marketplace
+- Route extraction flow
+- Validate supported marketplaces
+
+Supported:
+
+- eBay
+- Amazon (partial)
+- Mercado Libre
+
+---
+
+## Mercado Libre Module
+
+Responsibilities:
+
+- OAuth connection
+- Token management
+- Category prediction
+- Attribute retrieval
+- Product publishing
+- Publication tracking
+
+---
+
+# Database Entities
+
+## Products
+
+Stores:
+
+- Product title
+- Description
+- Price
+- Stock
+- Currency
+- Status
+- Marketplace source
+
+---
+
+## ProductImages
+
+Stores:
+
+- Product image URLs
+- Product image relationships
+
+---
+
+## MercadoLibreTokens
+
+Stores:
+
+- Access tokens
+- Refresh tokens
+- Expiration information
+
+---
+
+## ImportLogs
+
+Stores:
+
+- Import execution logs
+- Error tracking
+- Synchronization events
+
+---
+
+# Configuration Example
 
 ```json
 {
@@ -112,13 +260,101 @@ sequenceDiagram
 }
 ```
 
-> Do not commit real secrets, tokens, passwords, or API credentials to the repository.
+---
 
-## Recommended Next Steps
+# Security Recommendations
 
-- Add automatic Mercado Libre token refresh.
-- Move Mercado Libre publishing logic into dedicated services.
-- Add internal authentication and authorization.
-- Add background jobs for price and stock synchronization.
-- Improve Amazon extraction through an official API or approved data provider.
-- Add deployment documentation for Render or the selected hosting platform.
+Recommended improvements:
+
+- JWT authentication
+- Role-based authorization
+- Claims authorization
+- Global exception middleware
+- Request validation
+- CSRF protection
+- Secure secret storage
+- Audit logging
+
+---
+
+# DevOps Recommendations
+
+Recommended additions:
+
+- GitHub Actions CI/CD
+- Docker Compose
+- Environment-based configuration
+- Automated testing pipeline
+- Logging and monitoring
+- Background synchronization workers
+
+---
+
+# Future Roadmap
+
+## Planned Improvements
+
+- Automatic Mercado Libre token refresh
+- Inventory synchronization
+- Price synchronization
+- Background jobs
+- Queue processing
+- Retry policies
+- Product analytics
+- Multi-marketplace support
+- Advanced product matching
+- Admin dashboard
+- User authentication system
+- Clean Architecture migration
+
+---
+
+# Documentation
+
+| Document | Description |
+|---|---|
+| docs/architecture.md | System architecture |
+| docs/database.md | Database model |
+| docs/flows.md | Application flows |
+| docs/mercadolibre.md | Mercado Libre integration |
+| docs/ebay.md | eBay integration |
+| docs/recommendations.md | Technical recommendations |
+
+---
+
+# Deployment
+
+The project is compatible with:
+
+- Docker
+- Render
+- Azure App Service
+- AWS
+- Linux VPS environments
+
+---
+
+# Important Security Notice
+
+Never commit:
+
+- API keys
+- OAuth secrets
+- Database passwords
+- Access tokens
+- Environment secrets
+
+Use:
+
+- appsettings.Development.json
+- environment variables
+- GitHub Secrets
+- secure secret providers
+
+---
+
+# Author
+
+Developed by Francisco Javier Rodríguez Guillén.
+
+Focused on scalable marketplace synchronization, automation, and enterprise-ready ASP.NET development.
