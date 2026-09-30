@@ -14,9 +14,62 @@ using Hangfire.MemoryStorage;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var databaseConnectionString = ResolveDatabaseConnectionString();
+
+string ResolveDatabaseConnectionString()
+{
+    var explicitConnectionString =
+        Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+    if (!string.IsNullOrWhiteSpace(explicitConnectionString))
+        return explicitConnectionString;
+
+    var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+    if (!string.IsNullOrWhiteSpace(databaseUrl))
+    {
+        if (!Uri.TryCreate(databaseUrl, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != "postgres" && uri.Scheme != "postgresql"))
+        {
+            throw new InvalidOperationException("DATABASE_URL must be a PostgreSQL URL.");
+        }
+
+        var credentials = uri.UserInfo.Split(':', 2);
+        if (credentials.Length != 2 || string.IsNullOrWhiteSpace(uri.AbsolutePath.Trim('/')))
+            throw new InvalidOperationException("DATABASE_URL must include a database name and credentials.");
+
+        var parsedConnectionString = new Npgsql.NpgsqlConnectionStringBuilder
+        {
+            Host = uri.Host,
+            Port = uri.Port > 0 ? uri.Port : 5432,
+            Database = Uri.UnescapeDataString(uri.AbsolutePath.Trim('/')),
+            Username = Uri.UnescapeDataString(credentials[0]),
+            Password = Uri.UnescapeDataString(credentials[1])
+        };
+
+        foreach (var parameter in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var pair = parameter.Split('=', 2);
+            if (pair.Length == 2 && Uri.UnescapeDataString(pair[0]).Equals("sslmode", StringComparison.OrdinalIgnoreCase))
+                parsedConnectionString.SslMode = Enum.Parse<Npgsql.SslMode>(Uri.UnescapeDataString(pair[1]), true);
+        }
+
+        return parsedConnectionString.ConnectionString;
+    }
+
+    var configuredConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (string.IsNullOrWhiteSpace(configuredConnectionString))
+        throw new InvalidOperationException("Configure ConnectionStrings:DefaultConnection or DATABASE_URL.");
+
+    return configuredConnectionString;
+}
+
+var renderPort = Environment.GetEnvironmentVariable("PORT");
+if (int.TryParse(renderPort, out var port))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(databaseConnectionString));
 
 builder.Services.AddIdentity<IdentityUser, IdentityRole>()
     .AddEntityFrameworkStores<AppDbContext>()
@@ -64,30 +117,18 @@ builder.Services.AddHangfire(config =>
     else
     {
         config.UsePostgreSqlStorage(options =>
-            options.UseNpgsqlConnection(
-                builder.Configuration.GetConnectionString("DefaultConnection")));
+            options.UseNpgsqlConnection(databaseConnectionString));
     }
 });
 
 builder.Services.AddHangfireServer();
+builder.Services.AddHostedService<HangfireRecurringJobsRegistrationService>();
 
 builder.Services.AddControllersWithViews();
 
 builder.Services.AddSession();
 
 var app = builder.Build();
-
-using (var scope = app.Services.CreateScope())
-{
-    var recurringJobManager =
-        scope.ServiceProvider
-            .GetRequiredService<IRecurringJobManager>();
-
-    recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
-        "refresh-mercadolibre-token",
-        x => x.RefreshMercadoLibreToken(),
-        "*/30 * * * *");
-}
 
 if (!app.Environment.IsDevelopment())
 {
