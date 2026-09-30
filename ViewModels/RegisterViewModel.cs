@@ -4,6 +4,11 @@ namespace MarketplaceSync.Web.ViewModels
 {
     public class RegisterViewModel
     {
+        [Required(ErrorMessage = "El nombre del negocio es obligatorio.")]
+        [MaxLength(150, ErrorMessage = "El nombre del negocio no puede superar 150 caracteres.")]
+        [Display(Name = "Nombre del negocio")]
+        public string OrganizationName { get; set; } = string.Empty;
+
         [Required(ErrorMessage = "El correo es obligatorio.")]
         [EmailAddress(ErrorMessage = "Ingresa un correo válido.")]
         public string Email { get; set; } = string.Empty;

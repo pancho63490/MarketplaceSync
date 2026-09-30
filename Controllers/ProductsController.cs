@@ -6,29 +6,97 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using MarketplaceSync.Web.Data;
 using MarketplaceSync.Web.Models;
-using MarketplaceSync.Web.Services;
+using MarketplaceSync.Web.Models.Marketplace;
 using MarketplaceSync.Web.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using MarketplaceSync.Web.Services.Tenancy;
 namespace MarketplaceSync.Web.Controllers
 {
     [Authorize]
     public class ProductsController : Controller
-    {
+{
+        private async Task PopulateMarketplaceAccountsAsync(
+            PublishToMercadoLibreRequest request,
+            Guid organizationId)
+        {
+            request.Accounts = await _context.MarketplaceAccounts
+                .Where(x => x.OrganizationId == organizationId &&
+                            x.Marketplace == "MercadoLibre" &&
+                            x.Status == "Connected" &&
+                            x.Tokens.Any(token => token.IsActive))
+                .OrderBy(x => x.DisplayName)
+                .Select(x => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem
+                {
+                    Value = x.Id.ToString(),
+                    Text = string.IsNullOrWhiteSpace(x.DisplayName)
+                        ? x.ExternalAccountId
+                        : $"{x.DisplayName} ({x.ExternalAccountId})"
+                })
+                .ToListAsync();
+
+            if (request.MarketplaceAccountId.HasValue &&
+                request.Accounts.All(x => x.Value != request.MarketplaceAccountId.Value.ToString()))
+            {
+                request.MarketplaceAccountId = null;
+            }
+
+            if (!request.MarketplaceAccountId.HasValue && request.Accounts.Count > 0)
+                request.MarketplaceAccountId = int.Parse(request.Accounts[0].Value!);
+        }
+
+        private async Task<MarketplacePublication> GetOrCreateMarketplacePublicationAsync(
+            Product product,
+            int? marketplaceAccountId = null)
+        {
+            var publication = await _context.MarketplacePublications
+                .FirstOrDefaultAsync(x =>
+                    x.ProductId == product.Id &&
+                    x.Marketplace == "MercadoLibre" &&
+                    x.MarketplaceAccountId == marketplaceAccountId);
+
+            if (publication == null && marketplaceAccountId.HasValue)
+            {
+                publication = await _context.MarketplacePublications
+                    .FirstOrDefaultAsync(x =>
+                        x.ProductId == product.Id &&
+                        x.Marketplace == "MercadoLibre" &&
+                        x.MarketplaceAccountId == null);
+                if (publication != null)
+                    publication.MarketplaceAccountId = marketplaceAccountId;
+            }
+
+            if (publication != null)
+                return publication;
+
+            publication = new MarketplacePublication
+            {
+                Product = product,
+                Marketplace = "MercadoLibre",
+                MarketplaceAccountId = marketplaceAccountId,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _context.MarketplacePublications.Add(publication);
+            return publication;
+        }
+
           private readonly AppDbContext _context;
 
     private readonly MarketplaceDetectorService _detector;
 private readonly ProductExtractorService _extractor;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly MercadoLibreCategoryService _mercadoLibreCategoryService;
+    private readonly IOrganizationContext _organizationContext;
 
 public ProductsController(
     AppDbContext context,
     MarketplaceDetectorService detector,
     ProductExtractorService extractor,
     IHttpClientFactory httpClientFactory,
-    MercadoLibreCategoryService mercadoLibreCategoryService
+    MercadoLibreCategoryService mercadoLibreCategoryService,
+    IOrganizationContext organizationContext
 )
 {
     _context = context;
@@ -36,13 +104,20 @@ public ProductsController(
     _extractor = extractor;
     _httpClientFactory = httpClientFactory;
     _mercadoLibreCategoryService = mercadoLibreCategoryService;
+    _organizationContext = organizationContext;
 }
         
-        private async Task<List<MercadoLibreAttributeInput>> GetRequiredAttributesAsync(string categoryId)
+        private async Task<List<MercadoLibreAttributeInput>> GetRequiredAttributesAsync(
+            string categoryId,
+            int? marketplaceAccountId)
 {
     var result = new List<MercadoLibreAttributeInput>();
 
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
     var token = await _context.MercadoLibreTokens
+        .Where(x => x.OrganizationId == organizationId &&
+                    x.MarketplaceAccountId == marketplaceAccountId &&
+                    x.IsActive)
         .OrderByDescending(x => x.CreatedAt)
         .FirstOrDefaultAsync();
 
@@ -130,7 +205,9 @@ public async Task<IActionResult> LoadMercadoLibreAttributes(PublishToMercadoLibr
         return View("PublishToMercadoLibre", request);
     }
 
-    request.Attributes = await GetRequiredAttributesAsync(request.CategoryId);
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+    await PopulateMarketplaceAccountsAsync(request, organizationId);
+    request.Attributes = await GetRequiredAttributesAsync(request.CategoryId, request.MarketplaceAccountId);
 
     if (!request.Attributes.Any())
     {
@@ -143,7 +220,9 @@ public async Task<IActionResult> LoadMercadoLibreAttributes(PublishToMercadoLibr
 [ValidateAntiForgeryToken]
 public async Task<IActionResult> SaveMercadoLibreCategory(int id, string mercadoLibreCategoryId)
 {
-    var product = await _context.Products.FindAsync(id);
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+    var product = await _context.Products
+        .FirstOrDefaultAsync(x => x.Id == id && x.OrganizationId == organizationId);
 
     if (product == null)
         return NotFound();
@@ -154,12 +233,14 @@ public async Task<IActionResult> SaveMercadoLibreCategory(int id, string mercado
         return RedirectToAction(nameof(PublishToMercadoLibre), new { id });
     }
 
-    product.MercadoLibreCategoryId = mercadoLibreCategoryId.Trim();
+    var publication = await GetOrCreateMarketplacePublicationAsync(product);
+    publication.CategoryId = mercadoLibreCategoryId.Trim();
+    publication.UpdatedAt = DateTime.UtcNow;
     product.UpdatedAt = DateTime.UtcNow;
 
     await _context.SaveChangesAsync();
 
-    TempData["Success"] = $"Categoría Mercado Libre guardada: {product.MercadoLibreCategoryId}";
+    TempData["Success"] = $"Categoría Mercado Libre guardada: {publication.CategoryId}";
 
     return RedirectToAction(nameof(PublishToMercadoLibre), new { id });
 }
@@ -167,7 +248,9 @@ public async Task<IActionResult> SaveMercadoLibreCategory(int id, string mercado
 [ValidateAntiForgeryToken]
 public async Task<IActionResult> SuggestMercadoLibreCategory(int id)
 {
-    var product = await _context.Products.FindAsync(id);
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+    var product = await _context.Products
+        .FirstOrDefaultAsync(x => x.Id == id && x.OrganizationId == organizationId);
 
     if (product == null)
         return NotFound();
@@ -194,7 +277,9 @@ public async Task<IActionResult> SuggestMercadoLibreCategory(int id)
 [ValidateAntiForgeryToken]
 public async Task<IActionResult> RefreshProduct(int id)
 {
-    var product = await _context.Products.FindAsync(id);
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+    var product = await _context.Products
+        .FirstOrDefaultAsync(x => x.Id == id && x.OrganizationId == organizationId);
 
     if (product == null)
     {
@@ -247,7 +332,9 @@ public async Task<IActionResult> RefreshProduct(int id)
 [ValidateAntiForgeryToken]
 public async Task<IActionResult> RefreshSource(int id)
 {
-    var product = await _context.Products.FirstOrDefaultAsync(x => x.Id == id);
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+    var product = await _context.Products
+        .FirstOrDefaultAsync(x => x.Id == id && x.OrganizationId == organizationId);
 
     if (product == null)
     {
@@ -315,10 +402,11 @@ public async Task<IActionResult> RefreshSource(int id)
 [HttpGet]
 public async Task<IActionResult> Delete(int id)
 {
-  var appUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+  var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
 
 var product = await _context.Products
-    .FirstOrDefaultAsync(x => x.Id == id && x.AppUserId == appUserId);
+    .Include(x => x.MarketplacePublications)
+    .FirstOrDefaultAsync(x => x.Id == id && x.OrganizationId == organizationId);
 
     if (product == null)
     {
@@ -331,8 +419,9 @@ var product = await _context.Products
 [ValidateAntiForgeryToken]
 public async Task<IActionResult> RefreshAllSourceInfo()
 {
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
     var products = await _context.Products
-        .Where(x => !string.IsNullOrWhiteSpace(x.SourceUrl))
+        .Where(x => x.OrganizationId == organizationId && !string.IsNullOrWhiteSpace(x.SourceUrl))
         .OrderByDescending(x => x.CreatedAt)
         .ToListAsync();
 
@@ -404,8 +493,9 @@ public async Task<IActionResult> RefreshAllSourceInfo()
 [ValidateAntiForgeryToken]
 public async Task<IActionResult> DeleteConfirmed(int id)
 {
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
     var product = await _context.Products
-        .FirstOrDefaultAsync(p => p.Id == id);
+        .FirstOrDefaultAsync(p => p.Id == id && p.OrganizationId == organizationId);
 
     if (product == null)
     {
@@ -421,10 +511,11 @@ public async Task<IActionResult> DeleteConfirmed(int id)
 }
 [HttpGet]
 public async Task<IActionResult> Details(int id)
-{var appUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+{var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
 
 var product = await _context.Products
-    .FirstOrDefaultAsync(x => x.Id == id && x.AppUserId == appUserId);
+    .Include(x => x.MarketplacePublications)
+    .FirstOrDefaultAsync(x => x.Id == id && x.OrganizationId == organizationId);
 
     if (product == null)
     {
@@ -438,10 +529,11 @@ var product = await _context.Products
 [HttpGet]
 public async Task<IActionResult> PublishToMercadoLibre(int id)
 {
-   var appUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+   var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
 
 var product = await _context.Products
-    .FirstOrDefaultAsync(x => x.Id == id && x.AppUserId == appUserId);
+    .Include(x => x.MarketplacePublications)
+    .FirstOrDefaultAsync(x => x.Id == id && x.OrganizationId == organizationId);
 
     if (product == null)
         return NotFound();
@@ -454,30 +546,53 @@ var product = await _context.Products
             : "Producto sin título",
 
         Description = product.Description,
-        Price = product.MercadoLibrePrice ?? product.SourcePrice ?? 0,
-        Stock = product.MercadoLibreStock ?? product.SourceStock ?? 1,
-        CurrencyId = product.MercadoLibreCurrencyId ?? "MXN",
-        CategoryId = product.MercadoLibreCategoryId ?? "",
-        Condition = product.MercadoLibreCondition ?? "new",
-        ListingTypeId = product.MercadoLibreListingTypeId ?? "gold_special",
+        Price = product.SourcePrice ?? 0,
+        Stock = product.SourceStock ?? 1,
+        CurrencyId = "MXN",
+        CategoryId = "",
+        Condition = "new",
+        ListingTypeId = "gold_special",
         ImageUrl = product.ImageUrl,
         Brand = product.Brand,
         Model = product.Model
     };
 
+    await PopulateMarketplaceAccountsAsync(model, organizationId);
+
+    var publication = product.MarketplacePublications.FirstOrDefault(x =>
+        x.Marketplace == "MercadoLibre" &&
+        x.MarketplaceAccountId == model.MarketplaceAccountId)
+        ?? product.MarketplacePublications.FirstOrDefault(x =>
+            x.Marketplace == "MercadoLibre" && x.MarketplaceAccountId == null);
+
+    if (publication != null)
+    {
+        model.Price = publication.Price ?? model.Price;
+        model.Stock = publication.Stock ?? model.Stock;
+        model.CurrencyId = publication.CurrencyId ?? model.CurrencyId;
+        model.CategoryId = publication.CategoryId ?? model.CategoryId;
+        model.Condition = publication.Condition ?? model.Condition;
+        model.ListingTypeId = publication.ListingTypeId ?? model.ListingTypeId;
+    }
+
     return View(model);
 }
 [HttpPost]
 [ValidateAntiForgeryToken]
-public async Task<IActionResult> PublishToMercadoLibre(PublishToMercadoLibreRequest model)
+public async Task<IActionResult> PublishToMercadoLibre(PublishToMercadoLibreRequest input)
 {
-    var product = await _context.Products.FirstOrDefaultAsync(x => x.Id == model.ProductId);
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+    var product = await _context.Products
+        .FirstOrDefaultAsync(x => x.Id == input.ProductId && x.OrganizationId == organizationId);
 
     if (product == null)
         return NotFound();
 
     if (!ModelState.IsValid)
-        return View(model);
+    {
+        await PopulateMarketplaceAccountsAsync(input, organizationId);
+        return View(input);
+    }
 
 var appUserName = User.Identity?.Name;
 
@@ -486,41 +601,53 @@ if (string.IsNullOrWhiteSpace(appUserName))
     return RedirectToAction("Login", "Account");
 }
 
-var appUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
 var token = await _context.MercadoLibreTokens
-    .Where(x => x.AppUserId == appUserId && x.IsActive)
+    .Where(x => x.OrganizationId == organizationId &&
+                x.MarketplaceAccountId == input.MarketplaceAccountId &&
+                x.IsActive)
     .OrderByDescending(x => x.UpdatedAt)
     .FirstOrDefaultAsync();    
 
     if (token == null || string.IsNullOrWhiteSpace(token.AccessToken))
     {
-        model.ErrorMessage = "No hay token activo de Mercado Libre. Conecta primero la cuenta.";
-        return View(model);
+        input.ErrorMessage = "No hay token activo de Mercado Libre. Conecta primero la cuenta.";
+        await PopulateMarketplaceAccountsAsync(input, organizationId);
+        return View(input);
     }
 
     var payload = new
     {
-        title = model.Title,
-        category_id = model.CategoryId,
-        price = model.Price,
-        currency_id = model.CurrencyId,
-        available_quantity = model.Stock,
+        title = input.Title,
+        category_id = input.CategoryId,
+        price = input.Price,
+        currency_id = input.CurrencyId,
+        available_quantity = input.Stock,
         buying_mode = "buy_it_now",
-        condition = model.Condition,
-        listing_type_id = model.ListingTypeId,
-        pictures = string.IsNullOrWhiteSpace(model.ImageUrl)
+        condition = input.Condition,
+        listing_type_id = input.ListingTypeId,
+        pictures = string.IsNullOrWhiteSpace(input.ImageUrl)
             ? Array.Empty<object>()
             : new object[]
             {
-                new { source = model.ImageUrl }
+                new { source = input.ImageUrl }
             },
-        attributes = BuildMercadoLibreAttributes(model)
+        attributes = BuildMercadoLibreAttributes(input)
     };
 
     var client = _httpClientFactory.CreateClient();
 
-    using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.mercadolibre.com/items");
+    var publication = await _context.MarketplacePublications
+        .FirstOrDefaultAsync(x => x.ProductId == product.Id &&
+                                  x.Marketplace == "MercadoLibre" &&
+                                  x.MarketplaceAccountId == token.MarketplaceAccountId);
+    var updatingExistingItem = !string.IsNullOrWhiteSpace(publication?.ExternalItemId);
+    var targetUrl = updatingExistingItem
+        ? $"https://api.mercadolibre.com/items/{Uri.EscapeDataString(publication!.ExternalItemId!)}"
+        : "https://api.mercadolibre.com/items";
+
+    using var request = new HttpRequestMessage(
+        updatingExistingItem ? HttpMethod.Put : HttpMethod.Post,
+        targetUrl);
     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
 
     request.Content = new StringContent(
@@ -534,34 +661,36 @@ var token = await _context.MercadoLibreTokens
 
     if (!response.IsSuccessStatusCode)
     {
-        model.ErrorMessage = content;
-        return View(model);
+        input.ErrorMessage = content;
+        await PopulateMarketplaceAccountsAsync(input, organizationId);
+        return View(input);
     }
 
     using var document = JsonDocument.Parse(content);
     var root = document.RootElement;
 
-    product.MercadoLibreItemId = root.TryGetProperty("id", out var idElement)
+    publication ??= await GetOrCreateMarketplacePublicationAsync(product, token.MarketplaceAccountId);
+    publication.ExternalItemId = root.TryGetProperty("id", out var idElement)
         ? idElement.GetString()
         : null;
 
-    product.MercadoLibrePermalink = root.TryGetProperty("permalink", out var permalinkElement)
+    publication.Permalink = root.TryGetProperty("permalink", out var permalinkElement)
         ? permalinkElement.GetString()
         : null;
 
-    product.MercadoLibreStatus = root.TryGetProperty("status", out var statusElement)
+    publication.Status = root.TryGetProperty("status", out var statusElement)
         ? statusElement.GetString()
         : "published";
 
-    product.MercadoLibreCategoryId = model.CategoryId;
-    product.MercadoLibrePrice = model.Price;
-    product.MercadoLibreStock = model.Stock;
-    product.MercadoLibreCurrencyId = model.CurrencyId;
-    product.MercadoLibreListingTypeId = model.ListingTypeId;
-    product.MercadoLibreCondition = model.Condition;
-    product.MercadoLibrePublishedAt = DateTime.UtcNow;
-    product.Status = "Published";
-    product.UpdatedAt = DateTime.UtcNow;
+    publication.CategoryId = input.CategoryId;
+    publication.Price = input.Price;
+    publication.Stock = input.Stock;
+    publication.CurrencyId = input.CurrencyId;
+    publication.ListingTypeId = input.ListingTypeId;
+    publication.Condition = input.Condition;
+    publication.PublishedAt = DateTime.UtcNow;
+    publication.IsPublished = true;
+    publication.UpdatedAt = DateTime.UtcNow;
 
     await _context.SaveChangesAsync();
 
@@ -598,10 +727,11 @@ public IActionResult CreateFromUrl()
 // GET: /Products
 public async Task<IActionResult> Index()
 {
-    var appUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
 
     var products = await _context.Products
-        .Where(x => x.AppUserId == appUserId)
+        .Where(x => x.OrganizationId == organizationId)
+        .Include(x => x.MarketplacePublications)
         .OrderByDescending(x => x.CreatedAt)
         .ToListAsync();
 
@@ -612,10 +742,12 @@ public async Task<IActionResult> Index()
 [HttpGet]
 public async Task<IActionResult> Edit(int id)
 {
-   var appUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+   var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
 
 var product = await _context.Products
-    .FirstOrDefaultAsync(x => x.Id == id && x.AppUserId == appUserId);
+    .Include(x => x.MarketplacePublications)
+    .ThenInclude(x => x.MarketplaceAccount)
+    .FirstOrDefaultAsync(x => x.Id == id && x.OrganizationId == organizationId);
 
     if (product == null)
     {
@@ -628,46 +760,45 @@ var product = await _context.Products
 // POST: /Products/Edit/5
 [HttpPost]
 [ValidateAntiForgeryToken]
-public async Task<IActionResult> Edit(int id, Product model)
+public async Task<IActionResult> Edit(int id, Product input)
 {
-    if (id != model.Id)
+    if (id != input.Id)
     {
         return BadRequest();
     }
 
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
     var product = await _context.Products
-        .FirstOrDefaultAsync(x => x.Id == id);
+        .Include(x => x.MarketplacePublications)
+        .FirstOrDefaultAsync(x => x.Id == id && x.OrganizationId == organizationId);
 
     if (product == null)
     {
         return NotFound();
     }
 
+    ModelState.Remove(nameof(Product.CreatedByUserId));
+    ModelState.Remove(nameof(Product.CreatedByUser));
+    ModelState.Remove(nameof(Product.Organization));
+
     if (!ModelState.IsValid)
     {
-        return View(model);
+        return View(input);
     }
 
-    product.Title = model.Title;
-    product.Description = model.Description;
-    product.Brand = model.Brand;
-    product.Model = model.Model;
-    product.ImageUrl = model.ImageUrl;
+    product.Title = input.Title;
+    product.Description = input.Description;
+    product.Brand = input.Brand;
+    product.Model = input.Model;
+    product.ImageUrl = input.ImageUrl;
 
-    product.SourcePrice = model.SourcePrice;
-    product.SourceCurrency = model.SourceCurrency;
-    product.SourceStock = model.SourceStock;
-    product.SourceStatus = model.SourceStatus;
-    product.SourceAvailabilityText = model.SourceAvailabilityText;
+    product.SourcePrice = input.SourcePrice;
+    product.SourceCurrency = input.SourceCurrency;
+    product.SourceStock = input.SourceStock;
+    product.SourceStatus = input.SourceStatus;
+    product.SourceAvailabilityText = input.SourceAvailabilityText;
 
-    product.MercadoLibreCategoryId = model.MercadoLibreCategoryId;
-    product.MercadoLibrePrice = model.MercadoLibrePrice;
-    product.MercadoLibreStock = model.MercadoLibreStock;
-    product.MercadoLibreCurrencyId = model.MercadoLibreCurrencyId;
-    product.MercadoLibreListingTypeId = model.MercadoLibreListingTypeId;
-    product.MercadoLibreCondition = model.MercadoLibreCondition;
-
-    product.Status = model.Status;
+    product.Status = input.Status;
     product.UpdatedAt = DateTime.UtcNow;
 
     await _context.SaveChangesAsync();
@@ -682,21 +813,23 @@ public async Task<IActionResult> Edit(int id, Product model)
 [ValidateAntiForgeryToken]
 public async Task<IActionResult> PrepareForMercadoLibre(int id)
 {
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
     var product = await _context.Products
-        .FirstOrDefaultAsync(x => x.Id == id);
+        .FirstOrDefaultAsync(x => x.Id == id && x.OrganizationId == organizationId);
 
     if (product == null)
     {
         return NotFound();
     }
 
-    product.MercadoLibreCurrencyId = "MXN";
-    product.MercadoLibreCondition = "new";
-    product.MercadoLibreListingTypeId = "gold_special";
+    var publication = await GetOrCreateMarketplacePublicationAsync(product);
+    publication.CurrencyId = "MXN";
+    publication.Condition = "new";
+    publication.ListingTypeId = "gold_special";
 
     if (product.SourceStock.HasValue)
     {
-        product.MercadoLibreStock = product.SourceStock.Value;
+        publication.Stock = product.SourceStock.Value;
     }
 
     if (product.SourcePrice.HasValue)
@@ -704,14 +837,16 @@ public async Task<IActionResult> PrepareForMercadoLibre(int id)
         if (string.Equals(product.SourceCurrency, "USD", StringComparison.OrdinalIgnoreCase))
         {
             // Temporal: tipo de cambio fijo + margen
-            product.MercadoLibrePrice = Math.Round(product.SourcePrice.Value * 18.50m * 1.25m, 2);
+            publication.Price = Math.Round(product.SourcePrice.Value * 18.50m * 1.25m, 2);
         }
         else
         {
             // Si ya viene en MXN, solo agrega margen
-            product.MercadoLibrePrice = Math.Round(product.SourcePrice.Value * 1.25m, 2);
+            publication.Price = Math.Round(product.SourcePrice.Value * 1.25m, 2);
         }
     }
+
+    publication.UpdatedAt = DateTime.UtcNow;
 
     product.Status = "NeedsReview";
     product.UpdatedAt = DateTime.UtcNow;
@@ -738,11 +873,18 @@ public async Task<IActionResult> CreateFromUrl(CreateProductFromUrlViewModel mod
     }
 
     var extracted = await _extractor.ExtractAsync(model.SourceUrl.Trim());
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+    if (string.IsNullOrWhiteSpace(userId))
+        return Challenge();
 
     var product = new Product
     {
-        SourceUrl = extracted.SourceUrl,
-        SourceMarketplace = extracted.SourceMarketplace,
+        OrganizationId = organizationId,
+        CreatedByUserId = userId,
+        SourceUrl = extracted.SourceUrl ?? model.SourceUrl.Trim(),
+        SourceMarketplace = extracted.SourceMarketplace ?? "UNKNOWN",
         SourceProductId = extracted.SourceProductId,
 
         Title = extracted.Title,
@@ -759,7 +901,6 @@ public async Task<IActionResult> CreateFromUrl(CreateProductFromUrlViewModel mod
 
         Status = "Draft",
         CreatedAt = DateTime.UtcNow,
-        AppUserId = User.FindFirstValue(ClaimTypes.NameIdentifier),
     };
 
     _context.Products.Add(product);

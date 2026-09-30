@@ -2,6 +2,8 @@
 
 @{
     ViewData["Title"] = "Editar producto";
+    var mlPublication = Model.MarketplacePublications?
+        .FirstOrDefault(x => x.Marketplace == "MercadoLibre");
 }
 
 <div class="container-fluid px-4 py-4">
@@ -117,9 +119,9 @@
                         </a>
                     }
 
-                    @if (!string.IsNullOrWhiteSpace(Model.MercadoLibrePermalink))
+                    @if (!string.IsNullOrWhiteSpace(mlPublication?.Permalink))
                     {
-                        <a href="@Model.MercadoLibrePermalink"
+                        <a href="@mlPublication.Permalink"
                            target="_blank"
                            class="btn btn-sm btn-outline-success w-100 mt-2">
                             Ver publicación en Mercado Libre
@@ -264,80 +266,23 @@
 
                 <div class="card border-0 shadow-sm mb-4">
                     <div class="card-header bg-white border-0 py-3">
-                        <h5 class="fw-bold mb-0">Preparación Mercado Libre</h5>
+                        <h5 class="fw-bold mb-0">Publicación por canal</h5>
                     </div>
 
                     <div class="card-body">
-
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label asp-for="MercadoLibreCategoryId" class="form-label fw-semibold">Categoría Mercado Libre</label>
-                                <input asp-for="MercadoLibreCategoryId"
-                                       class="form-control"
-                                       placeholder="Ejemplo: MLM189898" />
-                                <span asp-validation-for="MercadoLibreCategoryId" class="text-danger small"></span>
-                                <div class="form-text">
-                                    Por ahora se ingresa manual. Después usamos predictor automático de categoría.
-                                </div>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label asp-for="MercadoLibreCondition" class="form-label fw-semibold">Condición</label>
-                                <select asp-for="MercadoLibreCondition" class="form-select">
-                                    <option value="new">Nuevo</option>
-                                    <option value="used">Usado</option>
-                                </select>
-                                <span asp-validation-for="MercadoLibreCondition" class="text-danger small"></span>
-                            </div>
-                        </div>
-
-                        <div class="row g-3 mt-1">
-                            <div class="col-md-4">
-                                <label asp-for="MercadoLibrePrice" class="form-label fw-semibold">Precio ML</label>
-                                <input asp-for="MercadoLibrePrice" class="form-control" />
-                                <span asp-validation-for="MercadoLibrePrice" class="text-danger small"></span>
-                            </div>
-
-                            <div class="col-md-4">
-                                <label asp-for="MercadoLibreStock" class="form-label fw-semibold">Stock ML</label>
-                                <input asp-for="MercadoLibreStock" class="form-control" />
-                                <span asp-validation-for="MercadoLibreStock" class="text-danger small"></span>
-                            </div>
-
-                            <div class="col-md-4">
-                                <label asp-for="MercadoLibreCurrencyId" class="form-label fw-semibold">Moneda ML</label>
-                                <input asp-for="MercadoLibreCurrencyId" class="form-control" />
-                                <span asp-validation-for="MercadoLibreCurrencyId" class="text-danger small"></span>
-                            </div>
-                        </div>
-
-                        <div class="mt-3">
-                            <label asp-for="MercadoLibreListingTypeId" class="form-label fw-semibold">Tipo de publicación</label>
-                            <select asp-for="MercadoLibreListingTypeId" class="form-select">
-                                <option value="gold_special">Clásica</option>
-                                <option value="gold_pro">Premium</option>
-                                <option value="free">Gratis</option>
-                            </select>
-                            <span asp-validation-for="MercadoLibreListingTypeId" class="text-danger small"></span>
-                        </div>
-
-                        @if (!string.IsNullOrWhiteSpace(Model.MercadoLibreItemId))
+                        <p class="text-muted">Precio, stock, categoría, estado y enlace se administran por publicación.</p>
+                        @if (mlPublication != null)
                         {
-                            <hr />
-
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label asp-for="MercadoLibreItemId" class="form-label fw-semibold">ML Item ID</label>
-                                    <input asp-for="MercadoLibreItemId" class="form-control" readonly />
-                                </div>
-
-                                <div class="col-md-6">
-                                    <label asp-for="MercadoLibreStatus" class="form-label fw-semibold">Status ML</label>
-                                    <input asp-for="MercadoLibreStatus" class="form-control" readonly />
-                                </div>
+                            <div class="d-flex gap-2 align-items-center mb-3">
+                                <span class="badge @(mlPublication.IsPublished ? "bg-success" : "bg-secondary")">
+                                    @(mlPublication.IsPublished ? "Publicado" : "Borrador")
+                                </span>
+                                <span>@(mlPublication.MarketplaceAccount?.DisplayName ?? "Mercado Libre")</span>
                             </div>
                         }
-
+                        <a asp-controller="Products" asp-action="PublishToMercadoLibre" asp-route-id="@Model.Id" class="btn btn-outline-success">
+                            Configurar publicación en Mercado Libre
+                        </a>
                     </div>
                 </div>
 

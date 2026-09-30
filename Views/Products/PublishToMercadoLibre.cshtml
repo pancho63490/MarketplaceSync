@@ -1,4 +1,7 @@
 @model MarketplaceSync.Web.ViewModels.PublishToMercadoLibreRequest
+@{
+    Model.Attributes ??= new();
+}
 
 @{
     ViewData["Title"] = "Publicar en Mercado Libre";
@@ -67,6 +70,29 @@
     @Html.AntiForgeryToken()
 
     <input type="hidden" asp-for="ProductId" />
+
+    <div class="mb-3">
+        <label asp-for="MarketplaceAccountId" class="form-label fw-semibold">Cuenta de Mercado Libre</label>
+        @if (Model.Accounts.Count > 1)
+        {
+            <select asp-for="MarketplaceAccountId" asp-items="Model.Accounts" class="form-select">
+                <option value="">Selecciona una cuenta</option>
+            </select>
+        }
+        else if (Model.Accounts.Count == 1)
+        {
+            <input type="hidden" asp-for="MarketplaceAccountId" />
+            <div class="form-control bg-light">@Model.Accounts[0].Text</div>
+        }
+        else
+        {
+            <div class="alert alert-warning mb-0">
+                Conecta una cuenta antes de publicar.
+                <a asp-controller="MercadoLibre" asp-action="Status" class="alert-link">Administrar cuentas</a>
+            </div>
+        }
+        <span asp-validation-for="MarketplaceAccountId" class="text-danger small"></span>
+    </div>
 
     <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
 
@@ -341,7 +367,7 @@
 
                     <div class="card-body">
 
-                        @for (var i = 0; i < Model.Attributes.Count; i++)
+                        @for (var i = 0; i < Model.Attributes!.Count; i++)
                         {
                             <input type="hidden" asp-for="Attributes[i].Id" />
                             <input type="hidden" asp-for="Attributes[i].Name" />

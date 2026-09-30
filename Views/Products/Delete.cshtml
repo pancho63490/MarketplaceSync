@@ -2,6 +2,8 @@
 
 @{
     ViewData["Title"] = "Eliminar producto";
+    var mlPublication = Model.MarketplacePublications?
+        .FirstOrDefault(x => x.Marketplace == "MercadoLibre");
 }
 
 <div class="container-fluid px-4 py-4">
@@ -103,7 +105,7 @@
                         <div class="col-md-6">
                             <div class="bg-light rounded-4 p-3">
                                 <div class="text-muted small fw-bold text-uppercase">Mercado Libre Item</div>
-                                <div class="fs-5 fw-bold">@(Model.MercadoLibreItemId ?? "No publicado")</div>
+                                <div class="fs-5 fw-bold">@(mlPublication?.ExternalItemId ?? "No publicado")</div>
                             </div>
                         </div>
 

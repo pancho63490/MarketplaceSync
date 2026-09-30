@@ -9,15 +9,18 @@ namespace MarketplaceSync.Web.Models
         public int Id { get; set; }
 
         // =========================
-        // Usuario dueño del producto
+        // Organización propietaria y usuario que creó el producto
         // =========================
 
-        [Required]
-        [MaxLength(450)]
-        public string? UserId { get; set; } = string.Empty;
+        public Guid OrganizationId { get; set; }
 
-        [ForeignKey(nameof(UserId))]
-        public IdentityUser? User { get; set; }
+        public Organization Organization { get; set; } = null!;
+
+        [MaxLength(450)]
+        public string? CreatedByUserId { get; set; }
+
+        [ForeignKey(nameof(CreatedByUserId))]
+        public IdentityUser? CreatedByUser { get; set; }
 
         // =========================
         // Fuente original: Amazon/eBay/etc.
@@ -81,45 +84,8 @@ namespace MarketplaceSync.Web.Models
 
         public DateTime? LastErrorAt { get; set; }
 
-        // =========================
-        // Datos de publicación en Mercado Libre
-        // =========================
-
-        [MaxLength(100)]
-        public string? MercadoLibreItemId { get; set; }
-
-        [MaxLength(100)]
-        public string? MercadoLibreCategoryId { get; set; }
-
-        public decimal? MercadoLibrePrice { get; set; }
-
-        public int? MercadoLibreStock { get; set; }
-
-        [MaxLength(20)]
-        public string? MercadoLibreCurrencyId { get; set; } = "MXN";
-
-        [MaxLength(100)]
-        public string? MercadoLibreListingTypeId { get; set; } = "gold_special";
-
-        [MaxLength(50)]
-        public string? MercadoLibreCondition { get; set; } = "new";
-
-        [MaxLength(100)]
-        public string? MercadoLibreStatus { get; set; }
-
-        [MaxLength(1000)]
-        public string? MercadoLibrePermalink { get; set; }
-
-        public DateTime? MercadoLibrePublishedAt { get; set; }
-        // =========================
-// Usuario dueño del producto
-// =========================
-
-[MaxLength(450)]
-public string? AppUserId { get; set; }
-public ICollection<MarketplacePublication>
-    MarketplacePublications { get; set; }
-    = new List<MarketplacePublication>();
+        public ICollection<MarketplacePublication> MarketplacePublications { get; set; }
+            = new List<MarketplacePublication>();
     }
     
 }

@@ -15,7 +15,10 @@ namespace MarketplaceSync.Web.Models.Marketplace
         public int ProductId { get; set; }
 
         [ForeignKey(nameof(ProductId))]
-        public Product Product { get; set; }
+        public required Product Product { get; set; }
+
+        public int? MarketplaceAccountId { get; set; }
+        public MarketplaceAccount? MarketplaceAccount { get; set; }
 
         // =====================================
         // MARKETPLACE

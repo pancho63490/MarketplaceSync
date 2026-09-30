@@ -14,7 +14,7 @@ namespace MarketplaceSync.Services.Jobs
 
         public async Task RefreshMercadoLibreToken()
         {
-            await _authService.RefreshTokenAsync();
+            await _authService.RefreshExpiringTokensAsync();
         }
     }
 }

@@ -25,16 +25,30 @@ private readonly IMercadoLibreAuthService _authService;
             _authService = authService;
         }
 
-        public async Task<bool> PublishProductAsync(int productId)
+        public async Task<bool> PublishProductAsync(int productId, Guid organizationId)
         {
             var product = await _context.Products
-                .FirstOrDefaultAsync(x => x.Id == productId);
+                .FirstOrDefaultAsync(x => x.Id == productId && x.OrganizationId == organizationId);
 
             if (product == null)
                 return false;
 
+            var credential = await _context.MercadoLibreTokens
+                .Where(x => x.OrganizationId == organizationId && x.IsActive && x.MarketplaceAccountId != null)
+                .OrderByDescending(x => x.UpdatedAt)
+                .FirstOrDefaultAsync();
+            if (credential == null)
+                return false;
+
+            var publication = await _context.MarketplacePublications
+                .FirstOrDefaultAsync(x => x.ProductId == productId &&
+                    x.Marketplace == "MercadoLibre" &&
+                    x.MarketplaceAccountId == credential.MarketplaceAccountId);
+            if (publication == null)
+                return false;
+
            var token =
-    await _authService.GetValidAccessTokenAsync();
+    await _authService.GetValidAccessTokenAsync(organizationId, credential.MarketplaceAccountId!.Value);
 
             var client = _httpClientFactory.CreateClient();
 
@@ -46,13 +60,13 @@ private readonly IMercadoLibreAuthService _authService;
             var payload = new
             {
                 title = product.Title,
-                price = product.MercadoLibrePrice,
+                price = publication.Price,
                 currency_id = "MXN",
-                available_quantity = product.MercadoLibreStock,
+                available_quantity = publication.Stock,
                 buying_mode = "buy_it_now",
                 condition = "new",
                 listing_type_id = "gold_special",
-                category_id = product.MercadoLibreCategoryId
+                category_id = publication.CategoryId
             };
 
             var response = await client.PostAsJsonAsync(
@@ -62,6 +76,16 @@ private readonly IMercadoLibreAuthService _authService;
             if (!response.IsSuccessStatusCode)
                 return false;
 
+            var content = await response.Content.ReadAsStringAsync();
+            using var document = JsonDocument.Parse(content);
+            var root = document.RootElement;
+            publication.ExternalItemId = root.TryGetProperty("id", out var id) ? id.GetString() : null;
+            publication.Permalink = root.TryGetProperty("permalink", out var permalink) ? permalink.GetString() : null;
+            publication.Status = root.TryGetProperty("status", out var status) ? status.GetString() : "published";
+            publication.PublishedAt = DateTime.UtcNow;
+            publication.IsPublished = true;
+            publication.UpdatedAt = DateTime.UtcNow;
+
             product.Status = "Published";
 
             await _context.SaveChangesAsync();
@@ -69,9 +93,9 @@ private readonly IMercadoLibreAuthService _authService;
             return true;
         }
 
-        public async Task<string?> PredictCategoryAsync(string title)
+        public async Task<string?> PredictCategoryAsync(string title, Guid organizationId)
         {
-            var token = await GetAccessTokenAsync();
+            var token = await GetAccessTokenAsync(organizationId);
 
             var client = _httpClientFactory.CreateClient();
 
@@ -88,9 +112,9 @@ private readonly IMercadoLibreAuthService _authService;
 
             return await response.Content.ReadAsStringAsync();
         }
-        public async Task<string?> GetCategoryAttributesAsync(string categoryId)
+        public async Task<string?> GetCategoryAttributesAsync(string categoryId, Guid organizationId)
 {
-    var token = await GetAccessTokenAsync();
+    var token = await GetAccessTokenAsync(organizationId);
 
     var client = _httpClientFactory.CreateClient();
 
@@ -146,9 +170,9 @@ public async Task<string?> GetNicknameAsync(string accessToken)
         return null;
     }
 }
-public async Task<string?> GetMeAsync()
+public async Task<string?> GetMeAsync(Guid organizationId)
 {
-    var token = await GetAccessTokenAsync();
+    var token = await GetAccessTokenAsync(organizationId);
 
     var client = _httpClientFactory.CreateClient();
 
@@ -166,9 +190,10 @@ public async Task<string?> GetMeAsync()
 
     return await response.Content.ReadAsStringAsync();
 }
-        public async Task<string> GetAccessTokenAsync()
+        public async Task<string> GetAccessTokenAsync(Guid organizationId)
         {
             var token = await _context.MercadoLibreTokens
+                .Where(x => x.OrganizationId == organizationId && x.IsActive)
                 .OrderByDescending(x => x.Id)
                 .FirstOrDefaultAsync();
 

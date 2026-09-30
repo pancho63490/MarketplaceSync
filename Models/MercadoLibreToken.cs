@@ -1,13 +1,23 @@
 using System.ComponentModel.DataAnnotations;
+using MarketplaceSync.Web.Models.Marketplace;
 
 namespace MarketplaceSync.Web.Models
 {
     public class MercadoLibreToken
     {
         public int Id { get; set; }
-[Required]
-[MaxLength(450)]
-public string? AppUserId { get; set; } = string.Empty;
+
+        public Guid OrganizationId { get; set; }
+
+        public Organization Organization { get; set; } = null!;
+
+        public int? MarketplaceAccountId { get; set; }
+
+        public MarketplaceAccount? MarketplaceAccount { get; set; }
+
+        [MaxLength(450)]
+        public string? ConnectedByUserId { get; set; }
+
         // Usuario interno de tu app
         [MaxLength(200)]
         public string? AppUserName { get; set; }

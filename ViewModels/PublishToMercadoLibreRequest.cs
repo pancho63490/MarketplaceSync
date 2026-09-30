@@ -1,10 +1,16 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace MarketplaceSync.Web.ViewModels
 {
     public class PublishToMercadoLibreRequest
     {
         public int ProductId { get; set; }
+
+        [Required(ErrorMessage = "Selecciona la cuenta de Mercado Libre.")]
+        public int? MarketplaceAccountId { get; set; }
+
+        public List<SelectListItem> Accounts { get; set; } = new();
 
         [Required(ErrorMessage = "El título es requerido.")]
         [MaxLength(60, ErrorMessage = "Mercado Libre permite máximo 60 caracteres en el título.")]

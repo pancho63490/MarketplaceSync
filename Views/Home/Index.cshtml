@@ -335,7 +335,7 @@
                                     </td>
 
                                     <td>
-                                        @if (!string.IsNullOrWhiteSpace(item.MercadoLibreItemId))
+                                        @if (item.MarketplacePublications.Any(p => p.Marketplace == "MercadoLibre" && p.IsPublished))
                                         {
                                             <span class="badge bg-success">Publicado ML</span>
                                         }

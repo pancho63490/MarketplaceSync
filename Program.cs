@@ -4,6 +4,7 @@ using MarketplaceSync.Services.Interfaces;
 using MarketplaceSync.Services.MercadoLibre;
 using MarketplaceSync.Services.Auth;
 using MarketplaceSync.Services.Jobs;
+using MarketplaceSync.Web.Services.Tenancy;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -35,6 +36,8 @@ builder.Services.ConfigureApplicationCookie(options =>
 });
 
 builder.Services.AddHttpClient();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IOrganizationContext, OrganizationContext>();
 
 builder.Services.AddScoped<IMercadoLibreService, MercadoLibreService>();
 
@@ -54,9 +57,16 @@ builder.Services.AddScoped<MercadoLibreCategoryService>();
 
 builder.Services.AddHangfire(config =>
 {
-   config.UsePostgreSqlStorage(options =>
-    options.UseNpgsqlConnection(
-        builder.Configuration.GetConnectionString("DefaultConnection")));
+    if (builder.Environment.IsDevelopment())
+    {
+        config.UseMemoryStorage();
+    }
+    else
+    {
+        config.UsePostgreSqlStorage(options =>
+            options.UseNpgsqlConnection(
+                builder.Configuration.GetConnectionString("DefaultConnection")));
+    }
 });
 
 builder.Services.AddHangfireServer();

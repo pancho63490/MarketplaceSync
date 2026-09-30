@@ -64,13 +64,32 @@ namespace MarketplaceSync.Web.Controllers
 
             var sourceUrl = request.SourceUrl.Trim();
             var sourceProductId = request.SourceProductId?.Trim();
+            var organizationId = await ResolveImporterOrganizationIdAsync();
+
+            if (!organizationId.HasValue)
+            {
+                return StatusCode(500, new
+                {
+                    message = "Configura Importer:OrganizationId cuando exista más de una organización."
+                });
+            }
+
+            var createdByUserId = await _context.OrganizationMemberships
+                .Where(x => x.OrganizationId == organizationId.Value && x.IsActive)
+                .OrderBy(x => x.CreatedAt)
+                .Select(x => x.UserId)
+                .FirstOrDefaultAsync();
+
+            if (string.IsNullOrWhiteSpace(createdByUserId))
+                return StatusCode(500, new { message = "La organización importadora no tiene usuarios activos." });
 
             var existingProduct = await _context.Products
                 .FirstOrDefaultAsync(x =>
-                    x.SourceUrl == sourceUrl ||
+                    x.OrganizationId == organizationId.Value &&
+                    (x.SourceUrl == sourceUrl ||
                     (!string.IsNullOrWhiteSpace(sourceProductId) &&
                      x.SourceProductId == sourceProductId &&
-                     x.SourceMarketplace == request.SourceMarketplace));
+                     x.SourceMarketplace == request.SourceMarketplace)));
 
             if (existingProduct != null)
             {
@@ -101,6 +120,8 @@ namespace MarketplaceSync.Web.Controllers
 
             var product = new Product
             {
+                OrganizationId = organizationId.Value,
+                CreatedByUserId = createdByUserId,
                 SourceMarketplace = request.SourceMarketplace ?? "Amazon",
                 SourceUrl = sourceUrl,
                 SourceProductId = sourceProductId,
@@ -136,6 +157,26 @@ namespace MarketplaceSync.Web.Controllers
                 productId = product.Id,
                 action = "created"
             });
+        }
+
+        private async Task<Guid?> ResolveImporterOrganizationIdAsync()
+        {
+            var configuredValue = _configuration["Importer:OrganizationId"];
+            if (Guid.TryParse(configuredValue, out var configuredId))
+            {
+                return await _context.Organizations
+                    .AnyAsync(x => x.Id == configuredId && x.IsActive)
+                    ? configuredId
+                    : null;
+            }
+
+            var organizationIds = await _context.Organizations
+                .Where(x => x.IsActive && x.Slug != "legacy-workspace")
+                .Select(x => x.Id)
+                .Take(2)
+                .ToListAsync();
+
+            return organizationIds.Count == 1 ? organizationIds[0] : null;
         }
     }
 

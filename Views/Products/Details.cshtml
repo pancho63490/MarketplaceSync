@@ -2,6 +2,8 @@
 
 @{
     ViewData["Title"] = "Detalle del producto";
+    var mlPublication = Model.MarketplacePublications?
+        .FirstOrDefault(x => x.Marketplace == "MercadoLibre");
 }
 
 <div class="container-fluid px-4 py-4">
@@ -98,7 +100,7 @@
                             @(Model.Status ?? "Draft")
                         </span>
 
-                        @if (!string.IsNullOrWhiteSpace(Model.MercadoLibreItemId))
+                        @if (!string.IsNullOrWhiteSpace(mlPublication?.ExternalItemId))
                         {
                             <span class="badge bg-success">
                                 Publicado ML
@@ -115,9 +117,9 @@
                         </a>
                     }
 
-                    @if (!string.IsNullOrWhiteSpace(Model.MercadoLibrePermalink))
+                    @if (!string.IsNullOrWhiteSpace(mlPublication?.Permalink))
                     {
-                        <a href="@Model.MercadoLibrePermalink"
+                        <a href="@mlPublication.Permalink"
                            target="_blank"
                            class="btn btn-outline-success w-100 mt-2">
                             Abrir publicación ML
@@ -225,21 +227,21 @@
                         <div class="col-md-4">
                             <div class="info-box">
                                 <span>ML Item ID</span>
-                                <strong>@(Model.MercadoLibreItemId ?? "No publicado")</strong>
+                                <strong>@(mlPublication?.ExternalItemId ?? "No publicado")</strong>
                             </div>
                         </div>
 
                         <div class="col-md-4">
                             <div class="info-box">
                                 <span>Categoría ML</span>
-                                <strong>@(Model.MercadoLibreCategoryId ?? "N/A")</strong>
+                                <strong>@(mlPublication?.CategoryId ?? "N/A")</strong>
                             </div>
                         </div>
 
                         <div class="col-md-4">
                             <div class="info-box">
                                 <span>Estado ML</span>
-                                <strong>@(Model.MercadoLibreStatus ?? "N/A")</strong>
+                                <strong>@(mlPublication?.Status ?? "N/A")</strong>
                             </div>
                         </div>
 
@@ -247,7 +249,7 @@
                             <div class="info-box">
                                 <span>Precio ML</span>
                                 <strong>
-                                    @(Model.MercadoLibrePrice.HasValue ? Model.MercadoLibrePrice.Value.ToString("C") : "N/A")
+                                    @(mlPublication?.Price?.ToString("C") ?? "N/A")
                                 </strong>
                             </div>
                         </div>
@@ -256,7 +258,7 @@
                             <div class="info-box">
                                 <span>Stock ML</span>
                                 <strong>
-                                    @(Model.MercadoLibreStock.HasValue ? Model.MercadoLibreStock.ToString() : "N/A")
+                                    @(mlPublication?.Stock?.ToString() ?? "N/A")
                                 </strong>
                             </div>
                         </div>
@@ -264,21 +266,21 @@
                         <div class="col-md-4">
                             <div class="info-box">
                                 <span>Moneda</span>
-                                <strong>@(Model.MercadoLibreCurrencyId ?? "MXN")</strong>
+                                <strong>@(mlPublication?.CurrencyId ?? "MXN")</strong>
                             </div>
                         </div>
 
                         <div class="col-md-6">
                             <div class="info-box">
                                 <span>Tipo publicación</span>
-                                <strong>@(Model.MercadoLibreListingTypeId ?? "N/A")</strong>
+                                <strong>@(mlPublication?.ListingTypeId ?? "N/A")</strong>
                             </div>
                         </div>
 
                         <div class="col-md-6">
                             <div class="info-box">
                                 <span>Condición</span>
-                                <strong>@(Model.MercadoLibreCondition ?? "new")</strong>
+                                <strong>@(mlPublication?.Condition ?? "new")</strong>
                             </div>
                         </div>
 
@@ -286,9 +288,7 @@
                             <div class="info-box">
                                 <span>Publicado en ML</span>
                                 <strong>
-                                    @(Model.MercadoLibrePublishedAt.HasValue
-                                                                        ? Model.MercadoLibrePublishedAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
-                                                                        : "No publicado")
+                                    @(mlPublication?.PublishedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "No publicado")
                                 </strong>
                             </div>
                         </div>

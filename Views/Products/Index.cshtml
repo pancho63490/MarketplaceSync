@@ -8,7 +8,7 @@
     var totalProducts = products.Count;
     var ebayCount = products.Count(x => string.Equals(x.SourceMarketplace, "eBay", StringComparison.OrdinalIgnoreCase));
     var amazonCount = products.Count(x => string.Equals(x.SourceMarketplace, "Amazon", StringComparison.OrdinalIgnoreCase));
-    var mlPublishedCount = products.Count(x => !string.IsNullOrWhiteSpace(x.MercadoLibreItemId));
+    var mlPublishedCount = products.Count(x => x.MarketplacePublications.Any(p => p.Marketplace == "MercadoLibre" && p.IsPublished));
     var outOfStockCount = products.Count(x => x.SourceStock.HasValue && x.SourceStock.Value <= 0);
     var needsReviewCount = products.Count(x => string.Equals(x.Status, "NeedsReview", StringComparison.OrdinalIgnoreCase));
 }
@@ -161,7 +161,8 @@
                         {
                             var marketplace = item.SourceMarketplace ?? "N/A";
                             var status = item.Status ?? "N/A";
-                            var isPublished = !string.IsNullOrWhiteSpace(item.MercadoLibreItemId);
+                            var mlPublication = item.MarketplacePublications?.FirstOrDefault(p => p.Marketplace == "MercadoLibre");
+                            var isPublished = mlPublication?.IsPublished == true;
                             var hasStock = item.SourceStock.HasValue && item.SourceStock.Value > 0;
                             var noStock = item.SourceStock.HasValue && item.SourceStock.Value <= 0;
 
@@ -219,10 +220,10 @@
                                             </a>
                                         }
 
-                                        @if (!string.IsNullOrWhiteSpace(item.MercadoLibrePermalink))
+                                        @if (!string.IsNullOrWhiteSpace(mlPublication?.Permalink))
                                         {
                                             <span class="text-muted mx-1">|</span>
-                                            <a href="@item.MercadoLibrePermalink" target="_blank" class="text-decoration-none">
+                                            <a href="@mlPublication.Permalink" target="_blank" class="text-decoration-none">
                                                 Ver ML
                                             </a>
                                         }
@@ -270,10 +271,10 @@
                                         <span class="text-muted">N/A</span>
                                     }
 
-                                    @if (item.MercadoLibrePrice.HasValue)
+                                    @if (mlPublication?.Price.HasValue == true)
                                     {
                                         <div class="small text-success mt-1">
-                                            ML: @item.MercadoLibrePrice.Value.ToString("N2") @(item.MercadoLibreCurrencyId ?? "MXN")
+                                            ML: @mlPublication.Price.Value.ToString("N2") @(mlPublication.CurrencyId ?? "MXN")
                                         </div>
                                     }
                                 </td>
@@ -305,10 +306,10 @@
                                         </div>
                                     }
 
-                                    @if (item.MercadoLibreStock.HasValue)
+                                    @if (mlPublication?.Stock.HasValue == true)
                                     {
                                         <div class="small text-success mt-1">
-                                            ML stock: @item.MercadoLibreStock
+                                            ML stock: @mlPublication.Stock
                                         </div>
                                     }
                                 </td>
@@ -335,10 +336,10 @@
                                         <span class="badge bg-secondary">@status</span>
                                     }
 
-                                    @if (!string.IsNullOrWhiteSpace(item.MercadoLibreItemId))
+                                    @if (!string.IsNullOrWhiteSpace(mlPublication?.ExternalItemId))
                                     {
                                         <div class="small text-muted mt-1">
-                                            ML: @item.MercadoLibreItemId
+                                            ML: @mlPublication.ExternalItemId
                                         </div>
                                     }
                                 </td>
