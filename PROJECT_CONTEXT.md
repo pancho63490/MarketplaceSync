@@ -23,11 +23,13 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 - La configuración de PostgreSQL acepta `ConnectionStrings__DefaultConnection` o la URL `DATABASE_URL` de Render, además del valor de `appsettings.json`. La URL de Render se convierte a formato Npgsql.
 - El servicio web escucha en `0.0.0.0:$PORT` cuando Render define `PORT`.
 - El registro del trabajo recurrente de Hangfire ya no se ejecuta durante la construcción de la aplicación; se reintenta en segundo plano cada 30 segundos si PostgreSQL no está disponible, para que el sitio pueda iniciar.
+- La pantalla de estado de Mercado Libre consulta `MarketplaceAccount` por organización, muestra estado y vencimiento de credenciales sin revelar tokens, y permite desconectar una cuenta específica. La desconexión desactiva todos sus tokens y actualiza el estado de la cuenta.
 
 ## Verificación pendiente
 
 - `dotnet build --no-restore` pasó con 0 errores y sin advertencias.
 - Tras el ajuste de inicio de Render y la lectura de `DATABASE_URL`, `dotnet build --no-restore` pasó con 0 errores y sin advertencias. Falta validar el arranque con la URL real de la base PostgreSQL en Render.
+- Tras rehacer el panel de estado por cuenta y agregar desconexión individual, `dotnet build --no-restore` pasó con 0 errores y sin advertencias; `git diff --check` también pasó.
 - Validar las tres migraciones en orden sobre una base PostgreSQL de desarrollo restaurada antes de aplicar cambios a cualquier entorno persistente.
 - Revisar la migración en un PostgreSQL de desarrollo/restauración antes de aplicarla a producción.
 - Instalar o habilitar `dotnet-ef` para generar/verificar el modelo snapshot de EF; no estaba disponible en el entorno al momento de escribir este archivo.
@@ -36,7 +38,7 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 
 ## Siguiente módulo
 
-Validar las migraciones y completar una pantalla de estado de Mercado Libre orientada a cuentas (ocultando fragmentos de credenciales). Después implementar variantes/SKU, inventario centralizado y pedidos, con historial de sincronización por publicación.
+Validar las migraciones en PostgreSQL y probar OAuth/desconexión de cuentas en Render. Después implementar variantes/SKU, inventario centralizado y pedidos, con historial de sincronización por publicación.
 
 ## Decisiones del modelo
 

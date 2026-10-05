@@ -45,28 +45,34 @@ namespace MarketplaceSync.Web.Controllers
         {
             var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
 
-            var tokens = await _context.MercadoLibreTokens
-                .Where(x => x.OrganizationId == organizationId)
-                .OrderByDescending(x => x.UpdatedAt)
+            var accounts = await _context.MarketplaceAccounts
+                .AsNoTracking()
+                .Where(x => x.OrganizationId == organizationId && x.Marketplace == "MercadoLibre")
+                .OrderByDescending(x => x.ConnectedAt)
+                .Select(x => new MarketplaceAccountStatusViewModel
+                {
+                    Id = x.Id,
+                    Marketplace = x.Marketplace,
+                    DisplayName = x.DisplayName ?? "Cuenta sin nombre",
+                    ExternalAccountId = x.ExternalAccountId,
+                    Status = x.Status,
+                    ConnectedAt = x.ConnectedAt,
+                    DisconnectedAt = x.DisconnectedAt,
+                    HasActiveToken = x.Tokens.Any(t => t.IsActive),
+                    TokenExpiresAt = x.Tokens
+                        .Where(t => t.IsActive)
+                        .OrderByDescending(t => t.UpdatedAt)
+                        .Select(t => t.ExpiresAt)
+                        .FirstOrDefault(),
+                    TokenUpdatedAt = x.Tokens
+                        .Where(t => t.IsActive)
+                        .OrderByDescending(t => t.UpdatedAt)
+                        .Select(t => t.UpdatedAt)
+                        .FirstOrDefault()
+                })
                 .ToListAsync();
 
-            var activeToken = tokens
-                .FirstOrDefault(x => x.IsActive);
-
-            ViewBag.TotalAccounts = tokens.Count;
-
-            ViewBag.ActiveAccounts =
-                tokens.Count(x => x.IsActive);
-
-            ViewBag.ActiveNickname =
-                activeToken?.Nickname ?? "N/A";
-
-            ViewBag.ActiveToken =
-                activeToken != null
-                    ? $"{activeToken.AccessToken[..Math.Min(10, activeToken.AccessToken.Length)]}..."
-                    : "N/A";
-
-            return View(tokens);
+            return View(accounts);
         }
 
         // =====================================================
@@ -405,6 +411,43 @@ namespace MarketplaceSync.Web.Controllers
             TempData["Success"] =
                 "Mercado Libre disconnected successfully.";
 
+            return RedirectToAction(nameof(Status));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DisconnectAccount(int accountId)
+        {
+            var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+            var account = await _context.MarketplaceAccounts
+                .Include(x => x.Tokens)
+                .FirstOrDefaultAsync(x =>
+                    x.Id == accountId &&
+                    x.OrganizationId == organizationId &&
+                    x.Marketplace == "MercadoLibre");
+
+            if (account == null)
+                return NotFound();
+
+            foreach (var token in account.Tokens)
+            {
+                token.IsActive = false;
+                token.UpdatedAt = DateTime.UtcNow;
+            }
+
+            account.Status = "Disconnected";
+            account.DisconnectedAt = DateTime.UtcNow;
+
+            var sessionTokenId = HttpContext.Session.GetInt32("ML_TOKEN_ID");
+            if (sessionTokenId.HasValue && account.Tokens.Any(x => x.Id == sessionTokenId.Value))
+            {
+                HttpContext.Session.Remove("ML_USER_ID");
+                HttpContext.Session.Remove("ML_NICKNAME");
+                HttpContext.Session.Remove("ML_TOKEN_ID");
+            }
+
+            await _context.SaveChangesAsync();
+            TempData["Success"] = $"La cuenta {account.DisplayName ?? account.ExternalAccountId} se desconectó.";
             return RedirectToAction(nameof(Status));
         }
 
