@@ -8,6 +8,7 @@ using MarketplaceSync.Web.Data;
 using MarketplaceSync.Web.Models;
 using MarketplaceSync.Web.Models.Marketplace;
 using MarketplaceSync.Web.ViewModels;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
@@ -515,6 +516,7 @@ public async Task<IActionResult> Details(int id)
 
 var product = await _context.Products
     .Include(x => x.MarketplacePublications)
+    .Include(x => x.Variants)
     .FirstOrDefaultAsync(x => x.Id == id && x.OrganizationId == organizationId);
 
     if (product == null)
@@ -615,32 +617,86 @@ var token = await _context.MercadoLibreTokens
         return View(input);
     }
 
-    var payload = new
-    {
-        title = input.Title,
-        category_id = input.CategoryId,
-        price = input.Price,
-        currency_id = input.CurrencyId,
-        available_quantity = input.Stock,
-        buying_mode = "buy_it_now",
-        condition = input.Condition,
-        listing_type_id = input.ListingTypeId,
-        pictures = string.IsNullOrWhiteSpace(input.ImageUrl)
-            ? Array.Empty<object>()
-            : new object[]
-            {
-                new { source = input.ImageUrl }
-            },
-        attributes = BuildMercadoLibreAttributes(input)
-    };
-
-    var client = _httpClientFactory.CreateClient();
-
     var publication = await _context.MarketplacePublications
         .FirstOrDefaultAsync(x => x.ProductId == product.Id &&
                                   x.Marketplace == "MercadoLibre" &&
                                   x.MarketplaceAccountId == token.MarketplaceAccountId);
     var updatingExistingItem = !string.IsNullOrWhiteSpace(publication?.ExternalItemId);
+
+    var variants = await _context.ProductVariants
+        .Where(x => x.ProductId == product.Id && x.OrganizationId == organizationId && x.IsActive)
+        .OrderBy(x => x.Sku)
+        .ToListAsync();
+
+    var publicationVariantLinks = publication == null
+        ? new List<MarketplacePublicationVariant>()
+        : await _context.MarketplacePublicationVariants
+            .Where(x => x.MarketplacePublicationId == publication.Id)
+            .ToListAsync();
+
+    if (variants.Count == 0 && publicationVariantLinks.Count > 0)
+    {
+        input.ErrorMessage = "Esta publicación ya tiene variantes en Mercado Libre. Mantén al menos una variante activa para evitar desincronizarla.";
+        await PopulateMarketplaceAccountsAsync(input, organizationId);
+        return View(input);
+    }
+
+    if (publicationVariantLinks.Any(link => variants.All(x => x.Id != link.ProductVariantId)))
+    {
+        input.ErrorMessage = "Una variante ya asociada a la publicación está inactiva. Reactívala antes de sincronizar.";
+        await PopulateMarketplaceAccountsAsync(input, organizationId);
+        return View(input);
+    }
+
+    var payload = new Dictionary<string, object?>
+    {
+        ["title"] = input.Title,
+        ["category_id"] = input.CategoryId,
+        ["currency_id"] = input.CurrencyId,
+        ["buying_mode"] = "buy_it_now",
+        ["condition"] = input.Condition,
+        ["listing_type_id"] = input.ListingTypeId,
+        ["pictures"] = string.IsNullOrWhiteSpace(input.ImageUrl)
+            ? Array.Empty<object>()
+            : new object[] { new { source = input.ImageUrl } },
+        ["attributes"] = BuildMercadoLibreAttributes(input)
+    };
+
+    if (variants.Count > 0)
+    {
+        var variantLinksById = publicationVariantLinks.ToDictionary(x => x.ProductVariantId);
+        payload["variations"] = variants.Select(variant =>
+        {
+            var variation = new Dictionary<string, object?>
+            {
+                ["attribute_combinations"] = JsonSerializer
+                    .Deserialize<Dictionary<string, string>>(variant.AttributesJson)!
+                    .Select(attribute => new
+                    {
+                        id = attribute.Key,
+                        name = attribute.Key,
+                        value_name = attribute.Value
+                    })
+                    .ToArray(),
+                ["price"] = variant.Price ?? input.Price,
+                ["available_quantity"] = variant.Stock,
+                ["seller_custom_field"] = variant.Sku
+            };
+
+            if (variantLinksById.TryGetValue(variant.Id, out var link) &&
+                long.TryParse(link.ExternalVariationId, out var externalVariationId))
+                variation["id"] = externalVariationId;
+
+            return variation;
+        }).ToArray();
+    }
+    else
+    {
+        payload["price"] = input.Price;
+        payload["available_quantity"] = input.Stock;
+    }
+
+    var client = _httpClientFactory.CreateClient();
     var targetUrl = updatingExistingItem
         ? $"https://api.mercadolibre.com/items/{Uri.EscapeDataString(publication!.ExternalItemId!)}"
         : "https://api.mercadolibre.com/items";
@@ -694,6 +750,47 @@ var token = await _context.MercadoLibreTokens
 
     await _context.SaveChangesAsync();
 
+    if (variants.Count > 0 && root.TryGetProperty("variations", out var returnedVariations) &&
+        returnedVariations.ValueKind == JsonValueKind.Array)
+    {
+        var returnedBySku = returnedVariations.EnumerateArray()
+            .Where(x => x.TryGetProperty("seller_custom_field", out var skuElement) && skuElement.ValueKind == JsonValueKind.String)
+            .ToDictionary(x => x.GetProperty("seller_custom_field").GetString()!, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var variant in variants)
+        {
+            JsonElement externalVariation;
+            if (!returnedBySku.TryGetValue(variant.Sku, out externalVariation))
+            {
+                externalVariation = returnedVariations.EnumerateArray()
+                    .FirstOrDefault(item => ReturnedVariationMatches(item, variant.AttributesJson));
+                if (externalVariation.ValueKind == JsonValueKind.Undefined)
+                    continue;
+            }
+
+            if (!externalVariation.TryGetProperty("id", out var externalId))
+                continue;
+
+            var link = publicationVariantLinks.FirstOrDefault(x => x.ProductVariantId == variant.Id);
+            if (link == null)
+            {
+                link = new MarketplacePublicationVariant
+                {
+                    MarketplacePublicationId = publication.Id,
+                    ProductVariantId = variant.Id
+                };
+                _context.MarketplacePublicationVariants.Add(link);
+                publicationVariantLinks.Add(link);
+            }
+
+            link.ExternalVariationId = externalId.ValueKind == JsonValueKind.String
+                ? externalId.GetString()
+                : externalId.GetRawText();
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
     return RedirectToAction(nameof(Details), new { id = product.Id });
 }
 private static object[] BuildMercadoLibreAttributes(PublishToMercadoLibreRequest model)
@@ -736,6 +833,242 @@ public async Task<IActionResult> Index()
         .ToListAsync();
 
     return View(products);
+}
+
+[HttpGet]
+public async Task<IActionResult> Variants(int id)
+{
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+    var product = await _context.Products
+        .AsNoTracking()
+        .Where(x => x.Id == id && x.OrganizationId == organizationId)
+        .Select(x => new { x.Id, x.Title })
+        .FirstOrDefaultAsync();
+
+    if (product == null)
+        return NotFound();
+
+    var variants = await _context.ProductVariants
+        .AsNoTracking()
+        .Where(x => x.ProductId == id && x.OrganizationId == organizationId)
+        .OrderBy(x => x.Sku)
+        .Select(x => new ProductVariantRowViewModel
+        {
+            Id = x.Id,
+            Sku = x.Sku,
+            Attributes = FormatVariantAttributes(x.AttributesJson),
+            Barcode = x.Barcode,
+            Price = x.Price,
+            Stock = x.Stock,
+            IsActive = x.IsActive
+        })
+        .ToListAsync();
+
+    return View(new ProductVariantsViewModel
+    {
+        ProductId = product.Id,
+        ProductTitle = product.Title ?? "Producto sin título",
+        NewVariant = new ProductVariantInput { ProductId = product.Id },
+        Variants = variants
+    });
+}
+
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> AddVariant([Bind(Prefix = "NewVariant")] ProductVariantInput input)
+{
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+    var product = await _context.Products.FirstOrDefaultAsync(x =>
+        x.Id == input.ProductId && x.OrganizationId == organizationId);
+    if (product == null)
+        return NotFound();
+
+    Dictionary<string, string>? attributes = null;
+    try
+    {
+        attributes = ParseVariantAttributes(input.Attributes ?? string.Empty);
+    }
+    catch (FormatException exception)
+    {
+        ModelState.AddModelError("NewVariant.Attributes", exception.Message);
+    }
+
+    var sku = input.Sku?.Trim().ToUpperInvariant() ?? string.Empty;
+    if (await _context.ProductVariants.AnyAsync(x =>
+            x.OrganizationId == organizationId && x.Sku == sku))
+        ModelState.AddModelError("NewVariant.Sku", "Ese SKU ya está asignado en esta organización.");
+
+    if (!ModelState.IsValid || attributes == null)
+    {
+        TempData["VariantError"] = "Revisa los datos de la variante e intenta de nuevo.";
+        return RedirectToAction(nameof(Variants), new { id = input.ProductId });
+    }
+
+    _context.ProductVariants.Add(new ProductVariant
+    {
+        ProductId = product.Id,
+        OrganizationId = organizationId,
+        Sku = sku,
+        AttributesJson = JsonSerializer.Serialize(attributes),
+        Barcode = string.IsNullOrWhiteSpace(input.Barcode) ? null : input.Barcode.Trim(),
+        Price = input.Price,
+        Stock = input.Stock,
+        IsActive = input.IsActive,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow
+    });
+
+    await _context.SaveChangesAsync();
+    TempData["Success"] = $"Variante {sku} agregada.";
+    return RedirectToAction(nameof(Variants), new { id = input.ProductId });
+}
+
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> UpdateVariant(ProductVariantInput input)
+{
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+    var variant = await _context.ProductVariants.FirstOrDefaultAsync(x =>
+        x.Id == input.Id && x.ProductId == input.ProductId && x.OrganizationId == organizationId);
+    if (variant == null)
+        return NotFound();
+
+    Dictionary<string, string>? attributes = null;
+    try
+    {
+        attributes = ParseVariantAttributes(input.Attributes ?? string.Empty);
+    }
+    catch (FormatException exception)
+    {
+        ModelState.AddModelError(nameof(input.Attributes), exception.Message);
+    }
+
+    var sku = input.Sku?.Trim().ToUpperInvariant() ?? string.Empty;
+    if (await _context.ProductVariants.AnyAsync(x =>
+            x.OrganizationId == organizationId && x.Sku == sku && x.Id != variant.Id))
+        ModelState.AddModelError(nameof(input.Sku), "Ese SKU ya está asignado en esta organización.");
+
+    var isPublishedVariant = await _context.MarketplacePublicationVariants
+        .AnyAsync(x => x.ProductVariantId == variant.Id);
+    if (isPublishedVariant && attributes != null &&
+        !VariantAttributesMatch(variant.AttributesJson, attributes))
+        ModelState.AddModelError(nameof(input.Attributes), "Los atributos de una variante publicada no se pueden cambiar; agrega una nueva variante en su lugar.");
+    if (isPublishedVariant && !input.IsActive)
+        ModelState.AddModelError(nameof(input.IsActive), "Esta variante está publicada. Retírala primero de Mercado Libre antes de desactivarla.");
+
+    if (!ModelState.IsValid || attributes == null)
+    {
+        TempData["VariantError"] = "No se guardaron los cambios. Revisa SKU, atributos, precio y stock.";
+        return RedirectToAction(nameof(Variants), new { id = input.ProductId });
+    }
+
+    variant.Sku = sku;
+    variant.AttributesJson = JsonSerializer.Serialize(attributes);
+    variant.Barcode = string.IsNullOrWhiteSpace(input.Barcode) ? null : input.Barcode.Trim();
+    variant.Price = input.Price;
+    variant.Stock = input.Stock;
+    variant.IsActive = input.IsActive;
+    variant.UpdatedAt = DateTime.UtcNow;
+    await _context.SaveChangesAsync();
+
+    TempData["Success"] = $"Variante {sku} actualizada.";
+    return RedirectToAction(nameof(Variants), new { id = input.ProductId });
+}
+
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> DeleteVariant(int id, int productId)
+{
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+    var variant = await _context.ProductVariants.FirstOrDefaultAsync(x =>
+        x.Id == id && x.ProductId == productId && x.OrganizationId == organizationId);
+    if (variant == null)
+        return NotFound();
+
+    if (await _context.MarketplacePublicationVariants.AnyAsync(x => x.ProductVariantId == variant.Id))
+    {
+        TempData["VariantError"] = "Esta variante está publicada. Retírala de Mercado Libre antes de eliminarla.";
+        return RedirectToAction(nameof(Variants), new { id = productId });
+    }
+
+    _context.ProductVariants.Remove(variant);
+    await _context.SaveChangesAsync();
+    TempData["Success"] = $"Variante {variant.Sku} eliminada.";
+    return RedirectToAction(nameof(Variants), new { id = productId });
+}
+
+private static Dictionary<string, string> ParseVariantAttributes(string input)
+{
+    var attributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var line in input.Split(new[] { ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+    {
+        var separator = line.IndexOf('=');
+        if (separator <= 0 || separator == line.Length - 1)
+            throw new FormatException("Usa pares ID=valor separados por punto y coma, por ejemplo COLOR=Rojo; SIZE=M.");
+
+        var id = line[..separator].Trim().ToUpperInvariant();
+        var value = line[(separator + 1)..].Trim();
+        id = Regex.Replace(id, @"\s+", "_");
+        if (!Regex.IsMatch(id, @"^[A-Z0-9_]+$") || string.IsNullOrWhiteSpace(value))
+            throw new FormatException("Cada atributo debe tener un ID válido y un valor.");
+        if (!attributes.TryAdd(id, value))
+            throw new FormatException($"El atributo {id} está repetido.");
+    }
+
+    if (attributes.Count == 0)
+        throw new FormatException("Agrega al menos un atributo, por ejemplo COLOR=Rojo.");
+
+    return attributes;
+}
+
+private static string FormatVariantAttributes(string attributesJson)
+{
+    try
+    {
+        var values = JsonSerializer.Deserialize<Dictionary<string, string>>(attributesJson);
+        return values == null ? string.Empty : string.Join("; ", values.Select(x => $"{x.Key}={x.Value}"));
+    }
+    catch (JsonException)
+    {
+        return string.Empty;
+    }
+}
+
+private static bool VariantAttributesMatch(string attributesJson, Dictionary<string, string> attributes)
+{
+    try
+    {
+        var existing = JsonSerializer.Deserialize<Dictionary<string, string>>(attributesJson);
+        return existing != null && existing.Count == attributes.Count &&
+               existing.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                   .SequenceEqual(attributes.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase));
+    }
+    catch (JsonException)
+    {
+        return false;
+    }
+}
+
+private static bool ReturnedVariationMatches(JsonElement variation, string attributesJson)
+{
+    if (!variation.TryGetProperty("attribute_combinations", out var combinations) ||
+        combinations.ValueKind != JsonValueKind.Array)
+        return false;
+
+    var expected = JsonSerializer.Deserialize<Dictionary<string, string>>(attributesJson);
+    if (expected == null)
+        return false;
+
+    var actual = combinations.EnumerateArray()
+        .Where(x => x.TryGetProperty("id", out _) && x.TryGetProperty("value_name", out _))
+        .ToDictionary(
+            x => x.GetProperty("id").GetString() ?? string.Empty,
+            x => x.GetProperty("value_name").GetString() ?? string.Empty,
+            StringComparer.OrdinalIgnoreCase);
+
+    return expected.Count == actual.Count && expected.All(x =>
+        actual.TryGetValue(x.Key, out var value) &&
+        string.Equals(value, x.Value, StringComparison.OrdinalIgnoreCase));
 }
 
 // GET: /Products/Edit/5

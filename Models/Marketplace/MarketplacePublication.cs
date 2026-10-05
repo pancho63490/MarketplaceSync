@@ -78,5 +78,8 @@ namespace MarketplaceSync.Web.Models.Marketplace
 
         public DateTime UpdatedAt { get; set; } =
             DateTime.UtcNow;
+
+        public ICollection<MarketplacePublicationVariant> Variants { get; set; }
+            = new List<MarketplacePublicationVariant>();
     }
 }

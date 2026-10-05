@@ -86,6 +86,9 @@ namespace MarketplaceSync.Web.Models
 
         public ICollection<MarketplacePublication> MarketplacePublications { get; set; }
             = new List<MarketplacePublication>();
+
+        public ICollection<ProductVariant> Variants { get; set; }
+            = new List<ProductVariant>();
     }
     
 }

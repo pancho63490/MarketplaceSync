@@ -1,0 +1,117 @@
+@model MarketplaceSync.Web.ViewModels.ProductVariantsViewModel
+
+@{
+    ViewData["Title"] = "Variantes y SKU";
+}
+
+<div class="container-fluid px-4 py-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+        <div>
+            <a asp-action="Details" asp-route-id="@Model.ProductId" class="text-decoration-none">← Volver al producto</a>
+            <h1 class="fw-bold mt-2 mb-1">Variantes y SKU</h1>
+            <p class="text-muted mb-0">@Model.ProductTitle</p>
+        </div>
+    </div>
+
+    @if (TempData["Success"] is string success)
+    {
+        <div class="alert alert-success">@success</div>
+    }
+    @if (TempData["VariantError"] is string error)
+    {
+        <div class="alert alert-danger">@error</div>
+    }
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3"><h2 class="h5 fw-bold mb-0">Agregar variante</h2></div>
+        <div class="card-body">
+            <form asp-action="AddVariant" method="post">
+                @Html.AntiForgeryToken()
+                <input asp-for="NewVariant.ProductId" type="hidden" />
+                <div class="row g-3">
+                    <div class="col-lg-2 col-md-4">
+                        <label asp-for="NewVariant.Sku" class="form-label">SKU *</label>
+                        <input asp-for="NewVariant.Sku" class="form-control" placeholder="CAMISA-AZ-M" required />
+                    </div>
+                    <div class="col-lg-4 col-md-8">
+                        <label asp-for="NewVariant.Attributes" class="form-label">Atributos *</label>
+                        <input asp-for="NewVariant.Attributes" class="form-control" placeholder="COLOR=Azul; SIZE=M" required />
+                        <div class="form-text">Usa IDs de atributo de Mercado Libre, como COLOR o SIZE.</div>
+                    </div>
+                    <div class="col-lg-2 col-md-4">
+                        <label asp-for="NewVariant.Barcode" class="form-label">Código de barras</label>
+                        <input asp-for="NewVariant.Barcode" class="form-control" />
+                    </div>
+                    <div class="col-lg-2 col-md-4">
+                        <label asp-for="NewVariant.Price" class="form-label">Precio (opcional)</label>
+                        <input asp-for="NewVariant.Price" class="form-control" type="number" min="0.01" step="0.01" />
+                    </div>
+                    <div class="col-lg-1 col-md-2">
+                        <label asp-for="NewVariant.Stock" class="form-label">Stock</label>
+                        <input asp-for="NewVariant.Stock" class="form-control" type="number" min="0" />
+                    </div>
+                    <div class="col-lg-1 col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">Agregar</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white py-3 d-flex justify-content-between">
+            <h2 class="h5 fw-bold mb-0">Variantes registradas</h2>
+            <span class="text-muted">@Model.Variants.Count variantes</span>
+        </div>
+        @if (Model.Variants.Count == 0)
+        {
+            <div class="card-body text-center py-5 text-muted">Este producto aún no tiene variantes.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead class="table-light"><tr><th>SKU</th><th>Atributos</th><th>Precio</th><th>Stock</th><th>Estado</th><th>Acciones</th></tr></thead>
+                    <tbody>
+                    @foreach (var variant in Model.Variants)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@variant.Sku</td>
+                            <td>@variant.Attributes</td>
+                            <td>@(variant.Price.HasValue ? variant.Price.Value.ToString("C") : "Usa precio del producto")</td>
+                            <td>@variant.Stock</td>
+                            <td><span class="badge @(variant.IsActive ? "text-bg-success" : "text-bg-secondary")">@(variant.IsActive ? "Activa" : "Inactiva")</span></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#edit-@variant.Id">Editar</button>
+                                <form asp-action="DeleteVariant" method="post" class="d-inline" onsubmit="return confirm('¿Eliminar la variante @variant.Sku?');">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@variant.Id" />
+                                    <input type="hidden" name="productId" value="@Model.ProductId" />
+                                    <button class="btn btn-sm btn-outline-danger" type="submit">Eliminar</button>
+                                </form>
+                            </td>
+                        </tr>
+                        <tr class="collapse" id="edit-@variant.Id">
+                            <td colspan="6" class="bg-light">
+                                <form asp-action="UpdateVariant" method="post" class="row g-2 py-2">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="Id" value="@variant.Id" />
+                                    <input type="hidden" name="ProductId" value="@Model.ProductId" />
+                                    <div class="col-lg-2"><label class="form-label">SKU</label><input name="Sku" value="@variant.Sku" class="form-control" required /></div>
+                                    <div class="col-lg-4"><label class="form-label">Atributos</label><input name="Attributes" value="@variant.Attributes" class="form-control" required /></div>
+                                    <div class="col-lg-2"><label class="form-label">Código de barras</label><input name="Barcode" value="@variant.Barcode" class="form-control" /></div>
+                                    <div class="col-lg-1"><label class="form-label">Precio</label><input name="Price" value="@variant.Price" type="number" min="0.01" step="0.01" class="form-control" /></div>
+                                    <div class="col-lg-1"><label class="form-label">Stock</label><input name="Stock" value="@variant.Stock" type="number" min="0" class="form-control" required /></div>
+                                    <div class="col-lg-1 d-flex align-items-end"><div class="form-check mb-2"><input name="IsActive" value="true" type="checkbox" class="form-check-input" checked="@(variant.IsActive ? "checked" : null)" /><label class="form-check-label">Activa</label></div></div>
+                                    <div class="col-lg-1 d-flex align-items-end"><button type="submit" class="btn btn-primary">Guardar</button></div>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+        <div class="card-footer bg-white text-muted small">El SKU es único dentro de tu organización. El stock de variantes se mantiene separado del stock general del producto.</div>
+    </div>
+</div>

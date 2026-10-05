@@ -47,6 +47,13 @@
             </a>
 
             <a asp-controller="Products"
+               asp-action="Variants"
+               asp-route-id="@Model.Id"
+               class="btn btn-outline-primary">
+                Variantes y SKU
+            </a>
+
+            <a asp-controller="Products"
                asp-action="PublishToMercadoLibre"
                asp-route-id="@Model.Id"
                class="btn btn-success">

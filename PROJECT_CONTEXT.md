@@ -24,13 +24,17 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 - El servicio web escucha en `0.0.0.0:$PORT` cuando Render define `PORT`.
 - El registro del trabajo recurrente de Hangfire ya no se ejecuta durante la construcción de la aplicación; se reintenta en segundo plano cada 30 segundos si PostgreSQL no está disponible, para que el sitio pueda iniciar.
 - La pantalla de estado de Mercado Libre consulta `MarketplaceAccount` por organización, muestra estado y vencimiento de credenciales sin revelar tokens, y permite desconectar una cuenta específica. La desconexión desactiva todos sus tokens y actualiza el estado de la cuenta.
+- `ProductVariant` agrega SKU único por organización, atributos flexibles almacenados como JSONB, código de barras, precio opcional, stock y estado. La vista de variantes permite agregar, editar y eliminar; las variantes ya publicadas no se pueden desactivar, borrar ni cambiar de atributos localmente.
+- La publicación de Mercado Libre envía variantes con sus combinaciones de atributos, precio, stock y SKU; se conserva el ID externo por publicación/variante para identificar variaciones al actualizarlas.
+- La migración `20261004090000_AddProductVariants` crea variantes e identificadores de variación por publicación. Debe aplicarse después de las tres migraciones anteriores y validarse en una base restaurada antes de Render.
 
 ## Verificación pendiente
 
 - `dotnet build --no-restore` pasó con 0 errores y sin advertencias.
 - Tras el ajuste de inicio de Render y la lectura de `DATABASE_URL`, `dotnet build --no-restore` pasó con 0 errores y sin advertencias. Falta validar el arranque con la URL real de la base PostgreSQL en Render.
 - Tras rehacer el panel de estado por cuenta y agregar desconexión individual, `dotnet build --no-restore` pasó con 0 errores y sin advertencias; `git diff --check` también pasó.
-- Validar las tres migraciones en orden sobre una base PostgreSQL de desarrollo restaurada antes de aplicar cambios a cualquier entorno persistente.
+- Tras agregar variantes, administración de SKU e integración de variaciones con Mercado Libre, `dotnet build --no-restore` pasó con 0 errores y sin advertencias; `git diff --check` también pasó.
+- Validar las cuatro migraciones en orden sobre una base PostgreSQL de desarrollo restaurada antes de aplicar cambios a cualquier entorno persistente. `dotnet-ef` no está disponible en este entorno, así que no se pudo ejecutar la verificación automática del snapshot.
 - Revisar la migración en un PostgreSQL de desarrollo/restauración antes de aplicarla a producción.
 - Instalar o habilitar `dotnet-ef` para generar/verificar el modelo snapshot de EF; no estaba disponible en el entorno al momento de escribir este archivo.
 - Completar pruebas manuales de registro, aislamiento entre organizaciones, importación y OAuth.
@@ -38,7 +42,7 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 
 ## Siguiente módulo
 
-Validar las migraciones en PostgreSQL y probar OAuth/desconexión de cuentas en Render. Después implementar variantes/SKU, inventario centralizado y pedidos, con historial de sincronización por publicación.
+Validar las migraciones en PostgreSQL y probar OAuth, variantes y publicación en Render. Después implementar inventario centralizado y pedidos, con historial de sincronización por publicación.
 
 ## Decisiones del modelo
 

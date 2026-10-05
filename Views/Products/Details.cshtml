@@ -31,6 +31,13 @@
                 Editar
             </a>
 
+            <a asp-controller="Products"
+               asp-action="Variants"
+               asp-route-id="@Model.Id"
+               class="btn btn-outline-primary">
+                Variantes y SKU (@Model.Variants.Count)
+            </a>
+
             <form asp-controller="Products"
                   asp-action="RefreshProduct"
                   asp-route-id="@Model.Id"

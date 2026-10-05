@@ -17,6 +17,8 @@ namespace MarketplaceSync.Web.Data
         public DbSet<Organization> Organizations { get; set; }
         public DbSet<OrganizationMembership> OrganizationMemberships { get; set; }
         public DbSet<Product> Products { get; set; }
+        public DbSet<ProductVariant> ProductVariants { get; set; }
+        public DbSet<MarketplacePublicationVariant> MarketplacePublicationVariants { get; set; }
         public DbSet<MercadoLibreToken> MercadoLibreTokens { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
@@ -85,6 +87,42 @@ namespace MarketplaceSync.Web.Data
                 entity.Property(x => x.ListingTypeId).HasMaxLength(50);
                 entity.Property(x => x.Condition).HasMaxLength(50);
                 entity.Property(x => x.Status).HasMaxLength(100);
+            });
+
+            builder.Entity<ProductVariant>(entity =>
+            {
+                entity.HasOne(x => x.Product)
+                    .WithMany(x => x.Variants)
+                    .HasForeignKey(x => x.ProductId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.Organization)
+                    .WithMany()
+                    .HasForeignKey(x => x.OrganizationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(x => new { x.OrganizationId, x.Sku }).IsUnique();
+                entity.HasIndex(x => new { x.ProductId, x.IsActive });
+                entity.Property(x => x.Sku).HasMaxLength(100);
+                entity.Property(x => x.Barcode).HasMaxLength(100);
+                entity.Property(x => x.AttributesJson).HasColumnType("jsonb");
+                entity.Property(x => x.Price).HasColumnType("numeric(18,2)");
+            });
+
+            builder.Entity<MarketplacePublicationVariant>(entity =>
+            {
+                entity.HasOne(x => x.MarketplacePublication)
+                    .WithMany(x => x.Variants)
+                    .HasForeignKey(x => x.MarketplacePublicationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.ProductVariant)
+                    .WithMany(x => x.MarketplacePublications)
+                    .HasForeignKey(x => x.ProductVariantId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(x => new { x.MarketplacePublicationId, x.ProductVariantId }).IsUnique();
+                entity.Property(x => x.ExternalVariationId).HasMaxLength(100);
             });
 
             builder.Entity<MercadoLibreToken>(entity =>

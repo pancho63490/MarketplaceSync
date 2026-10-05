@@ -98,6 +98,19 @@ namespace MarketplaceSync.Web.Migrations
                     b.ToTable("MarketplacePublications");
                 });
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplacePublicationVariant", b =>
+                {
+                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("integer");
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    b.Property<string>("ExternalVariationId").HasMaxLength(100).HasColumnType("character varying(100)");
+                    b.Property<int>("MarketplacePublicationId").HasColumnType("integer");
+                    b.Property<int>("ProductVariantId").HasColumnType("integer");
+                    b.HasKey("Id");
+                    b.HasIndex("MarketplacePublicationId", "ProductVariantId").IsUnique();
+                    b.HasIndex("ProductVariantId");
+                    b.ToTable("MarketplacePublicationVariants");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.MercadoLibreToken", b =>
                 {
                     b.Property<int>("Id")
@@ -257,6 +270,26 @@ namespace MarketplaceSync.Web.Migrations
                     b.HasIndex("OrganizationId", "SourceMarketplace", "SourceProductId");
 
                     b.ToTable("Products");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.ProductVariant", b =>
+                {
+                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("integer");
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    b.Property<string>("AttributesJson").IsRequired().HasColumnType("jsonb");
+                    b.Property<string>("Barcode").HasMaxLength(100).HasColumnType("character varying(100)");
+                    b.Property<DateTime>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<bool>("IsActive").HasColumnType("boolean");
+                    b.Property<decimal?>("Price").HasColumnType("numeric(18,2)");
+                    b.Property<Guid>("OrganizationId").HasColumnType("uuid");
+                    b.Property<int>("ProductId").HasColumnType("integer");
+                    b.Property<int>("Stock").HasColumnType("integer");
+                    b.Property<string>("Sku").IsRequired().HasMaxLength(100).HasColumnType("character varying(100)");
+                    b.Property<DateTime>("UpdatedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("ProductId", "IsActive");
+                    b.HasIndex("OrganizationId", "Sku").IsUnique();
+                    b.ToTable("ProductVariants");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.Organization", b =>
@@ -546,6 +579,19 @@ namespace MarketplaceSync.Web.Migrations
 
                     b.Navigation("Product");
                     b.Navigation("MarketplaceAccount");
+                    b.Navigation("Variants");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplacePublicationVariant", b =>
+                {
+                    b.HasOne("MarketplaceSync.Web.Models.Marketplace.MarketplacePublication", "MarketplacePublication")
+                        .WithMany("Variants").HasForeignKey("MarketplacePublicationId")
+                        .OnDelete(DeleteBehavior.Cascade).IsRequired();
+                    b.HasOne("MarketplaceSync.Web.Models.ProductVariant", "ProductVariant")
+                        .WithMany("MarketplacePublications").HasForeignKey("ProductVariantId")
+                        .OnDelete(DeleteBehavior.Cascade).IsRequired();
+                    b.Navigation("MarketplacePublication");
+                    b.Navigation("ProductVariant");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.Product", b =>
@@ -562,6 +608,19 @@ namespace MarketplaceSync.Web.Migrations
                         .IsRequired();
                     b.Navigation("CreatedByUser");
                     b.Navigation("Organization");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.ProductVariant", b =>
+                {
+                    b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
+                        .WithMany().HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade).IsRequired();
+                    b.HasOne("MarketplaceSync.Web.Models.Product", "Product")
+                        .WithMany("Variants").HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade).IsRequired();
+                    b.Navigation("Organization");
+                    b.Navigation("Product");
+                    b.Navigation("MarketplacePublications");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.MercadoLibreToken", b =>
@@ -679,6 +738,7 @@ namespace MarketplaceSync.Web.Migrations
             modelBuilder.Entity("MarketplaceSync.Web.Models.Product", b =>
                 {
                     b.Navigation("MarketplacePublications");
+                    b.Navigation("Variants");
                 });
 #pragma warning restore 612, 618
         }
