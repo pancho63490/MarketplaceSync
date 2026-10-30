@@ -26,9 +26,11 @@ namespace MarketplaceSync.Web.Controllers
 
             var verificationToken = _configuration["Ebay:MarketplaceDeletionVerificationToken"];
 
-            if (string.IsNullOrWhiteSpace(verificationToken))
+            if (string.IsNullOrWhiteSpace(verificationToken) || verificationToken.Length < 32)
             {
-                return StatusCode(500, "Missing eBay verification token configuration.");
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    "eBay account deletion notifications are not configured.");
             }
 
             var endpoint = "https://marketplacesync.onrender.com/Ebay/MarketplaceAccountDeletion";

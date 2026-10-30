@@ -2,11 +2,17 @@
 
 MarketplaceSync does not store production credentials in the repository. Configure secrets in Render (or the selected hosting platform) as environment variables.
 
-## Required variables
+## Database configuration
 
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL` | PostgreSQL URL supplied by Render. Alternatively use `ConnectionStrings__DefaultConnection`. |
+| `PORT` | Web port supplied by Render. |
+
+## Optional integration variables
+
+| Variable | Purpose |
+|---|---|
 | `Ebay__ClientId` | eBay application client ID. |
 | `Ebay__ClientSecret` | eBay application client secret. |
 | `Ebay__MarketplaceDeletionVerificationToken` | Verification token for the eBay account-deletion endpoint; use at least 32 random characters. |
@@ -15,9 +21,8 @@ MarketplaceSync does not store production credentials in the repository. Configu
 | `MercadoLibre__ClientId` | Mercado Libre application ID. |
 | `MercadoLibre__ClientSecret` | Mercado Libre application secret. |
 | `MercadoLibre__RedirectUri` | Absolute HTTPS OAuth callback registered with Mercado Libre. |
-| `PORT` | Web port supplied by Render. |
 
-Keep the non-secret endpoint defaults from `appsettings.json` unless the provider requires different URLs.
+Integration credentials do not block application startup. Each integration validates its own configuration when used. Keep the non-secret endpoint defaults from `appsettings.json` unless the provider requires different URLs.
 
 ## Local development
 
@@ -38,13 +43,13 @@ Do not copy real values into `appsettings.json`. Use `dotnet user-secrets list` 
 
 ## Deployment sequence
 
-1. Configure all required variables in the hosting platform. Never place their values in Git, logs, screenshots, or documentation.
+1. Configure the database and the variables for the integrations you enable. Never place their values in Git, logs, screenshots, or documentation.
 2. Back up or restore the target database when validating new migrations.
 3. Run `dotnet MarketplaceSync.Web.dll --migrate` as a pre-deploy task. The command must finish successfully before starting the new release.
 4. Start the web service with `dotnet MarketplaceSync.Web.dll`.
 5. Confirm login, organization isolation, OAuth connection, import authentication, and publication using non-production marketplace data first.
 
-The `--migrate` command validates only the database configuration. A normal staging or production web start fails fast when a required marketplace credential is missing, an importer/eBay token is shorter than 32 characters, or the Mercado Libre callback is not HTTPS.
+The `--migrate` command and a normal web start require only database configuration. Optional integrations return a clear configuration error when their credentials are missing or invalid.
 
 ## Credential rotation
 

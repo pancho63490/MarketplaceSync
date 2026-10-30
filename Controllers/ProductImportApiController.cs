@@ -2,6 +2,8 @@ using MarketplaceSync.Web.Data;
 using MarketplaceSync.Web.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace MarketplaceSync.Web.Controllers
 {
@@ -25,15 +27,15 @@ namespace MarketplaceSync.Web.Controllers
         {
             var expectedKey = _configuration["Importer:Key"];
 
-            if (string.IsNullOrWhiteSpace(expectedKey))
+            if (string.IsNullOrWhiteSpace(expectedKey) || expectedKey.Length < 32)
             {
-                return StatusCode(500, new
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
                 {
-                    message = "Falta configurar la credencial del importador."
+                    message = "El importador no está configurado."
                 });
             }
 
-            if (string.IsNullOrWhiteSpace(importerKey) || importerKey != expectedKey)
+            if (string.IsNullOrWhiteSpace(importerKey) || !KeysMatch(importerKey, expectedKey))
             {
                 return Unauthorized(new
                 {
@@ -157,6 +159,15 @@ namespace MarketplaceSync.Web.Controllers
                 productId = product.Id,
                 action = "created"
             });
+        }
+
+        private static bool KeysMatch(string providedKey, string expectedKey)
+        {
+            var providedBytes = Encoding.UTF8.GetBytes(providedKey);
+            var expectedBytes = Encoding.UTF8.GetBytes(expectedKey);
+
+            return providedBytes.Length == expectedBytes.Length &&
+                   CryptographicOperations.FixedTimeEquals(providedBytes, expectedBytes);
         }
 
         private async Task<Guid?> ResolveImporterOrganizationIdAsync()

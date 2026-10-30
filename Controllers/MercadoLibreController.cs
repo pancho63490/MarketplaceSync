@@ -99,6 +99,12 @@ namespace MarketplaceSync.Web.Controllers
                 return BadRequest(
                     "Missing MercadoLibre RedirectUri.");
 
+            if (!Uri.TryCreate(redirectUri, UriKind.Absolute, out var callbackUri) ||
+                callbackUri.Scheme != Uri.UriSchemeHttps)
+            {
+                return BadRequest("MercadoLibre RedirectUri must be an absolute HTTPS URL.");
+            }
+
             if (string.IsNullOrWhiteSpace(authUrl))
             {
                 authUrl =
@@ -183,6 +189,14 @@ namespace MarketplaceSync.Web.Controllers
 
             var tokenUrl =
                 _configuration["MercadoLibre:TokenUrl"];
+
+            if (string.IsNullOrWhiteSpace(clientId) ||
+                string.IsNullOrWhiteSpace(clientSecret) ||
+                string.IsNullOrWhiteSpace(redirectUri))
+            {
+                TempData["Error"] = "La integración de Mercado Libre no está configurada completamente.";
+                return RedirectToAction(nameof(Status));
+            }
 
             if (string.IsNullOrWhiteSpace(tokenUrl))
             {
