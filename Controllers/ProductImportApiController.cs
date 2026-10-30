@@ -29,7 +29,7 @@ namespace MarketplaceSync.Web.Controllers
             {
                 return StatusCode(500, new
                 {
-                    message = "Falta configurar Importer:Key en appsettings o Render."
+                    message = "Falta configurar la credencial del importador."
                 });
             }
 

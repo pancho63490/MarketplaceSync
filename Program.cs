@@ -13,8 +13,56 @@ using Hangfire;
 using Hangfire.MemoryStorage;
 
 var builder = WebApplication.CreateBuilder(args);
+var runMigrations = args.Contains("--migrate", StringComparer.OrdinalIgnoreCase);
+
+if (!builder.Environment.IsDevelopment() && !runMigrations)
+{
+    ValidateProductionConfiguration();
+}
 
 var databaseConnectionString = ResolveDatabaseConnectionString();
+
+void ValidateProductionConfiguration()
+{
+    var requiredSettings = new Dictionary<string, string>
+    {
+        ["Ebay:ClientId"] = "Ebay__ClientId",
+        ["Ebay:ClientSecret"] = "Ebay__ClientSecret",
+        ["Ebay:MarketplaceDeletionVerificationToken"] = "Ebay__MarketplaceDeletionVerificationToken",
+        ["Importer:Key"] = "Importer__Key",
+        ["MercadoLibre:ClientId"] = "MercadoLibre__ClientId",
+        ["MercadoLibre:ClientSecret"] = "MercadoLibre__ClientSecret",
+        ["MercadoLibre:RedirectUri"] = "MercadoLibre__RedirectUri"
+    };
+
+    var missingVariables = requiredSettings
+        .Where(setting => string.IsNullOrWhiteSpace(builder.Configuration[setting.Key]))
+        .Select(setting => setting.Value)
+        .ToArray();
+
+    if (missingVariables.Length > 0)
+    {
+        throw new InvalidOperationException(
+            $"Missing required production environment variables: {string.Join(", ", missingVariables)}.");
+    }
+
+    if (builder.Configuration["Importer:Key"]!.Length < 32)
+        throw new InvalidOperationException("Importer__Key must contain at least 32 characters.");
+
+    if (builder.Configuration["Ebay:MarketplaceDeletionVerificationToken"]!.Length < 32)
+    {
+        throw new InvalidOperationException(
+            "Ebay__MarketplaceDeletionVerificationToken must contain at least 32 characters.");
+    }
+
+    var redirectUriValue = builder.Configuration["MercadoLibre:RedirectUri"]!;
+    if (!Uri.TryCreate(redirectUriValue, UriKind.Absolute, out var redirectUri) ||
+        redirectUri.Scheme != Uri.UriSchemeHttps)
+    {
+        throw new InvalidOperationException(
+            "MercadoLibre__RedirectUri must be an absolute HTTPS URL outside Development.");
+    }
+}
 
 string ResolveDatabaseConnectionString()
 {
@@ -95,6 +143,10 @@ builder.Services.AddScoped<IOrganizationContext, OrganizationContext>();
 builder.Services.AddScoped<IMercadoLibreService, MercadoLibreService>();
 
 builder.Services.AddScoped<
+    IMercadoLibreOrderSyncService,
+    MercadoLibreOrderSyncService>();
+
+builder.Services.AddScoped<
     IMercadoLibreAuthService,
     MercadoLibreAuthService>();
 
@@ -130,6 +182,14 @@ builder.Services.AddSession();
 
 var app = builder.Build();
 
+if (runMigrations)
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await dbContext.Database.MigrateAsync();
+    return;
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
@@ -141,8 +201,6 @@ app.UseHttpsRedirection();
 
 app.UseStaticFiles();
 
-app.UseHangfireDashboard("/hangfire");
-
 app.UseRouting();
 
 app.UseSession();
@@ -150,6 +208,11 @@ app.UseSession();
 app.UseAuthentication();
 
 app.UseAuthorization();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseHangfireDashboard("/hangfire");
+}
 
 app.MapControllers();
 

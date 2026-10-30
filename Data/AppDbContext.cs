@@ -2,6 +2,7 @@ using MarketplaceSync.Web.Models;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using MarketplaceSync.Web.Models.Marketplace;
+using MarketplaceSync.Web.Models.Orders;
 namespace MarketplaceSync.Web.Data
 {
     public class AppDbContext : IdentityDbContext
@@ -20,6 +21,8 @@ namespace MarketplaceSync.Web.Data
         public DbSet<ProductVariant> ProductVariants { get; set; }
         public DbSet<MarketplacePublicationVariant> MarketplacePublicationVariants { get; set; }
         public DbSet<MercadoLibreToken> MercadoLibreTokens { get; set; }
+        public DbSet<SalesOrder> SalesOrders { get; set; }
+        public DbSet<SalesOrderItem> SalesOrderItems { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -174,6 +177,49 @@ namespace MarketplaceSync.Web.Data
                 entity.Property(x => x.ExternalAccountId).HasMaxLength(200);
                 entity.Property(x => x.DisplayName).HasMaxLength(300);
                 entity.Property(x => x.Status).HasMaxLength(30);
+                entity.Property(x => x.LastOrdersSyncError).HasMaxLength(1000);
+            });
+
+            builder.Entity<SalesOrder>(entity =>
+            {
+                entity.HasOne(x => x.Organization)
+                    .WithMany(x => x.SalesOrders)
+                    .HasForeignKey(x => x.OrganizationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.MarketplaceAccount)
+                    .WithMany(x => x.SalesOrders)
+                    .HasForeignKey(x => x.MarketplaceAccountId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(x => new { x.MarketplaceAccountId, x.ExternalOrderId })
+                    .IsUnique();
+                entity.HasIndex(x => new { x.OrganizationId, x.DateCreated });
+                entity.HasIndex(x => new { x.OrganizationId, x.Status });
+                entity.Property(x => x.Marketplace).HasMaxLength(50);
+                entity.Property(x => x.ExternalOrderId).HasMaxLength(100);
+                entity.Property(x => x.ExternalPackId).HasMaxLength(100);
+                entity.Property(x => x.Status).HasMaxLength(50);
+                entity.Property(x => x.StatusDetail).HasMaxLength(100);
+                entity.Property(x => x.CurrencyId).HasMaxLength(20);
+                entity.Property(x => x.BuyerId).HasMaxLength(100);
+                entity.Property(x => x.BuyerNickname).HasMaxLength(200);
+                entity.Property(x => x.ShippingId).HasMaxLength(100);
+            });
+
+            builder.Entity<SalesOrderItem>(entity =>
+            {
+                entity.HasOne(x => x.SalesOrder)
+                    .WithMany(x => x.Items)
+                    .HasForeignKey(x => x.SalesOrderId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(x => x.SalesOrderId);
+                entity.Property(x => x.ExternalItemId).HasMaxLength(100);
+                entity.Property(x => x.ExternalVariationId).HasMaxLength(100);
+                entity.Property(x => x.Title).HasMaxLength(500);
+                entity.Property(x => x.SellerSku).HasMaxLength(100);
+                entity.Property(x => x.CurrencyId).HasMaxLength(20);
             });
 
             builder.Entity<Organization>(entity =>

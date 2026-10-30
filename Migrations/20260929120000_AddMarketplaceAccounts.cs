@@ -63,8 +63,13 @@ public partial class AddMarketplaceAccounts : Migration
             """);
 
         migrationBuilder.CreateIndex("IX_MercadoLibreTokens_MarketplaceAccountId", "MercadoLibreTokens", "MarketplaceAccountId");
-        migrationBuilder.AddForeignKey("FK_MercadoLibreTokens_MarketplaceAccounts_MarketplaceAccountId",
-            "MercadoLibreTokens", "MarketplaceAccountId", "MarketplaceAccounts", "Id", onDelete: ReferentialAction.SetNull);
+        migrationBuilder.AddForeignKey(
+            name: "FK_MercadoLibreTokens_MarketplaceAccounts_MarketplaceAccountId",
+            table: "MercadoLibreTokens",
+            column: "MarketplaceAccountId",
+            principalTable: "MarketplaceAccounts",
+            principalColumn: "Id",
+            onDelete: ReferentialAction.SetNull);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)

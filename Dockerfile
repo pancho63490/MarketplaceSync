@@ -8,9 +8,9 @@ WORKDIR /src
 
 COPY . .
 
-RUN dotnet restore
+RUN dotnet restore MarketplaceSync.Web.csproj
 
-RUN dotnet publish -c Release -o /app/publish
+RUN dotnet publish MarketplaceSync.Web.csproj -c Release -o /app/publish
 
 # =========================
 # RUNTIME STAGE

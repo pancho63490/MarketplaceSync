@@ -1,0 +1,57 @@
+name: marketplacesync
+
+x-app-environment: &app-environment
+  ASPNETCORE_ENVIRONMENT: Development
+  ASPNETCORE_URLS: http://+:10000
+  ConnectionStrings__DefaultConnection: Host=database;Port=5432;Database=marketplace_sync;Username=postgres;Password=${POSTGRES_PASSWORD:-marketplacesync_dev}
+
+services:
+  database:
+    image: postgres:16-alpine
+    container_name: marketplacesync-database
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: marketplace_sync
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-marketplacesync_dev}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d marketplace_sync"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: marketplacesync-app:local
+    environment: *app-environment
+    command: ["dotnet", "MarketplaceSync.Web.dll", "--migrate"]
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: marketplacesync-app:local
+    container_name: marketplacesync-app
+    env_file:
+      - ${APP_ENV_FILE:-/Users/francsico/Downloads/MarketplaceSync.env}
+    environment: *app-environment
+    ports:
+      - "${APP_PORT:-10000}:10000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    name: marketplacesync-postgres-data

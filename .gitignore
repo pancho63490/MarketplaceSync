@@ -6,6 +6,11 @@ obj/
 *.suo
 *.cache
 *.log
+.DS_Store
+**/.DS_Store
 
 appsettings.Development.json
+appsettings.Local.json
 .env
+.env.*
+!.env.example

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using MarketplaceSync.Web.Models.Marketplace;
+using MarketplaceSync.Web.Models.Orders;
 
 namespace MarketplaceSync.Web.Models;
 
@@ -32,4 +33,7 @@ public class Organization
 
     public ICollection<MarketplaceAccount> MarketplaceAccounts { get; set; }
         = new List<MarketplaceAccount>();
+
+    public ICollection<SalesOrder> SalesOrders { get; set; }
+        = new List<SalesOrder>();
 }

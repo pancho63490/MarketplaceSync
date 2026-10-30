@@ -22,6 +22,62 @@ namespace MarketplaceSync.Web.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ConnectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ConnectedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<DateTime?>("DisconnectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("ExternalAccountId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("LastOrdersSyncAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastOrdersSyncError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Marketplace")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "Marketplace", "ExternalAccountId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MarketplaceAccounts_Org_Marketplace_ExternalId");
+
+                    b.ToTable("MarketplaceAccounts");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplacePublication", b =>
                 {
                     b.Property<int>("Id")
@@ -61,6 +117,9 @@ namespace MarketplaceSync.Web.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<int?>("MarketplaceAccountId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Permalink")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
@@ -69,9 +128,6 @@ namespace MarketplaceSync.Web.Migrations
                         .HasColumnType("numeric(18,2)");
 
                     b.Property<int>("ProductId")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("MarketplaceAccountId")
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("PublishedAt")
@@ -89,8 +145,8 @@ namespace MarketplaceSync.Web.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ProductId");
                     b.HasIndex("MarketplaceAccountId");
+
                     b.HasIndex("ProductId", "Marketplace", "MarketplaceAccountId")
                         .IsUnique()
                         .HasDatabaseName("IX_MarketplacePublications_Product_Channel_Account");
@@ -100,14 +156,29 @@ namespace MarketplaceSync.Web.Migrations
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplacePublicationVariant", b =>
                 {
-                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("integer");
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-                    b.Property<string>("ExternalVariationId").HasMaxLength(100).HasColumnType("character varying(100)");
-                    b.Property<int>("MarketplacePublicationId").HasColumnType("integer");
-                    b.Property<int>("ProductVariantId").HasColumnType("integer");
+
+                    b.Property<string>("ExternalVariationId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("MarketplacePublicationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProductVariantId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
-                    b.HasIndex("MarketplacePublicationId", "ProductVariantId").IsUnique();
+
                     b.HasIndex("ProductVariantId");
+
+                    b.HasIndex("MarketplacePublicationId", "ProductVariantId")
+                        .IsUnique();
+
                     b.ToTable("MarketplacePublicationVariants");
                 });
 
@@ -123,18 +194,13 @@ namespace MarketplaceSync.Web.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("ConnectedByUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
-
-                    b.Property<Guid>("OrganizationId").HasColumnType("uuid");
-
-                    b.Property<int?>("MarketplaceAccountId")
-                        .HasColumnType("integer");
-
                     b.Property<string>("AppUserName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ConnectedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -148,9 +214,15 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("MarketplaceAccountId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Nickname")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("RefreshToken")
                         .HasColumnType("text");
@@ -172,10 +244,204 @@ namespace MarketplaceSync.Web.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ConnectedByUserId");
+
                     b.HasIndex("MarketplaceAccountId");
-                    b.HasIndex("OrganizationId", "UserId").IsUnique();
+
+                    b.HasIndex("OrganizationId", "UserId")
+                        .IsUnique();
 
                     b.ToTable("MercadoLibreTokens");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Orders.SalesOrder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BuyerId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("BuyerNickname")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("CurrencyId")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("DateClosed")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("DateCreated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExternalOrderId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ExternalPackId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Marketplace")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("MarketplaceAccountId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("PaidAmount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("ShippingId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("StatusDetail")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("SyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MarketplaceAccountId", "ExternalOrderId")
+                        .IsUnique();
+
+                    b.HasIndex("OrganizationId", "DateCreated");
+
+                    b.HasIndex("OrganizationId", "Status");
+
+                    b.ToTable("SalesOrders");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Orders.SalesOrderItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CurrencyId")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ExternalItemId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ExternalVariationId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("SaleFee")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("SalesOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SellerSku")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SalesOrderId");
+
+                    b.ToTable("SalesOrderItems");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Organization", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(180)
+                        .HasColumnType("character varying(180)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.ToTable("Organizations");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.OrganizationMembership", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("OrganizationId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("OrganizationMemberships");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.Product", b =>
@@ -186,18 +452,16 @@ namespace MarketplaceSync.Web.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("CreatedByUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
-
-                    b.Property<Guid>("OrganizationId").HasColumnType("uuid");
-
                     b.Property<string>("Brand")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
@@ -218,6 +482,9 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<string>("Model")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("SourceAvailabilityText")
                         .HasMaxLength(100)
@@ -266,7 +533,9 @@ namespace MarketplaceSync.Web.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedByUserId");
+
                     b.HasIndex("OrganizationId", "CreatedAt");
+
                     b.HasIndex("OrganizationId", "SourceMarketplace", "SourceProductId");
 
                     b.ToTable("Products");
@@ -274,98 +543,54 @@ namespace MarketplaceSync.Web.Migrations
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.ProductVariant", b =>
                 {
-                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("integer");
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-                    b.Property<string>("AttributesJson").IsRequired().HasColumnType("jsonb");
-                    b.Property<string>("Barcode").HasMaxLength(100).HasColumnType("character varying(100)");
-                    b.Property<DateTime>("CreatedAt").HasColumnType("timestamp with time zone");
-                    b.Property<bool>("IsActive").HasColumnType("boolean");
-                    b.Property<decimal?>("Price").HasColumnType("numeric(18,2)");
-                    b.Property<Guid>("OrganizationId").HasColumnType("uuid");
-                    b.Property<int>("ProductId").HasColumnType("integer");
-                    b.Property<int>("Stock").HasColumnType("integer");
-                    b.Property<string>("Sku").IsRequired().HasMaxLength(100).HasColumnType("character varying(100)");
-                    b.Property<DateTime>("UpdatedAt").HasColumnType("timestamp with time zone");
-                    b.HasKey("Id");
-                    b.HasIndex("ProductId", "IsActive");
-                    b.HasIndex("OrganizationId", "Sku").IsUnique();
-                    b.ToTable("ProductVariants");
-                });
-
-            modelBuilder.Entity("MarketplaceSync.Web.Models.Organization", b =>
-                {
-                    b.Property<Guid>("Id").HasColumnType("uuid");
-                    b.Property<DateTime>("CreatedAt").HasColumnType("timestamp with time zone");
-                    b.Property<bool>("IsActive").HasColumnType("boolean");
-                    b.Property<string>("Name").IsRequired().HasMaxLength(150).HasColumnType("character varying(150)");
-                    b.Property<string>("Slug").IsRequired().HasMaxLength(180).HasColumnType("character varying(180)");
-                    b.Property<DateTime?>("UpdatedAt").HasColumnType("timestamp with time zone");
-                    b.HasKey("Id");
-                    b.HasIndex("Slug").IsUnique();
-                    b.ToTable("Organizations");
-                });
-
-            modelBuilder.Entity("MarketplaceSync.Web.Models.OrganizationMembership", b =>
-                {
-                    b.Property<Guid>("OrganizationId").HasColumnType("uuid");
-                    b.Property<string>("UserId").IsRequired().HasMaxLength(450).HasColumnType("character varying(450)");
-                    b.Property<DateTime>("CreatedAt").HasColumnType("timestamp with time zone");
-                    b.Property<bool>("IsActive").HasColumnType("boolean");
-                    b.Property<string>("Role").IsRequired().HasMaxLength(30).HasColumnType("character varying(30)");
-                    b.HasKey("OrganizationId", "UserId");
-                    b.HasIndex("UserId");
-                    b.ToTable("OrganizationMemberships");
-                });
-
-            modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", b =>
-                {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("ConnectedAt")
+                    b.Property<string>("AttributesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Barcode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("ConnectedByUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
-
-                    b.Property<DateTime?>("DisconnectedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DisplayName")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<string>("ExternalAccountId")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Marketplace")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
 
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Status")
+                    b.Property<decimal?>("Price")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Sku")
                         .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Stock")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ConnectedByUserId");
+                    b.HasIndex("OrganizationId", "Sku")
+                        .IsUnique();
 
-                    b.HasIndex("OrganizationId", "Marketplace", "ExternalAccountId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_MarketplaceAccounts_Org_Marketplace_ExternalId");
+                    b.HasIndex("ProductId", "IsActive");
 
-                    b.ToTable("MarketplaceAccounts");
+                    b.ToTable("ProductVariants");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -564,6 +789,17 @@ namespace MarketplaceSync.Web.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", b =>
+                {
+                    b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
+                        .WithMany("MarketplaceAccounts")
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Organization");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplacePublication", b =>
                 {
                     b.HasOne("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", "MarketplaceAccount")
@@ -577,21 +813,100 @@ namespace MarketplaceSync.Web.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Product");
                     b.Navigation("MarketplaceAccount");
-                    b.Navigation("Variants");
+
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplacePublicationVariant", b =>
                 {
                     b.HasOne("MarketplaceSync.Web.Models.Marketplace.MarketplacePublication", "MarketplacePublication")
-                        .WithMany("Variants").HasForeignKey("MarketplacePublicationId")
-                        .OnDelete(DeleteBehavior.Cascade).IsRequired();
+                        .WithMany("Variants")
+                        .HasForeignKey("MarketplacePublicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("MarketplaceSync.Web.Models.ProductVariant", "ProductVariant")
-                        .WithMany("MarketplacePublications").HasForeignKey("ProductVariantId")
-                        .OnDelete(DeleteBehavior.Cascade).IsRequired();
+                        .WithMany("MarketplacePublications")
+                        .HasForeignKey("ProductVariantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("MarketplacePublication");
+
                     b.Navigation("ProductVariant");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.MercadoLibreToken", b =>
+                {
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", "MarketplaceAccount")
+                        .WithMany("Tokens")
+                        .HasForeignKey("MarketplaceAccountId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
+                        .WithMany("MercadoLibreTokens")
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MarketplaceAccount");
+
+                    b.Navigation("Organization");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Orders.SalesOrder", b =>
+                {
+                    b.HasOne("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", "MarketplaceAccount")
+                        .WithMany("SalesOrders")
+                        .HasForeignKey("MarketplaceAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
+                        .WithMany("SalesOrders")
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MarketplaceAccount");
+
+                    b.Navigation("Organization");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Orders.SalesOrderItem", b =>
+                {
+                    b.HasOne("MarketplaceSync.Web.Models.Orders.SalesOrder", "SalesOrder")
+                        .WithMany("Items")
+                        .HasForeignKey("SalesOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SalesOrder");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.OrganizationMembership", b =>
+                {
+                    b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
+                        .WithMany("Memberships")
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Organization");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.Product", b =>
@@ -606,82 +921,29 @@ namespace MarketplaceSync.Web.Migrations
                         .HasForeignKey("OrganizationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
                     b.Navigation("CreatedByUser");
+
                     b.Navigation("Organization");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.ProductVariant", b =>
                 {
                     b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
-                        .WithMany().HasForeignKey("OrganizationId")
-                        .OnDelete(DeleteBehavior.Cascade).IsRequired();
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("MarketplaceSync.Web.Models.Product", "Product")
-                        .WithMany("Variants").HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Cascade).IsRequired();
+                        .WithMany("Variants")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("Organization");
+
                     b.Navigation("Product");
-                    b.Navigation("MarketplacePublications");
-                });
-
-            modelBuilder.Entity("MarketplaceSync.Web.Models.MercadoLibreToken", b =>
-                {
-                    b.HasOne("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", "MarketplaceAccount")
-                        .WithMany("Tokens")
-                        .HasForeignKey("MarketplaceAccountId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
-                        .WithMany("MercadoLibreTokens")
-                        .HasForeignKey("OrganizationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", null)
-                        .WithMany()
-                        .HasForeignKey("ConnectedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-                    b.Navigation("Organization");
-                    b.Navigation("MarketplaceAccount");
-                });
-
-            modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", b =>
-                {
-                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", null)
-                        .WithMany()
-                        .HasForeignKey("ConnectedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
-                        .WithMany("MarketplaceAccounts")
-                        .HasForeignKey("OrganizationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Organization");
-                    b.Navigation("Tokens");
-                });
-
-            modelBuilder.Entity("MarketplaceSync.Web.Models.OrganizationMembership", b =>
-                {
-                    b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
-                        .WithMany("Memberships")
-                        .HasForeignKey("OrganizationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                    b.Navigation("Organization");
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("MarketplaceSync.Web.Models.Organization", b =>
-                {
-                    b.Navigation("Memberships");
-                    b.Navigation("Products");
-                    b.Navigation("MercadoLibreTokens");
-                    b.Navigation("MarketplaceAccounts");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -735,10 +997,46 @@ namespace MarketplaceSync.Web.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", b =>
+                {
+                    b.Navigation("SalesOrders");
+
+                    b.Navigation("Tokens");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplacePublication", b =>
+                {
+                    b.Navigation("Variants");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Orders.SalesOrder", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Organization", b =>
+                {
+                    b.Navigation("MarketplaceAccounts");
+
+                    b.Navigation("Memberships");
+
+                    b.Navigation("MercadoLibreTokens");
+
+                    b.Navigation("Products");
+
+                    b.Navigation("SalesOrders");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.Product", b =>
                 {
                     b.Navigation("MarketplacePublications");
+
                     b.Navigation("Variants");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.ProductVariant", b =>
+                {
+                    b.Navigation("MarketplacePublications");
                 });
 #pragma warning restore 612, 618
         }

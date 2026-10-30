@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using MarketplaceSync.Web.Models.Orders;
 
 namespace MarketplaceSync.Web.Models.Marketplace;
 
@@ -23,10 +24,17 @@ public class MarketplaceAccount
 
     public DateTime ConnectedAt { get; set; } = DateTime.UtcNow;
     public DateTime? DisconnectedAt { get; set; }
+    public DateTime? LastOrdersSyncAt { get; set; }
+
+    [MaxLength(1000)]
+    public string? LastOrdersSyncError { get; set; }
 
     [MaxLength(450)]
     public string? ConnectedByUserId { get; set; }
 
     public ICollection<MercadoLibreToken> Tokens { get; set; }
         = new List<MercadoLibreToken>();
+
+    public ICollection<SalesOrder> SalesOrders { get; set; }
+        = new List<SalesOrder>();
 }

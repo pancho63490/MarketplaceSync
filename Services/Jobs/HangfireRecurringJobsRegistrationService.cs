@@ -30,6 +30,11 @@ public sealed class HangfireRecurringJobsRegistrationService : BackgroundService
                     job => job.RefreshMercadoLibreToken(),
                     "*/30 * * * *");
 
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "sync-mercadolibre-orders",
+                    job => job.SyncMercadoLibreOrders(),
+                    "*/5 * * * *");
+
                 _logger.LogInformation("Hangfire recurring jobs registered.");
                 return;
             }

@@ -279,6 +279,46 @@ Recommended improvements:
 
 # DevOps Recommendations
 
+## Run with Docker Desktop
+
+With Docker Desktop running, start the application and PostgreSQL from the
+repository root:
+
+```bash
+docker compose up -d --build
+```
+
+The application is available at `http://localhost:10000` and PostgreSQL at
+`localhost:5432`. The first start applies the Entity Framework migrations
+automatically. Database files are preserved in the named Docker volume
+`marketplacesync-postgres-data`.
+
+For local development, the default PostgreSQL password is
+`marketplacesync_dev`. You can override it without changing `compose.yaml`:
+
+```bash
+POSTGRES_PASSWORD=another-local-password docker compose up -d --build
+```
+
+Stop the containers with `docker compose down`. This keeps the database
+volume so the data is available on the next start.
+
+To connect a Mercado Libre account, create the local environment file:
+
+```bash
+cp .env.example .env
+```
+
+Set `APP_ENV_FILE` in `.env` to the absolute path of the external credentials
+file. That file must define `MercadoLibre__ClientId`,
+`MercadoLibre__ClientSecret`, and the exact HTTPS
+`MercadoLibre__RedirectUri` registered in Mercado Libre. Recreate the app
+container after changing the file:
+
+```bash
+docker compose up -d --force-recreate app
+```
+
 Recommended additions:
 
 - GitHub Actions CI/CD
