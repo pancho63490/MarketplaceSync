@@ -13,7 +13,8 @@ using Hangfire;
 using Hangfire.MemoryStorage;
 
 var builder = WebApplication.CreateBuilder(args);
-var runMigrations = args.Contains("--migrate", StringComparer.OrdinalIgnoreCase);
+var migrateOnly = args.Contains("--migrate", StringComparer.OrdinalIgnoreCase);
+var migrateAndRun = args.Contains("--migrate-and-run", StringComparer.OrdinalIgnoreCase);
 
 var databaseConnectionString = ResolveDatabaseConnectionString();
 
@@ -135,12 +136,14 @@ builder.Services.AddSession();
 
 var app = builder.Build();
 
-if (runMigrations)
+if (migrateOnly || migrateAndRun)
 {
     await using var scope = app.Services.CreateAsyncScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await dbContext.Database.MigrateAsync();
-    return;
+
+    if (migrateOnly)
+        return;
 }
 
 if (!app.Environment.IsDevelopment())

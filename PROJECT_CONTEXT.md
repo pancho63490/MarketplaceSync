@@ -34,6 +34,7 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 - El proyecto habilita .NET User Secrets con `UserSecretsId` para configuración local en `Development`; esos valores se guardan fuera del repositorio. Los comandos de configuración están en `docs/deployment.md`.
 - Las integraciones son opcionales al arrancar: eBay, el importador y Mercado Libre validan sus credenciales únicamente cuando se usan. La llave del importador y el token de eBay requieren al menos 32 caracteres en sus endpoints, y el callback de Mercado Libre debe ser una URL HTTPS absoluta.
 - Tanto el modo `--migrate` como el servidor web requieren solamente la configuración de PostgreSQL.
+- El modo `--migrate-and-run` aplica migraciones y continúa con el servidor; se usa como Docker Command en Render Free para evitar encadenar comandos mediante shell.
 - `.gitignore` excluye `.DS_Store`, archivos locales de configuración y variantes de `.env` (excepto un posible `.env.example`). Los `.DS_Store` que ya estaban rastreados no se eliminaron porque contienen cambios previos ajenos a esta tarea.
 - La lista completa de variables de despliegue y el procedimiento de rotación está en `docs/deployment.md`; nunca se deben copiar valores reales a ese documento ni a `PROJECT_CONTEXT.md`.
 
