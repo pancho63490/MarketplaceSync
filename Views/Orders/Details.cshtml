@@ -1,0 +1,88 @@
+@model MarketplaceSync.Web.Models.Orders.SalesOrder
+
+@functions {
+    private static string StatusLabel(string status) => status.ToLowerInvariant() switch
+    {
+        "paid" => "Pagado",
+        "confirmed" => "Confirmado",
+        "payment_required" => "Pago pendiente",
+        "payment_in_process" => "Pago en proceso",
+        "partially_refunded" => "Reembolso parcial",
+        "pending_cancel" => "Cancelación pendiente",
+        "cancelled" => "Cancelado",
+        "invalid" => "Inválido",
+        _ => status.Replace('_', ' ')
+    };
+}
+
+@{
+    ViewData["Title"] = $"Pedido #{Model.ExternalOrderId}";
+}
+
+<div class="order-detail-page">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+        <div>
+            <a asp-action="Index" class="order-back-link">← Volver a pedidos</a>
+            <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                <h2 class="h4 fw-bold mb-0">Pedido #@Model.ExternalOrderId</h2>
+                <span class="badge rounded-pill text-bg-primary">@StatusLabel(Model.Status)</span>
+            </div>
+            <div class="text-muted small mt-2">Mercado Libre · @(Model.MarketplaceAccount.DisplayName ?? Model.MarketplaceAccount.ExternalAccountId)</div>
+        </div>
+        <div class="text-end"><div class="text-muted small">Total del pedido</div><div class="order-detail-total">$@Model.TotalAmount.ToString("N2") @Model.CurrencyId</div></div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm order-detail-card mb-4">
+                <div class="card-header bg-white"><h3 class="h6 fw-bold mb-0">Productos</h3></div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead class="table-light"><tr><th>Producto</th><th>SKU</th><th class="text-center">Cantidad</th><th class="text-end">Precio</th><th class="text-end">Subtotal</th></tr></thead>
+                        <tbody>
+                        @foreach (var item in Model.Items)
+                        {
+                            <tr>
+                                <td><div class="fw-semibold">@(item.Title ?? item.ExternalItemId)</div><div class="small text-muted">MLM @item.ExternalItemId</div></td>
+                                <td>@(item.SellerSku ?? "—")</td><td class="text-center">@item.Quantity</td><td class="text-end">$@item.UnitPrice.ToString("N2")</td><td class="text-end fw-bold">$@((item.UnitPrice * item.Quantity).ToString("N2"))</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm order-detail-card">
+                <div class="card-header bg-white"><h3 class="h6 fw-bold mb-0">Resumen de pago</h3></div>
+                <div class="card-body">
+                    <div class="detail-row"><span>Total publicado</span><strong>$@Model.TotalAmount.ToString("N2") @Model.CurrencyId</strong></div>
+                    <div class="detail-row"><span>Monto cobrado</span><strong class="text-success">$@Model.PaidAmount.ToString("N2") @Model.CurrencyId</strong></div>
+                    <div class="detail-row"><span>Estado del pago</span><strong>@StatusLabel(Model.Status)</strong></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm order-detail-card mb-4">
+                <div class="card-header bg-white"><h3 class="h6 fw-bold mb-0">Comprador</h3></div>
+                <div class="card-body"><div class="detail-label">Usuario</div><div class="fw-bold">@(Model.BuyerNickname ?? "No disponible")</div><div class="detail-label mt-3">ID de comprador</div><div>@(Model.BuyerId ?? "No disponible")</div></div>
+            </div>
+            <div class="card border-0 shadow-sm order-detail-card mb-4">
+                <div class="card-header bg-white"><h3 class="h6 fw-bold mb-0">Envío</h3></div>
+                <div class="card-body"><div class="detail-label">ID de envío</div><div class="fw-semibold">@(Model.ShippingId ?? "No disponible")</div>@if (!string.IsNullOrWhiteSpace(Model.ExternalPackId)) { <div class="detail-label mt-3">Pack</div><div>@Model.ExternalPackId</div> }</div>
+            </div>
+            <div class="card border-0 shadow-sm order-detail-card">
+                <div class="card-header bg-white"><h3 class="h6 fw-bold mb-0">Fechas</h3></div>
+                <div class="card-body"><div class="detail-label">Creado</div><div>@Model.DateCreated.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div><div class="detail-label mt-3">Actualizado</div><div>@Model.LastUpdated.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div><div class="detail-label mt-3">Sincronizado</div><div>@Model.SyncedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .order-back-link { color: #64748b; font-size: .85rem; font-weight: 700; text-decoration: none; } .order-back-link:hover { color: #2563eb; }
+    .order-detail-total { color: #0f172a; font-size: 1.5rem; font-weight: 850; } .order-detail-card { border-radius: 16px; overflow: hidden; }
+    .order-detail-card .card-header { border-color: #eef2f7; padding: 1rem 1.25rem; } .order-detail-card .card-body { padding: 1.25rem; }
+    .order-detail-card th { color: #64748b; font-size: .72rem; text-transform: uppercase; } .detail-row { display: flex; justify-content: space-between; padding: .55rem 0; }
+    .detail-row + .detail-row { border-top: 1px solid #eef2f7; } .detail-label { color: #94a3b8; font-size: .72rem; font-weight: 750; text-transform: uppercase; }
+</style>

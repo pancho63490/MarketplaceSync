@@ -1,114 +1,183 @@
 @model MarketplaceSync.Web.ViewModels.Orders.OrdersIndexViewModel
 
+@functions {
+    private static string StatusLabel(string status) => status.ToLowerInvariant() switch
+    {
+        "paid" => "Pagado",
+        "confirmed" => "Confirmado",
+        "payment_required" => "Pago pendiente",
+        "payment_in_process" => "Pago en proceso",
+        "partially_refunded" => "Reembolso parcial",
+        "pending_cancel" => "Cancelación pendiente",
+        "cancelled" => "Cancelado",
+        "invalid" => "Inválido",
+        _ => status.Replace('_', ' ')
+    };
+
+    private static string StatusClass(string status) => status.ToLowerInvariant() switch
+    {
+        "paid" => "order-status-success",
+        "confirmed" => "order-status-info",
+        "cancelled" or "invalid" => "order-status-danger",
+        _ => "order-status-warning"
+    };
+}
+
 @{
-    ViewData["Title"] = "Pedidos";
+    ViewData["Title"] = "Centro de pedidos";
+    var firstVisible = Model.FilteredOrders == 0 ? 0 : ((Model.Page - 1) * Model.PageSize) + 1;
+    var lastVisible = Math.Min(Model.Page * Model.PageSize, Model.FilteredOrders);
 }
 
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-    <div>
-        <h2 class="h4 mb-1">Pedidos de Mercado Libre</h2>
-        <div class="text-muted">
-            @Model.TotalOrders pedidos sincronizados
-            @if (Model.LastSyncAt.HasValue)
-            {
-                <span>· Última sincronización @Model.LastSyncAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
-            }
+<div class="orders-page">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+        <div>
+            <div class="eyebrow">OPERACIÓN OMNICANAL</div>
+            <h2 class="orders-title mb-1">Centro de pedidos</h2>
+            <div class="text-muted">
+                Gestiona las ventas importadas desde Mercado Libre.
+                @if (Model.LastSyncAt.HasValue)
+                {
+                    <span>Última sincronización: @Model.LastSyncAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+                }
+            </div>
         </div>
-    </div>
-    <form asp-action="Sync" method="post">
-        @Html.AntiForgeryToken()
-        <button type="submit" class="btn btn-app-primary">Sincronizar ahora</button>
-    </form>
-</div>
-
-@if (TempData["Success"] is string success)
-{
-    <div class="alert alert-success">@success</div>
-}
-@if (TempData["Error"] is string error)
-{
-    <div class="alert alert-danger">@error</div>
-}
-@if (Model.ConnectedAccounts == 0)
-{
-    <div class="alert alert-warning d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <span>Conecta una cuenta de Mercado Libre para comenzar a importar pedidos.</span>
-        <a asp-controller="MercadoLibre" asp-action="Status" class="btn btn-sm btn-outline-dark">Ir a conexiones</a>
-    </div>
-}
-
-<div class="card border-0 shadow-sm mb-4">
-    <div class="card-body">
-        <form method="get" class="row g-2 align-items-end">
-            <div class="col-sm-5 col-lg-3">
-                <label for="status" class="form-label fw-semibold">Estado</label>
-                <select id="status" name="status" class="form-select">
-                    <option value="">Todos</option>
-                    @foreach (var status in Model.Statuses)
-                    {
-                        <option value="@status" selected="@(status == Model.SelectedStatus)">@status</option>
-                    }
-                </select>
-            </div>
-            <div class="col-auto">
-                <button class="btn btn-outline-primary" type="submit">Filtrar</button>
-            </div>
+        <form asp-action="Sync" method="post">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-app-primary orders-sync-button"><span aria-hidden="true">↻</span> Sincronizar ahora</button>
         </form>
     </div>
-</div>
 
-<div class="card border-0 shadow-sm">
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-            <thead class="table-light">
-                <tr>
-                    <th>Pedido</th>
-                    <th>Cuenta</th>
-                    <th>Productos</th>
-                    <th>Estado</th>
-                    <th>Total</th>
-                    <th>Fecha</th>
-                </tr>
-            </thead>
-            <tbody>
-            @if (Model.Orders.Count == 0)
-            {
-                <tr>
-                    <td colspan="6" class="text-center text-muted py-5">
-                        No hay pedidos sincronizados. Conecta una cuenta y selecciona “Sincronizar ahora”.
-                    </td>
-                </tr>
-            }
-            else
-            {
-                @foreach (var order in Model.Orders)
+    @if (TempData["Success"] is string success)
+    {
+        <div class="alert alert-success border-0 shadow-sm">@success</div>
+    }
+    @if (TempData["Error"] is string error)
+    {
+        <div class="alert alert-danger border-0 shadow-sm">@error</div>
+    }
+    @if (Model.ConnectedAccounts == 0)
+    {
+        <div class="alert alert-warning border-0 d-flex flex-wrap justify-content-between align-items-center gap-2 shadow-sm">
+            <span>Conecta una cuenta de Mercado Libre para comenzar a importar pedidos.</span>
+            <a asp-controller="MercadoLibre" asp-action="Status" class="btn btn-sm btn-outline-dark">Ir a conexiones</a>
+        </div>
+    }
+
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-xl"><div class="order-kpi-card"><div class="order-kpi-icon kpi-blue">▤</div><div><div class="order-kpi-label">Pedidos totales</div><div class="order-kpi-value">@Model.TotalOrders.ToString("N0")</div></div></div></div>
+        <div class="col-sm-6 col-xl"><div class="order-kpi-card"><div class="order-kpi-icon kpi-green">✓</div><div><div class="order-kpi-label">Pagados</div><div class="order-kpi-value">@Model.PaidOrders.ToString("N0")</div></div></div></div>
+        <div class="col-sm-6 col-xl"><div class="order-kpi-card"><div class="order-kpi-icon kpi-amber">◷</div><div><div class="order-kpi-label">Pendientes</div><div class="order-kpi-value">@Model.PendingOrders.ToString("N0")</div></div></div></div>
+        <div class="col-sm-6 col-xl"><div class="order-kpi-card"><div class="order-kpi-icon kpi-red">×</div><div><div class="order-kpi-label">Cancelados</div><div class="order-kpi-value">@Model.CancelledOrders.ToString("N0")</div></div></div></div>
+        <div class="col-sm-6 col-xl"><div class="order-kpi-card"><div class="order-kpi-icon kpi-purple">$</div><div><div class="order-kpi-label">Ventas cobradas</div><div class="order-kpi-value order-kpi-money">$@Model.TotalSales.ToString("N2")</div></div></div></div>
+    </div>
+
+    <div class="card orders-filter-card border-0 shadow-sm mb-4">
+        <div class="card-body p-3 p-lg-4">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-12 col-xl-4">
+                    <label for="search" class="form-label orders-label">Buscar pedido</label>
+                    <div class="orders-search"><span aria-hidden="true">⌕</span><input id="search" name="search" value="@Model.Search" class="form-control" placeholder="Pedido, comprador, producto o SKU" /></div>
+                </div>
+                <div class="col-sm-6 col-lg-3 col-xl-2">
+                    <label for="status" class="form-label orders-label">Estado</label>
+                    <select id="status" name="status" class="form-select">
+                        <option value="">Todos los estados</option>
+                        @foreach (var status in Model.Statuses)
+                        {
+                            <option value="@status" selected="@(status == Model.SelectedStatus)">@StatusLabel(status)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-sm-6 col-lg-3 col-xl-2">
+                    <label for="accountId" class="form-label orders-label">Cuenta</label>
+                    <select id="accountId" name="accountId" class="form-select">
+                        <option value="">Todas las cuentas</option>
+                        @foreach (var account in Model.Accounts)
+                        {
+                            <option value="@account.Id" selected="@(account.Id == Model.SelectedAccountId)">@(account.DisplayName ?? account.ExternalAccountId)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-sm-6 col-lg-3 col-xl-1"><label for="dateFrom" class="form-label orders-label">Desde</label><input id="dateFrom" name="dateFrom" type="date" class="form-control" value="@(Model.DateFrom?.ToString("yyyy-MM-dd"))" /></div>
+                <div class="col-sm-6 col-lg-3 col-xl-1"><label for="dateTo" class="form-label orders-label">Hasta</label><input id="dateTo" name="dateTo" type="date" class="form-control" value="@(Model.DateTo?.ToString("yyyy-MM-dd"))" /></div>
+                <div class="col-12 col-xl-2 d-flex gap-2"><button class="btn btn-primary flex-grow-1" type="submit">Aplicar</button><a asp-action="Index" class="btn btn-outline-secondary">Limpiar</a></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card orders-table-card border-0 shadow-sm">
+        <div class="card-header bg-white border-0 d-flex flex-wrap justify-content-between align-items-center gap-2 px-3 px-lg-4 py-3">
+            <div><h3 class="h6 fw-bold mb-1">Pedidos sincronizados</h3><div class="small text-muted">@Model.FilteredOrders resultado(s)</div></div>
+            <div class="orders-channel-chip"><span></span> Mercado Libre</div>
+        </div>
+        <div class="table-responsive">
+            <table class="table orders-table align-middle mb-0">
+                <thead><tr><th>Pedido</th><th>Comprador</th><th>Productos</th><th>Estado</th><th class="text-end">Total</th><th>Fecha</th><th class="text-end">Acción</th></tr></thead>
+                <tbody>
+                @if (Model.Orders.Count == 0)
                 {
-                    <tr>
-                        <td>
-                            <div class="fw-semibold">#@order.ExternalOrderId</div>
-                            @if (!string.IsNullOrWhiteSpace(order.ExternalPackId))
-                            {
-                                <small class="text-muted">Pack @order.ExternalPackId</small>
-                            }
-                        </td>
-                        <td>@(order.MarketplaceAccount.DisplayName ?? order.MarketplaceAccount.ExternalAccountId)</td>
-                        <td>
-                            @foreach (var item in order.Items.Take(2))
-                            {
-                                <div class="small">@item.Quantity × @(item.Title ?? item.ExternalItemId)</div>
-                            }
-                            @if (order.Items.Count > 2)
-                            {
-                                <small class="text-muted">+@(order.Items.Count - 2) más</small>
-                            }
-                        </td>
-                        <td><span class="badge text-bg-primary">@order.Status</span></td>
-                        <td class="fw-semibold">@order.TotalAmount.ToString("N2") @order.CurrencyId</td>
-                        <td>@order.DateCreated.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
-                    </tr>
+                    <tr><td colspan="7" class="text-center py-5"><div class="orders-empty-icon">▤</div><div class="fw-bold mt-3">No encontramos pedidos</div><div class="text-muted small mt-1">Cambia los filtros o sincroniza tu cuenta de Mercado Libre.</div></td></tr>
                 }
-            }
-            </tbody>
-        </table>
+                else
+                {
+                    @foreach (var order in Model.Orders)
+                    {
+                        <tr>
+                            <td>
+                                <a asp-action="Details" asp-route-id="@order.Id" class="order-number">#@order.ExternalOrderId</a>
+                                <div class="order-account">@(order.MarketplaceAccount.DisplayName ?? order.MarketplaceAccount.ExternalAccountId)</div>
+                                @if (!string.IsNullOrWhiteSpace(order.ExternalPackId)) { <div class="order-pack">Pack @order.ExternalPackId</div> }
+                            </td>
+                            <td><div class="fw-semibold">@(order.BuyerNickname ?? "Comprador de Mercado Libre")</div>@if (!string.IsNullOrWhiteSpace(order.BuyerId)) { <div class="small text-muted">ID @order.BuyerId</div> }</td>
+                            <td class="products-cell">
+                                @foreach (var item in order.Items.Take(2)) { <div class="order-product-line"><span class="order-quantity">@item.Quantity×</span><span>@(item.Title ?? item.ExternalItemId)</span></div> }
+                                @if (order.Items.Count > 2) { <div class="small text-muted mt-1">+@(order.Items.Count - 2) producto(s) más</div> }
+                            </td>
+                            <td><span class="order-status @StatusClass(order.Status)">@StatusLabel(order.Status)</span></td>
+                            <td class="text-end"><div class="fw-bold">$@order.TotalAmount.ToString("N2")</div><div class="small text-muted">@order.CurrencyId</div></td>
+                            <td><div class="fw-semibold">@order.DateCreated.ToLocalTime().ToString("dd MMM yyyy")</div><div class="small text-muted">@order.DateCreated.ToLocalTime().ToString("HH:mm")</div></td>
+                            <td class="text-end"><a asp-action="Details" asp-route-id="@order.Id" class="btn btn-sm btn-outline-primary rounded-pill px-3">Ver detalle</a></td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+        @if (Model.FilteredOrders > 0)
+        {
+            <div class="card-footer bg-white border-0 d-flex flex-wrap justify-content-between align-items-center gap-3 px-3 px-lg-4 py-3">
+                <div class="small text-muted">Mostrando @firstVisible–@lastVisible de @Model.FilteredOrders</div>
+                @if (Model.TotalPages > 1)
+                {
+                    <nav aria-label="Paginación de pedidos"><ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(Model.Page == 1 ? "disabled" : "")"><a class="page-link" asp-action="Index" asp-route-page="@(Model.Page - 1)" asp-route-status="@Model.SelectedStatus" asp-route-accountId="@Model.SelectedAccountId" asp-route-search="@Model.Search" asp-route-dateFrom="@Model.DateFrom" asp-route-dateTo="@Model.DateTo">Anterior</a></li>
+                        <li class="page-item disabled"><span class="page-link">Página @Model.Page de @Model.TotalPages</span></li>
+                        <li class="page-item @(Model.Page == Model.TotalPages ? "disabled" : "")"><a class="page-link" asp-action="Index" asp-route-page="@(Model.Page + 1)" asp-route-status="@Model.SelectedStatus" asp-route-accountId="@Model.SelectedAccountId" asp-route-search="@Model.Search" asp-route-dateFrom="@Model.DateFrom" asp-route-dateTo="@Model.DateTo">Siguiente</a></li>
+                    </ul></nav>
+                }
+            </div>
+        }
     </div>
 </div>
+
+<style>
+    .eyebrow { color: #2563eb; font-size: .72rem; font-weight: 800; letter-spacing: .12em; margin-bottom: .35rem; }
+    .orders-title { font-size: 1.65rem; font-weight: 850; letter-spacing: -.025em; }
+    .orders-sync-button { padding: .65rem 1.1rem; }
+    .order-kpi-card { align-items: center; background: #fff; border: 1px solid #e8edf5; border-radius: 16px; display: flex; gap: 13px; height: 100%; min-height: 96px; padding: 16px; box-shadow: 0 8px 28px rgba(15, 23, 42, .045); }
+    .order-kpi-icon { align-items: center; border-radius: 13px; display: flex; flex: 0 0 42px; font-size: 1.15rem; font-weight: 900; height: 42px; justify-content: center; }
+    .kpi-blue { background: #dbeafe; color: #2563eb; } .kpi-green { background: #dcfce7; color: #16a34a; } .kpi-amber { background: #fef3c7; color: #d97706; } .kpi-red { background: #fee2e2; color: #dc2626; } .kpi-purple { background: #ede9fe; color: #7c3aed; }
+    .order-kpi-label { color: #64748b; font-size: .75rem; font-weight: 700; white-space: nowrap; } .order-kpi-value { color: #0f172a; font-size: 1.35rem; font-weight: 850; line-height: 1.25; } .order-kpi-money { font-size: 1.05rem; }
+    .orders-filter-card, .orders-table-card { border-radius: 18px; overflow: hidden; } .orders-label { color: #475569; font-size: .75rem; font-weight: 750; margin-bottom: .4rem; }
+    .orders-search { position: relative; } .orders-search span { color: #94a3b8; font-size: 1.2rem; left: 13px; position: absolute; top: 7px; z-index: 2; } .orders-search .form-control { padding-left: 39px; }
+    .orders-filter-card .form-control, .orders-filter-card .form-select { border-color: #dbe2ea; border-radius: 10px; min-height: 40px; }
+    .orders-channel-chip { background: #fff8d8; border: 1px solid #f4e79c; border-radius: 999px; color: #725d00; font-size: .75rem; font-weight: 800; padding: .38rem .7rem; } .orders-channel-chip span { background: #ffe600; border-radius: 50%; display: inline-block; height: 8px; margin-right: 5px; width: 8px; }
+    .orders-table thead th { background: #f8fafc; border-color: #edf1f5; color: #64748b; font-size: .69rem; font-weight: 800; letter-spacing: .055em; padding: .8rem 1rem; text-transform: uppercase; white-space: nowrap; }
+    .orders-table tbody td { border-color: #eef2f7; color: #334155; font-size: .82rem; padding: .95rem 1rem; vertical-align: middle; } .orders-table tbody tr:hover { background: #fbfdff; }
+    .order-number { color: #1d4ed8; font-weight: 800; text-decoration: none; } .order-number:hover { text-decoration: underline; } .order-account, .order-pack { color: #94a3b8; font-size: .7rem; margin-top: 2px; }
+    .products-cell { min-width: 230px; max-width: 340px; } .order-product-line { display: flex; gap: 6px; line-height: 1.35; } .order-quantity { color: #2563eb; flex: 0 0 auto; font-weight: 800; }
+    .order-status { border-radius: 999px; display: inline-flex; font-size: .7rem; font-weight: 800; padding: .36rem .62rem; white-space: nowrap; } .order-status-success { background: #dcfce7; color: #15803d; } .order-status-info { background: #dbeafe; color: #1d4ed8; } .order-status-warning { background: #fef3c7; color: #a16207; } .order-status-danger { background: #fee2e2; color: #b91c1c; }
+    .orders-empty-icon { align-items: center; background: #eff6ff; border-radius: 50%; color: #2563eb; display: inline-flex; font-size: 1.5rem; height: 58px; justify-content: center; width: 58px; }
+    @@media (max-width: 767px) { .order-kpi-card { min-height: 82px; } .orders-title { font-size: 1.4rem; } }
+</style>

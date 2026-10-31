@@ -31,32 +31,90 @@ public sealed class OrdersController : Controller
     [HttpGet]
     public async Task<IActionResult> Index(
         string? status,
-        CancellationToken cancellationToken)
+        int? accountId,
+        string? search,
+        DateOnly? dateFrom,
+        DateOnly? dateTo,
+        CancellationToken cancellationToken,
+        int page = 1)
     {
         var organizationId = await _organizationContext
             .RequireCurrentOrganizationIdAsync(cancellationToken);
-        var query = _dbContext.SalesOrders
+        const int pageSize = 25;
+        page = Math.Max(1, page);
+        search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+
+        var organizationOrders = _dbContext.SalesOrders
             .AsNoTracking()
-            .Include(x => x.Items)
-            .Include(x => x.MarketplaceAccount)
             .Where(x => x.OrganizationId == organizationId);
+        var query = organizationOrders;
 
         if (!string.IsNullOrWhiteSpace(status))
             query = query.Where(x => x.Status == status);
 
+        if (accountId.HasValue)
+            query = query.Where(x => x.MarketplaceAccountId == accountId.Value);
+
+        if (search is not null)
+        {
+            var pattern = $"%{search}%";
+            query = query.Where(x =>
+                EF.Functions.ILike(x.ExternalOrderId, pattern) ||
+                (x.ExternalPackId != null && EF.Functions.ILike(x.ExternalPackId, pattern)) ||
+                (x.BuyerNickname != null && EF.Functions.ILike(x.BuyerNickname, pattern)) ||
+                (x.BuyerId != null && EF.Functions.ILike(x.BuyerId, pattern)) ||
+                x.Items.Any(item =>
+                    (item.Title != null && EF.Functions.ILike(item.Title, pattern)) ||
+                    (item.SellerSku != null && EF.Functions.ILike(item.SellerSku, pattern))));
+        }
+
+        if (dateFrom.HasValue)
+        {
+            var from = DateTime.SpecifyKind(dateFrom.Value.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+            query = query.Where(x => x.DateCreated >= from);
+        }
+
+        if (dateTo.HasValue)
+        {
+            var until = DateTime.SpecifyKind(dateTo.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+            query = query.Where(x => x.DateCreated < until);
+        }
+
+        var filteredOrders = await query.CountAsync(cancellationToken);
+        var totalPages = Math.Max(1, (int)Math.Ceiling(filteredOrders / (double)pageSize));
+        page = Math.Min(page, totalPages);
+
         var orders = await query
-            .OrderByDescending(x => x.DateCreated)
-            .Take(200)
-            .ToListAsync(cancellationToken);
-        var statuses = await _dbContext.SalesOrders
             .AsNoTracking()
-            .Where(x => x.OrganizationId == organizationId)
+            .Include(x => x.Items)
+            .Include(x => x.MarketplaceAccount)
+            .OrderByDescending(x => x.DateCreated)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+        var statuses = await organizationOrders
             .Select(x => x.Status)
             .Distinct()
             .OrderBy(x => x)
             .ToListAsync(cancellationToken);
-        var totalOrders = await _dbContext.SalesOrders
-            .CountAsync(x => x.OrganizationId == organizationId, cancellationToken);
+        var accounts = await _dbContext.MarketplaceAccounts
+            .AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId && x.Marketplace == "MercadoLibre")
+            .OrderBy(x => x.DisplayName)
+            .ThenBy(x => x.ExternalAccountId)
+            .ToListAsync(cancellationToken);
+        var summary = await organizationOrders
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                Total = group.Count(),
+                Paid = group.Count(x => x.Status == "paid"),
+                Pending = group.Count(x => x.Status != "paid" && x.Status != "cancelled" && x.Status != "invalid"),
+                Cancelled = group.Count(x => x.Status == "cancelled" || x.Status == "invalid"),
+                Sales = group.Where(x => x.Status != "cancelled" && x.Status != "invalid")
+                    .Sum(x => x.PaidAmount)
+            })
+            .SingleOrDefaultAsync(cancellationToken);
         var connectedAccounts = await _dbContext.MarketplaceAccounts
             .CountAsync(x => x.OrganizationId == organizationId &&
                              x.Marketplace == "MercadoLibre" &&
@@ -71,11 +129,39 @@ public sealed class OrdersController : Controller
         {
             Orders = orders,
             Statuses = statuses,
+            Accounts = accounts,
             SelectedStatus = status,
-            TotalOrders = totalOrders,
+            SelectedAccountId = accountId,
+            Search = search,
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            TotalOrders = summary?.Total ?? 0,
+            FilteredOrders = filteredOrders,
+            PaidOrders = summary?.Paid ?? 0,
+            PendingOrders = summary?.Pending ?? 0,
+            CancelledOrders = summary?.Cancelled ?? 0,
+            TotalSales = summary?.Sales ?? 0,
             ConnectedAccounts = connectedAccounts,
-            LastSyncAt = lastSyncAt
+            LastSyncAt = lastSyncAt,
+            Page = page,
+            PageSize = pageSize
         });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Details(int id, CancellationToken cancellationToken)
+    {
+        var organizationId = await _organizationContext
+            .RequireCurrentOrganizationIdAsync(cancellationToken);
+        var order = await _dbContext.SalesOrders
+            .AsNoTracking()
+            .Include(x => x.Items)
+            .Include(x => x.MarketplaceAccount)
+            .SingleOrDefaultAsync(
+                x => x.Id == id && x.OrganizationId == organizationId,
+                cancellationToken);
+
+        return order is null ? NotFound() : View(order);
     }
 
     [HttpPost]
