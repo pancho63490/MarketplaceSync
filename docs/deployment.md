@@ -51,13 +51,7 @@ Do not copy real values into `appsettings.json`. Use `dotnet user-secrets list` 
 
 The `--migrate` command and a normal web start require only database configuration. Optional integrations return a clear configuration error when their credentials are missing or invalid.
 
-On a free Render web service, where pre-deploy commands are unavailable, set the Docker Command to:
-
-```bash
-dotnet MarketplaceSync.Web.dll --migrate-and-run
-```
-
-This mode applies pending migrations and then starts the web server without shell command chaining.
+The Docker image starts with `--migrate-and-run`, so free Render web services apply pending migrations automatically before starting the web server. Leave Render's Docker Command empty so the image uses its default entrypoint.
 
 ## Credential rotation
 

@@ -24,18 +24,6 @@ services:
       timeout: 5s
       retries: 10
 
-  migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: marketplacesync-app:local
-    environment: *app-environment
-    command: ["dotnet", "MarketplaceSync.Web.dll", "--migrate"]
-    depends_on:
-      database:
-        condition: service_healthy
-    restart: "no"
-
   app:
     build:
       context: .
@@ -48,8 +36,8 @@ services:
     ports:
       - "${APP_PORT:-10000}:10000"
     depends_on:
-      migrate:
-        condition: service_completed_successfully
+      database:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
