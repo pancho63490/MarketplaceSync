@@ -278,26 +278,58 @@
                 <div class="card-body">
 
                     <div class="row g-3 align-items-end">
-                        <div class="col-md-8">
+                        <div class="col-lg-7">
                             <label asp-for="CategoryId" class="form-label fw-semibold">Categoría</label>
                             <input asp-for="CategoryId"
                                    class="form-control"
                                    placeholder="Ejemplo: MLM189898" />
                             <span asp-validation-for="CategoryId" class="text-danger small"></span>
                             <div class="form-text">
-                                Por ahora puedes ingresarla manualmente. El siguiente paso será agregar sugerencia automática por título.
+                                Usa una categoría de Mercado Libre México con prefijo MLM.
                             </div>
                         </div>
 
-                        <div class="col-md-4">
-                            <button type="submit"
-                                    formaction="@Url.Action("LoadMercadoLibreAttributes", "Products")"
-                                    formmethod="post"
-                                    class="btn btn-outline-primary w-100">
-                                Cargar atributos
-                            </button>
+                        <div class="col-lg-5">
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="submit"
+                                        formaction="@Url.Action("SuggestMercadoLibreCategories", "Products")"
+                                        formmethod="post"
+                                        class="btn btn-outline-secondary flex-grow-1">
+                                    Sugerir por título
+                                </button>
+                                <button type="submit"
+                                        formaction="@Url.Action("LoadMercadoLibreAttributes", "Products")"
+                                        formmethod="post"
+                                        class="btn btn-outline-primary flex-grow-1">
+                                    Cargar atributos
+                                </button>
+                            </div>
                         </div>
                     </div>
+
+                    @if (Model.CategorySuggestions.Any())
+                    {
+                        <div class="category-suggestions mt-4">
+                            <div class="small fw-bold text-uppercase text-muted mb-2">Categorías sugeridas</div>
+                            <div class="row g-2">
+                                @foreach (var suggestion in Model.CategorySuggestions.Where(x => !string.IsNullOrWhiteSpace(x.Category_Id)))
+                                {
+                                    <div class="col-md-6">
+                                        <button type="button"
+                                                class="category-suggestion @(suggestion.Category_Id == Model.CategoryId ? "selected" : "")"
+                                                data-category-id="@suggestion.Category_Id">
+                                            <span class="category-suggestion-check">✓</span>
+                                            <span>
+                                                <strong>@(suggestion.Category_Name ?? suggestion.Category_Id)</strong>
+                                                <small>@suggestion.Category_Id · @(suggestion.Domain_Name ?? "Mercado Libre")</small>
+                                            </span>
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+                            <div class="form-text mt-2">Selecciona una sugerencia y después presiona “Cargar atributos”.</div>
+                        </div>
+                    }
 
                     @if (!hasCategory)
                     {
@@ -386,28 +418,29 @@
 
                                 @if (Model.Attributes[i].Values != null && Model.Attributes[i].Values.Any())
                                 {
-                                    <select asp-for="Attributes[i].Values"
-                                            class="form-select">
+                                    <select asp-for="Attributes[i].ValueId"
+                                            class="form-select ml-attribute-select"
+                                            data-value-name-target="Attributes_@(i)__ValueName">
                                         <option value="">Selecciona una opción</option>
 
                                         @foreach (var option in Model.Attributes[i].Values)
                                         {
-                                            <option value="@option.Name">@option.Name</option>
+                                            var optionValue = string.IsNullOrWhiteSpace(option.Id)
+                                                ? $"name:{option.Name}"
+                                                : option.Id;
+                                            <option value="@optionValue" data-value-name="@option.Name">@option.Name</option>
                                         }
                                     </select>
-
-                                    @for (var j = 0; j < Model.Attributes[i].Values.Count; j++)
-                                    {
-                                        <input type="hidden" asp-for="Attributes[i].Values[j].Id" />
-                                        <input type="hidden" asp-for="Attributes[i].Values[j].Name" />
-                                    }
+                                    <input type="hidden" asp-for="Attributes[i].ValueName" />
                                 }
                                 else
                                 {
-                                    <input asp-for="Attributes[i].Values"
+                                    <input asp-for="Attributes[i].ValueName"
                                            class="form-control"
                                            placeholder="Ingresa valor" />
                                 }
+
+                                <span asp-validation-for="Attributes[i].ValueName" class="text-danger small"></span>
 
                                 <div class="form-text">
                                     ID atributo: @Model.Attributes[i].Id
@@ -454,4 +487,38 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.querySelectorAll('.category-suggestion').forEach(function (button) {
+            button.addEventListener('click', function () {
+                var categoryInput = document.getElementById('CategoryId');
+                categoryInput.value = button.dataset.categoryId;
+                document.querySelectorAll('.category-suggestion').forEach(function (item) {
+                    item.classList.remove('selected');
+                });
+                button.classList.add('selected');
+                categoryInput.focus();
+            });
+        });
+
+        document.querySelectorAll('.ml-attribute-select').forEach(function (select) {
+            select.addEventListener('change', function () {
+                var target = document.getElementById(select.dataset.valueNameTarget);
+                var selected = select.options[select.selectedIndex];
+                if (target) {
+                    target.value = selected ? (selected.dataset.valueName || '') : '';
+                }
+            });
+        });
+    </script>
 }
+
+<style>
+    .category-suggestion { align-items: center; background: #fff; border: 1px solid #dce2ea; border-radius: 10px; color: #435067; display: flex; gap: 10px; padding: 10px 12px; text-align: left; width: 100%; }
+    .category-suggestion:hover { background: #f8faff; border-color: #9cbcff; }
+    .category-suggestion.selected { background: #edf4ff; border-color: #246bfd; color: #1857d8; }
+    .category-suggestion-check { align-items: center; background: #eef2f6; border-radius: 50%; color: transparent; display: inline-flex; flex: 0 0 24px; height: 24px; justify-content: center; font-size: .7rem; font-weight: 900; }
+    .category-suggestion.selected .category-suggestion-check { background: #246bfd; color: #fff; }
+    .category-suggestion strong, .category-suggestion small { display: block; }
+    .category-suggestion strong { font-size: .78rem; }
+    .category-suggestion small { color: #8792a4; font-size: .66rem; margin-top: 2px; }
+</style>

@@ -41,6 +41,7 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 - La pantalla de inventario está aislada por organización e incluye existencias, ventas netas, alertas, sobreventas, ajustes manuales e historial enlazado al pedido.
 - La migración `20261031030150_AddInventoryMovements` agrega el umbral con valor inicial 5, la tabla de movimientos y el índice único de idempotencia.
 - La interfaz global usa una navegación lateral clara y compacta, topbar con acción rápida y estilos consistentes para tarjetas, formularios y tablas. El dashboard prioriza pedidos, ventas, catálogo, alertas, tareas operativas y una guía de configuración de cuatro pasos.
+- La publicación en Mercado Libre permite sugerir categorías por título, seleccionar una sugerencia, validar IDs mexicanos `MLM`, cargar atributos obligatorios sin requerir token para el recurso público y enviar al API los valores elegidos. Los atributos de lista usan `value_id`, los libres usan `value_name` y marca/modelo se precargan cuando existen.
 - `.gitignore` excluye `.DS_Store`, archivos locales de configuración y variantes de `.env` (excepto un posible `.env.example`). Los `.DS_Store` que ya estaban rastreados no se eliminaron porque contienen cambios previos ajenos a esta tarea.
 - La lista completa de variables de despliegue y el procedimiento de rotación está en `docs/deployment.md`; nunca se deben copiar valores reales a ese documento ni a `PROJECT_CONTEXT.md`.
 
@@ -55,6 +56,7 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 - Tras ampliar el centro de pedidos y agregar su vista de detalle, `dotnet build MarketplaceSync.Web.csproj --no-restore` pasó con 0 errores y sin advertencias.
 - La migración de inventario se generó con `dotnet-ef` 8.0.11 dentro del SDK oficial .NET 8, se aplicó sobre PostgreSQL local y se verificaron la tabla, el índice único, el valor predeterminado 5 y el arranque posterior.
 - El rediseño del dashboard se validó con una cuenta y organización temporales: el registro respondió 302, el dashboard autenticado respondió HTTP 200 y renderizó métricas, tareas, configuración y productos; luego se eliminaron ambos registros temporales.
+- El flujo de categorías se validó de extremo a extremo con datos temporales: el predictor devolvió `MLM1055`, la vista mostró la sugerencia y la carga de atributos devolvió los cinco campos obligatorios de celulares. El usuario, organización y producto temporales fueron eliminados después.
 - Mantener la validación de migraciones nuevas sobre PostgreSQL local antes de aplicarlas en producción. Cuando el runtime local no coincida con .NET 8, usar `dotnet-ef` 8.0.11 dentro de la imagen oficial del SDK como se hizo con inventario.
 - Completar pruebas manuales de registro, aislamiento entre organizaciones, importación y OAuth.
 - Mover secretos de `appsettings.json` a variables de entorno y cifrar tokens en reposo antes de operar con vendedores reales.

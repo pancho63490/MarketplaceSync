@@ -90,6 +90,7 @@ private readonly ProductExtractorService _extractor;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly MercadoLibreCategoryService _mercadoLibreCategoryService;
     private readonly IOrganizationContext _organizationContext;
+    private readonly ILogger<ProductsController> _logger;
 
 public ProductsController(
     AppDbContext context,
@@ -97,7 +98,8 @@ public ProductsController(
     ProductExtractorService extractor,
     IHttpClientFactory httpClientFactory,
     MercadoLibreCategoryService mercadoLibreCategoryService,
-    IOrganizationContext organizationContext
+    IOrganizationContext organizationContext,
+    ILogger<ProductsController> logger
 )
 {
     _context = context;
@@ -106,6 +108,7 @@ public ProductsController(
     _httpClientFactory = httpClientFactory;
     _mercadoLibreCategoryService = mercadoLibreCategoryService;
     _organizationContext = organizationContext;
+    _logger = logger;
 }
         
         private async Task<List<MercadoLibreAttributeInput>> GetRequiredAttributesAsync(
@@ -122,22 +125,25 @@ public ProductsController(
         .OrderByDescending(x => x.CreatedAt)
         .FirstOrDefaultAsync();
 
-    if (token == null || string.IsNullOrWhiteSpace(token.AccessToken))
-        return result;
-
     var client = _httpClientFactory.CreateClient();
 
     var url = $"https://api.mercadolibre.com/categories/{Uri.EscapeDataString(categoryId)}/attributes";
 
     var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
-    httpRequest.Headers.Authorization =
-        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token.AccessToken);
+    if (!string.IsNullOrWhiteSpace(token?.AccessToken))
+    {
+        httpRequest.Headers.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token.AccessToken);
+    }
 
     var response = await client.SendAsync(httpRequest);
     var content = await response.Content.ReadAsStringAsync();
 
     if (!response.IsSuccessStatusCode)
-        return result;
+    {
+        throw new HttpRequestException(
+            $"Mercado Libre rechazó la categoría {categoryId} con HTTP {(int)response.StatusCode}.");
+    }
 
     var json = JsonNode.Parse(content)?.AsArray();
 
@@ -208,11 +214,63 @@ public async Task<IActionResult> LoadMercadoLibreAttributes(PublishToMercadoLibr
 
     var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
     await PopulateMarketplaceAccountsAsync(request, organizationId);
-    request.Attributes = await GetRequiredAttributesAsync(request.CategoryId, request.MarketplaceAccountId);
-
-    if (!request.Attributes.Any())
+    if (!Regex.IsMatch(request.CategoryId.Trim(), @"^MLM\d+$", RegexOptions.IgnoreCase))
     {
-        ModelState.AddModelError("", "No se encontraron atributos requeridos para esta categoría o no se pudo consultar Mercado Libre.");
+        ModelState.AddModelError(nameof(request.CategoryId), "Usa una categoría válida de México, por ejemplo MLM12345.");
+        return View("PublishToMercadoLibre", request);
+    }
+
+    try
+    {
+        request.CategoryId = request.CategoryId.Trim().ToUpperInvariant();
+        request.Attributes = await GetRequiredAttributesAsync(request.CategoryId, request.MarketplaceAccountId);
+        foreach (var attribute in request.Attributes)
+        {
+            if (attribute.Id.Equals("BRAND", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(request.Brand))
+                attribute.ValueName = request.Brand;
+
+            if (attribute.Id.Equals("MODEL", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(request.Model))
+                attribute.ValueName = request.Model;
+        }
+        if (!request.Attributes.Any())
+            TempData["Success"] = "La categoría es válida y no reportó atributos obligatorios adicionales.";
+    }
+    catch (Exception exception)
+    {
+        _logger.LogWarning(exception, "Could not load Mercado Libre attributes for category {CategoryId}.", request.CategoryId);
+        ModelState.AddModelError(nameof(request.CategoryId), "No fue posible consultar esa categoría en Mercado Libre. Verifica el ID e inténtalo de nuevo.");
+    }
+
+    return View("PublishToMercadoLibre", request);
+}
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> SuggestMercadoLibreCategories(PublishToMercadoLibreRequest request)
+{
+    ModelState.Clear();
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+    await PopulateMarketplaceAccountsAsync(request, organizationId);
+
+    if (string.IsNullOrWhiteSpace(request.Title))
+    {
+        ModelState.AddModelError(nameof(request.Title), "Escribe un título antes de solicitar categorías.");
+        return View("PublishToMercadoLibre", request);
+    }
+
+    try
+    {
+        request.CategorySuggestions = await _mercadoLibreCategoryService
+            .SuggestCategoriesAsync(request.Title);
+
+        if (!request.CategorySuggestions.Any())
+            ModelState.AddModelError(nameof(request.CategoryId), "Mercado Libre no encontró categorías para este título.");
+    }
+    catch (Exception exception)
+    {
+        _logger.LogWarning(exception, "Could not suggest Mercado Libre categories for product {ProductId}.", request.ProductId);
+        ModelState.AddModelError(nameof(request.CategoryId), "No fue posible obtener sugerencias de Mercado Libre. Inténtalo nuevamente.");
     }
 
     return View("PublishToMercadoLibre", request);
@@ -590,9 +648,12 @@ public async Task<IActionResult> PublishToMercadoLibre(PublishToMercadoLibreRequ
     if (product == null)
         return NotFound();
 
+    ValidateRequiredMercadoLibreAttributes(input);
+
     if (!ModelState.IsValid)
     {
         await PopulateMarketplaceAccountsAsync(input, organizationId);
+        await RepopulateMercadoLibreAttributeOptionsAsync(input);
         return View(input);
     }
 
@@ -795,27 +856,109 @@ var token = await _context.MercadoLibreTokens
 }
 private static object[] BuildMercadoLibreAttributes(PublishToMercadoLibreRequest model)
 {
-    var attributes = new List<object>();
+    var attributes = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
-    if (!string.IsNullOrWhiteSpace(model.Brand))
+    foreach (var attribute in model.Attributes)
     {
-        attributes.Add(new
+        if (string.IsNullOrWhiteSpace(attribute.Id))
+            continue;
+
+        var selectedOption = attribute.Values.FirstOrDefault(option =>
+            !string.IsNullOrWhiteSpace(attribute.ValueName) &&
+            string.Equals(option.Name, attribute.ValueName, StringComparison.OrdinalIgnoreCase));
+        var valueId = !string.IsNullOrWhiteSpace(attribute.ValueId)
+            ? attribute.ValueId
+            : selectedOption?.Id;
+        var valueName = attribute.ValueName;
+
+        if (valueId?.StartsWith("name:", StringComparison.Ordinal) == true)
+        {
+            valueName = valueId[5..];
+            valueId = null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(valueId))
+        {
+            attributes[attribute.Id] = new
+            {
+                id = attribute.Id,
+                value_id = valueId
+            };
+        }
+        else if (!string.IsNullOrWhiteSpace(valueName))
+        {
+            attributes[attribute.Id] = new
+            {
+                id = attribute.Id,
+                value_name = valueName.Trim()
+            };
+        }
+    }
+
+    if (!string.IsNullOrWhiteSpace(model.Brand) && !attributes.ContainsKey("BRAND"))
+    {
+        attributes["BRAND"] = new
         {
             id = "BRAND",
             value_name = model.Brand
-        });
+        };
     }
 
-    if (!string.IsNullOrWhiteSpace(model.Model))
+    if (!string.IsNullOrWhiteSpace(model.Model) && !attributes.ContainsKey("MODEL"))
     {
-        attributes.Add(new
+        attributes["MODEL"] = new
         {
             id = "MODEL",
             value_name = model.Model
-        });
+        };
     }
 
-    return attributes.ToArray();
+    return attributes.Values.ToArray();
+}
+
+private async Task RepopulateMercadoLibreAttributeOptionsAsync(PublishToMercadoLibreRequest model)
+{
+    if (string.IsNullOrWhiteSpace(model.CategoryId))
+        return;
+
+    try
+    {
+        var submittedAttributes = model.Attributes.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+        var refreshedAttributes = await GetRequiredAttributesAsync(model.CategoryId, model.MarketplaceAccountId);
+
+        foreach (var refreshedAttribute in refreshedAttributes)
+        {
+            if (!submittedAttributes.TryGetValue(refreshedAttribute.Id, out var submittedAttribute))
+                continue;
+
+            refreshedAttribute.ValueId = submittedAttribute.ValueId;
+            refreshedAttribute.ValueName = submittedAttribute.ValueName;
+        }
+
+        model.Attributes = refreshedAttributes;
+    }
+    catch (Exception exception)
+    {
+        _logger.LogWarning(exception, "Could not repopulate Mercado Libre attribute options for {CategoryId}.", model.CategoryId);
+    }
+}
+
+private void ValidateRequiredMercadoLibreAttributes(PublishToMercadoLibreRequest model)
+{
+    for (var index = 0; index < model.Attributes.Count; index++)
+    {
+        var attribute = model.Attributes[index];
+        if (!attribute.Required)
+            continue;
+
+        if (string.IsNullOrWhiteSpace(attribute.ValueId) &&
+            string.IsNullOrWhiteSpace(attribute.ValueName))
+        {
+            ModelState.AddModelError(
+                $"Attributes[{index}].ValueName",
+                $"Completa el atributo {attribute.Name}.");
+        }
+    }
 }
 public IActionResult CreateFromUrl()
 {

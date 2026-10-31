@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using MarketplaceSync.Web.Services;
 
 namespace MarketplaceSync.Web.ViewModels
 {
@@ -47,6 +48,8 @@ namespace MarketplaceSync.Web.ViewModels
         public string? ErrorMessage { get; set; }
 
         public List<MercadoLibreAttributeInput> Attributes { get; set; } = new();
+
+        public List<MercadoLibreCategorySuggestion> CategorySuggestions { get; set; } = new();
     }
 
     public class MercadoLibreAttributeInput
