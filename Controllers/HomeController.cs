@@ -46,6 +46,21 @@ namespace MarketplaceSync.Web.Controllers
             ViewBag.OutOfStockProducts = await organizationProducts.CountAsync(x => x.Status == "OutOfStock" || x.SourceStock == 0);
             ViewBag.MLConnectedAccounts = await _context.MercadoLibreTokens
                 .CountAsync(x => x.OrganizationId == organizationId && x.IsActive);
+            var organizationOrders = _context.SalesOrders
+                .Where(x => x.OrganizationId == organizationId);
+            var todayUtc = DateTime.UtcNow.Date;
+            ViewBag.TotalOrders = await organizationOrders.CountAsync();
+            ViewBag.OrdersToday = await organizationOrders.CountAsync(x => x.DateCreated >= todayUtc);
+            ViewBag.PendingOrders = await organizationOrders.CountAsync(x =>
+                x.Status != "paid" && x.Status != "cancelled" && x.Status != "invalid");
+            ViewBag.TotalSales = await organizationOrders
+                .Where(x => x.Status != "cancelled" && x.Status != "invalid")
+                .SumAsync(x => (decimal?)x.PaidAmount) ?? 0m;
+            var organizationVariants = _context.ProductVariants
+                .Where(x => x.OrganizationId == organizationId && x.IsActive);
+            ViewBag.LowStockVariants = await organizationVariants.CountAsync(x =>
+                x.Stock > 0 && x.Stock <= x.LowStockThreshold);
+            ViewBag.OutOfStockVariants = await organizationVariants.CountAsync(x => x.Stock <= 0);
 
             return View(products);
         }

@@ -4,52 +4,50 @@
     ViewData["Title"] = "Iniciar sesión";
 }
 
-<div class="container py-5">
-    <div class="row justify-content-center">
-        <div class="col-md-5 col-lg-4">
-            <div class="card border-0 shadow-sm rounded-4">
-                <div class="card-body p-4">
-                    <h2 class="fw-bold mb-1">MarketplaceSync</h2>
-                    <p class="text-muted mb-4">Inicia sesión para administrar tus productos.</p>
+<div class="auth-wrap">
+    <div class="auth-panel">
+        <section class="auth-form-side">
+            <div class="auth-form-content">
+                <div class="auth-mini-brand"><span>MS</span> MarketplaceSync</div>
+                <div class="auth-kicker">BIENVENIDO DE NUEVO</div>
+                <h2>Inicia sesión en tu cuenta</h2>
+                <p class="auth-intro">Administra pedidos, productos e inventario desde un solo espacio.</p>
 
-                    <form asp-action="Login" method="post">
-                        @Html.AntiForgeryToken()
+                <form asp-action="Login" method="post" class="auth-form">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" asp-for="ReturnUrl" />
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small"></div>
 
-                        <input type="hidden" asp-for="ReturnUrl" />
-
-                        <div asp-validation-summary="ModelOnly" class="text-danger small mb-3"></div>
-
-                        <div class="mb-3">
-                            <label asp-for="Email" class="form-label">Correo</label>
-                            <input asp-for="Email" class="form-control" placeholder="correo@ejemplo.com" />
-                            <span asp-validation-for="Email" class="text-danger small"></span>
-                        </div>
-
-                        <div class="mb-3">
-                            <label asp-for="Password" class="form-label">Contraseña</label>
-                            <input asp-for="Password" class="form-control" placeholder="Contraseña" />
-                            <span asp-validation-for="Password" class="text-danger small"></span>
-                        </div>
-
-                        <div class="form-check mb-4">
-                            <input asp-for="RememberMe" class="form-check-input" />
-                            <label asp-for="RememberMe" class="form-check-label">
-                                Recordarme
-                            </label>
-                        </div>
-
-                        <button type="submit" class="btn btn-primary w-100">
-                            Entrar
-                        </button>
-                    </form>
-
-                    <div class="text-center mt-3">
-                        <a asp-controller="Account" asp-action="Register" class="text-decoration-none">
-                            Crear cuenta
-                        </a>
+                    <div class="mb-3">
+                        <label asp-for="Email" class="form-label">Correo electrónico</label>
+                        <input asp-for="Email" class="form-control" placeholder="nombre@empresa.com" autocomplete="email" />
+                        <span asp-validation-for="Email" class="text-danger small"></span>
                     </div>
-                </div>
+                    <div class="mb-3">
+                        <label asp-for="Password" class="form-label">Contraseña</label>
+                        <input asp-for="Password" class="form-control" placeholder="Ingresa tu contraseña" autocomplete="current-password" />
+                        <span asp-validation-for="Password" class="text-danger small"></span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <div class="form-check"><input asp-for="RememberMe" class="form-check-input" /><label asp-for="RememberMe" class="form-check-label">Mantener sesión</label></div>
+                        <span class="auth-secure">● Acceso seguro</span>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 auth-submit">Entrar a MarketplaceSync</button>
+                </form>
+
+                <div class="auth-switch">¿Aún no tienes cuenta? <a asp-controller="Account" asp-action="Register">Crear cuenta</a></div>
             </div>
-        </div>
+        </section>
+
+        <aside class="auth-info-side">
+            <div class="auth-info-content">
+                <span class="auth-info-badge">OPERACIÓN OMNICANAL</span>
+                <h3>Todo tu comercio bajo control</h3>
+                <p>Centraliza el trabajo diario y toma decisiones con información actualizada.</p>
+                <div class="auth-feature"><span>≡</span><div><strong>Pedidos centralizados</strong><small>Consulta ventas y estados en una sola vista.</small></div></div>
+                <div class="auth-feature"><span>▦</span><div><strong>Inventario confiable</strong><small>Descuentos automáticos e historial por SKU.</small></div></div>
+                <div class="auth-feature"><span>↻</span><div><strong>Sincronización continua</strong><small>Mercado Libre conectado con tu operación.</small></div></div>
+            </div>
+        </aside>
     </div>
 </div>

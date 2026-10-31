@@ -1,383 +1,145 @@
-﻿@model IEnumerable<MarketplaceSync.Web.Models.Product>
+@model IEnumerable<MarketplaceSync.Web.Models.Product>
 
 @{
-    ViewData["Title"] = "Dashboard";
-
-    var totalProducts = ViewBag.TotalProducts ?? 0;
-    var ebayProducts = ViewBag.EbayProducts ?? 0;
-    var amazonProducts = ViewBag.AmazonProducts ?? 0;
-    var mercadoLibreProducts = ViewBag.MercadoLibreProducts ?? 0;
-    var draftProducts = ViewBag.DraftProducts ?? 0;
-    var needsReviewProducts = ViewBag.NeedsReviewProducts ?? 0;
-    var outOfStockProducts = ViewBag.OutOfStockProducts ?? 0;
-    var mlConnectedAccounts = ViewBag.MLConnectedAccounts ?? 0;
+    ViewData["Title"] = "Resumen operativo";
+    var totalProducts = (int)(ViewBag.TotalProducts ?? 0);
+    var mercadoLibreProducts = (int)(ViewBag.MercadoLibreProducts ?? 0);
+    var draftProducts = (int)(ViewBag.DraftProducts ?? 0);
+    var needsReviewProducts = (int)(ViewBag.NeedsReviewProducts ?? 0);
+    var mlConnectedAccounts = (int)(ViewBag.MLConnectedAccounts ?? 0);
+    var totalOrders = (int)(ViewBag.TotalOrders ?? 0);
+    var ordersToday = (int)(ViewBag.OrdersToday ?? 0);
+    var pendingOrders = (int)(ViewBag.PendingOrders ?? 0);
+    var totalSales = (decimal)(ViewBag.TotalSales ?? 0m);
+    var lowStockVariants = (int)(ViewBag.LowStockVariants ?? 0);
+    var outOfStockVariants = (int)(ViewBag.OutOfStockVariants ?? 0);
+    var completedSetupSteps = (mlConnectedAccounts > 0 ? 1 : 0) + (totalProducts > 0 ? 1 : 0) + (mercadoLibreProducts > 0 ? 1 : 0) + (totalOrders > 0 ? 1 : 0);
+    var setupPercent = completedSetupSteps * 25;
 }
 
-<div class="container-fluid px-4 py-4">
-
-    <div class="row align-items-center mb-4">
-        <div class="col-lg-8">
-            <h1 class="fw-bold mb-1">MarketplaceSync</h1>
-            <p class="text-muted mb-0">
-                Panel central para administrar productos, revisar stock, validar precios y preparar publicaciones para Mercado Libre.
-            </p>
+<div class="dashboard-page">
+    <section class="dashboard-welcome mb-4">
+        <div>
+            <div class="dashboard-kicker">PANEL DE CONTROL</div>
+            <h2 class="dashboard-heading">Tu operación, en un solo lugar</h2>
+            <p>Revisa ventas, pedidos, catálogo e inventario sin cambiar de plataforma.</p>
         </div>
+        <div class="dashboard-welcome-actions">
+            <a asp-controller="Orders" asp-action="Index" class="btn btn-app-light">Ver pedidos</a>
+            <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-app-primary">＋ Agregar producto</a>
+        </div>
+    </section>
 
-        <div class="col-lg-4 text-lg-end mt-3 mt-lg-0">
-            <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-primary me-2">
-                + Agregar producto
+    <section class="row g-3 mb-4">
+        <div class="col-sm-6 col-xl-3">
+            <a asp-controller="Orders" asp-action="Index" class="dashboard-metric metric-blue">
+                <div class="dashboard-metric-top"><span>Pedidos de hoy</span><span class="dashboard-metric-icon">≡</span></div>
+                <strong>@ordersToday.ToString("N0")</strong>
+                <small>@totalOrders.ToString("N0") pedidos sincronizados</small>
             </a>
-
-            <a asp-controller="Products" asp-action="Index" class="btn btn-outline-dark">
-                Ver productos
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="dashboard-metric metric-green">
+                <div class="dashboard-metric-top"><span>Ventas cobradas</span><span class="dashboard-metric-icon">$</span></div>
+                <strong>$@totalSales.ToString("N2")</strong>
+                <small>Acumulado de Mercado Libre</small>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <a asp-controller="Products" asp-action="Index" class="dashboard-metric metric-violet">
+                <div class="dashboard-metric-top"><span>Productos</span><span class="dashboard-metric-icon">□</span></div>
+                <strong>@totalProducts.ToString("N0")</strong>
+                <small>@mercadoLibreProducts.ToString("N0") publicados en Mercado Libre</small>
             </a>
         </div>
-    </div>
-
-    <div class="row g-3 mb-4">
-
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <div class="text-muted small">Total productos</div>
-                            <div class="fs-2 fw-bold">@totalProducts</div>
-                        </div>
-                        <div class="rounded-circle bg-primary bg-opacity-10 px-3 py-2">
-                            <span class="fs-4">📦</span>
-                        </div>
-                    </div>
-                    <div class="text-muted small mt-2">
-                        Productos registrados en la plataforma.
-                    </div>
-                </div>
-            </div>
+        <div class="col-sm-6 col-xl-3">
+            <a asp-controller="Inventory" asp-action="Index" asp-route-lowStockOnly="true" class="dashboard-metric metric-amber">
+                <div class="dashboard-metric-top"><span>Alertas de inventario</span><span class="dashboard-metric-icon">!</span></div>
+                <strong>@((lowStockVariants + outOfStockVariants).ToString("N0"))</strong>
+                <small>@outOfStockVariants agotados o con sobreventa</small>
+            </a>
         </div>
+    </section>
 
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <div class="text-muted small">Productos eBay</div>
-                            <div class="fs-2 fw-bold">@ebayProducts</div>
-                        </div>
-                        <div class="rounded-circle bg-info bg-opacity-10 px-3 py-2">
-                            <span class="fs-4">🛒</span>
-                        </div>
-                    </div>
-                    <div class="text-muted small mt-2">
-                        Productos importados o detectados desde eBay.
-                    </div>
+    <div class="row g-4 mb-4">
+        <div class="col-xl-8">
+            <section class="dashboard-panel h-100">
+                <div class="dashboard-panel-header">
+                    <div><h3>Tareas de operación</h3><p>Elementos que requieren atención</p></div>
+                    <span class="dashboard-live"><i></i> En tiempo real</span>
                 </div>
-            </div>
-        </div>
-
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <div class="text-muted small">Productos Amazon</div>
-                            <div class="fs-2 fw-bold">@amazonProducts</div>
-                        </div>
-                        <div class="rounded-circle bg-warning bg-opacity-10 px-3 py-2">
-                            <span class="fs-4">🟠</span>
-                        </div>
-                    </div>
-                    <div class="text-muted small mt-2">
-                        Productos preparados para integración con Amazon.
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <div class="text-muted small">Publicados en ML</div>
-                            <div class="fs-2 fw-bold">@mercadoLibreProducts</div>
-                        </div>
-                        <div class="rounded-circle bg-success bg-opacity-10 px-3 py-2">
-                            <span class="fs-4">✅</span>
-                        </div>
-                    </div>
-                    <div class="text-muted small mt-2">
-                        Productos ya enviados a Mercado Libre.
-                    </div>
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-    <div class="row g-3 mb-4">
-
-        <div class="col-lg-8">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-header bg-white border-0 py-3">
-                    <h5 class="fw-bold mb-0">Estado operativo</h5>
-                </div>
-
-                <div class="card-body">
-                    <div class="row g-3">
-
-                        <div class="col-md-4">
-                            <div class="p-3 rounded bg-light border">
-                                <div class="text-muted small">Borradores</div>
-                                <div class="fs-4 fw-bold">@draftProducts</div>
-                                <div class="small text-muted">
-                                    Productos guardados pero no preparados.
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-md-4">
-                            <div class="p-3 rounded bg-light border">
-                                <div class="text-muted small">Pendientes de revisión</div>
-                                <div class="fs-4 fw-bold">@needsReviewProducts</div>
-                                <div class="small text-muted">
-                                    Requieren validar precio, stock o categoría.
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-md-4">
-                            <div class="p-3 rounded bg-light border">
-                                <div class="text-muted small">Sin stock</div>
-                                <div class="fs-4 fw-bold">@outOfStockProducts</div>
-                                <div class="small text-muted">
-                                    Productos con stock cero o marcado agotado.
-                                </div>
-                            </div>
-                        </div>
-
-                    </div>
-
-                    <hr />
-
-                    <div class="d-flex flex-wrap gap-2">
-                        <a asp-controller="Products" asp-action="Index" class="btn btn-outline-primary">
-                            Administrar productos
-                        </a>
-
-                        <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-outline-dark">
-                            Agregar por link
-                        </a>
-
-                        <a asp-controller="MercadoLibre" asp-action="Status" class="btn btn-outline-success">
-                            Ver conexión Mercado Libre
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-lg-4">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-header bg-white border-0 py-3">
-                    <h5 class="fw-bold mb-0">Conexiones</h5>
-                </div>
-
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-3">
-                        <div>
-                            <div class="fw-semibold">Mercado Libre</div>
-                            <div class="text-muted small">Cuentas autorizadas</div>
-                        </div>
-
-                        @if ((int)mlConnectedAccounts > 0)
-                        {
-                            <span class="badge bg-success">Conectado</span>
-                        }
-                        else
-                        {
-                            <span class="badge bg-danger">No conectado</span>
-                        }
-                    </div>
-
-                    <div class="mb-3">
-                        <div class="text-muted small">Cuentas activas</div>
-                        <div class="fs-3 fw-bold">@mlConnectedAccounts</div>
-                    </div>
-
-                    <a asp-controller="MercadoLibre" asp-action="Status" class="btn btn-success w-100">
-                        Administrar Mercado Libre
+                <div class="dashboard-tasks">
+                    <a asp-controller="Orders" asp-action="Index" class="dashboard-task">
+                        <span class="dashboard-task-icon task-blue">≡</span>
+                        <span><strong>Pedidos pendientes</strong><small>Revisar estado de pago</small></span>
+                        <b>@pendingOrders</b><em>›</em>
+                    </a>
+                    <a asp-controller="Inventory" asp-action="Index" asp-route-lowStockOnly="true" class="dashboard-task">
+                        <span class="dashboard-task-icon task-amber">!</span>
+                        <span><strong>Stock bajo</strong><small>Variantes bajo el mínimo</small></span>
+                        <b>@lowStockVariants</b><em>›</em>
+                    </a>
+                    <a asp-controller="Products" asp-action="Index" class="dashboard-task">
+                        <span class="dashboard-task-icon task-violet">□</span>
+                        <span><strong>Borradores</strong><small>Productos sin publicar</small></span>
+                        <b>@draftProducts</b><em>›</em>
+                    </a>
+                    <a asp-controller="Products" asp-action="Index" class="dashboard-task">
+                        <span class="dashboard-task-icon task-red">◇</span>
+                        <span><strong>Por revisar</strong><small>Precio, categoría o disponibilidad</small></span>
+                        <b>@needsReviewProducts</b><em>›</em>
                     </a>
                 </div>
-            </div>
+            </section>
         </div>
 
-    </div>
-
-    <div class="card border-0 shadow-sm">
-        <div class="card-header bg-white border-0 py-3">
-            <div class="d-flex justify-content-between align-items-center">
-                <h5 class="fw-bold mb-0">Productos recientes</h5>
-
-                <a asp-controller="Products" asp-action="Index" class="btn btn-sm btn-outline-dark">
-                    Ver todos
-                </a>
-            </div>
-        </div>
-
-        <div class="card-body p-0">
-            @if (!Model.Any())
-            {
-                <div class="text-center py-5">
-                    <div class="display-6 mb-2">📦</div>
-                    <h5 class="fw-bold">Aún no hay productos</h5>
-                    <p class="text-muted">
-                        Agrega tu primer producto para comenzar a construir tu catálogo.
-                    </p>
-                    <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-primary">
-                        Agregar producto
-                    </a>
+        <div class="col-xl-4">
+            <section class="dashboard-panel h-100">
+                <div class="dashboard-panel-header">
+                    <div><h3>Configuración inicial</h3><p>@completedSetupSteps de 4 pasos completados</p></div>
+                    <span class="setup-score">@setupPercent%</span>
                 </div>
-            }
-            else
-            {
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width: 80px;">Imagen</th>
-                                <th>Producto</th>
-                                <th style="width: 130px;">Origen</th>
-                                <th style="width: 120px;">Precio</th>
-                                <th style="width: 100px;">Stock</th>
-                                <th style="width: 140px;">Estado</th>
-                                <th style="width: 180px;">Acciones</th>
-                            </tr>
-                        </thead>
-
-                        <tbody>
-                            @foreach (var item in Model)
-                            {
-                                <tr>
-                                    <td>
-                                        @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
-                                        {
-                                            <img src="@item.ImageUrl"
-                                                 class="rounded border"
-                                                 style="width: 58px; height: 58px; object-fit: cover;"
-                                                 alt="@item.Title" />
-                                        }
-                                        else
-                                        {
-                                            <div class="rounded border bg-light d-flex align-items-center justify-content-center"
-                                                 style="width: 58px; height: 58px;">
-                                                <span class="text-muted small">N/A</span>
-                                            </div>
-                                        }
-                                    </td>
-
-                                    <td>
-                                        <div class="fw-semibold">
-                                            @(string.IsNullOrWhiteSpace(item.Title) ? "Sin título" : item.Title)
-                                        </div>
-
-                                        <div class="text-muted small">
-                                            ID: @item.Id
-
-                                            @if (!string.IsNullOrWhiteSpace(item.Brand))
-                                            {
-                                                <span class="ms-2">Marca: @item.Brand</span>
-                                            }
-                                        </div>
-                                    </td>
-
-                                    <td>
-                                        @if (item.SourceMarketplace == "eBay")
-                                        {
-                                            <span class="badge bg-primary">eBay</span>
-                                        }
-                                        else if (item.SourceMarketplace == "Amazon")
-                                        {
-                                            <span class="badge bg-warning text-dark">Amazon</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-secondary">
-                                                @(item.SourceMarketplace ?? "N/A")
-                                            </span>
-                                        }
-                                    </td>
-
-                                    <td>
-                                        @if (item.SourcePrice.HasValue)
-                                        {
-                                            <span class="fw-semibold">@item.SourcePrice.Value.ToString("N2")</span>
-                                            <span class="text-muted small">@item.SourceCurrency</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted">N/A</span>
-                                        }
-                                    </td>
-
-                                    <td>
-                                        @if (item.SourceStock.HasValue && item.SourceStock.Value > 0)
-                                        {
-                                            <span class="badge bg-success">@item.SourceStock</span>
-                                        }
-                                        else if (item.SourceStock.HasValue && item.SourceStock.Value == 0)
-                                        {
-                                            <span class="badge bg-danger">0</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-secondary">N/A</span>
-                                        }
-                                    </td>
-
-                                    <td>
-                                        @if (item.MarketplacePublications.Any(p => p.Marketplace == "MercadoLibre" && p.IsPublished))
-                                        {
-                                            <span class="badge bg-success">Publicado ML</span>
-                                        }
-                                        else if (item.Status == "NeedsReview")
-                                        {
-                                            <span class="badge bg-info text-dark">Revisar</span>
-                                        }
-                                        else if (item.Status == "Draft")
-                                        {
-                                            <span class="badge bg-warning text-dark">Draft</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-secondary">@item.Status</span>
-                                        }
-                                    </td>
-
-                                    <td>
-                                        <div class="d-flex gap-1">
-                                            <a asp-controller="Products"
-                                               asp-action="Edit"
-                                               asp-route-id="@item.Id"
-                                               class="btn btn-sm btn-outline-dark">
-                                                Editar
-                                            </a>
-
-                                            <a asp-controller="Products"
-                                               asp-action="PublishToMercadoLibre"
-                                               asp-route-id="@item.Id"
-                                               class="btn btn-sm btn-success">
-                                                Publicar
-                                            </a>
-                                        </div>
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-
-                    </table>
+                <div class="progress setup-progress" role="progressbar" aria-label="Progreso de configuración" aria-valuenow="@setupPercent" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width: @setupPercent%"></div></div>
+                <div class="setup-list">
+                    <a asp-controller="MercadoLibre" asp-action="Status" class="setup-item @(mlConnectedAccounts > 0 ? "done" : "")"><span>@(mlConnectedAccounts > 0 ? "✓" : "1")</span><div><strong>Conectar una tienda</strong><small>Autoriza Mercado Libre</small></div></a>
+                    <a asp-controller="Products" asp-action="CreateFromUrl" class="setup-item @(totalProducts > 0 ? "done" : "")"><span>@(totalProducts > 0 ? "✓" : "2")</span><div><strong>Agregar un producto</strong><small>Crea tu catálogo inicial</small></div></a>
+                    <a asp-controller="Products" asp-action="Index" class="setup-item @(mercadoLibreProducts > 0 ? "done" : "")"><span>@(mercadoLibreProducts > 0 ? "✓" : "3")</span><div><strong>Publicar en Mercado Libre</strong><small>Activa tu primera publicación</small></div></a>
+                    <a asp-controller="Orders" asp-action="Index" class="setup-item @(totalOrders > 0 ? "done" : "")"><span>@(totalOrders > 0 ? "✓" : "4")</span><div><strong>Sincronizar pedidos</strong><small>Importa tu primera venta</small></div></a>
                 </div>
-            }
+            </section>
         </div>
     </div>
 
+    <section class="dashboard-panel">
+        <div class="dashboard-panel-header">
+            <div><h3>Productos recientes</h3><p>Últimos artículos agregados al catálogo</p></div>
+            <a asp-controller="Products" asp-action="Index" class="dashboard-panel-link">Ver catálogo completo →</a>
+        </div>
+        @if (!Model.Any())
+        {
+            <div class="dashboard-empty"><span>□</span><h4>Tu catálogo está vacío</h4><p>Agrega un producto para comenzar a publicar y controlar inventario.</p><a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-app-primary">Agregar producto</a></div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table dashboard-table align-middle mb-0">
+                    <thead><tr><th>Producto</th><th>Origen</th><th>Precio</th><th>Stock fuente</th><th>Publicación</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var item in Model)
+                    {
+                        var published = item.MarketplacePublications.Any(p => p.Marketplace == "MercadoLibre" && p.IsPublished);
+                        <tr>
+                            <td><div class="dashboard-product"><div class="dashboard-product-image">@if (!string.IsNullOrWhiteSpace(item.ImageUrl)) { <img src="@item.ImageUrl" alt="" /> } else { <span>□</span> }</div><div><strong>@(string.IsNullOrWhiteSpace(item.Title) ? "Sin título" : item.Title)</strong><small>@(item.Brand ?? $"Producto #{item.Id}")</small></div></div></td>
+                            <td><span class="channel-badge">@(item.SourceMarketplace ?? "Manual")</span></td>
+                            <td class="fw-semibold">@(item.SourcePrice?.ToString("N2") ?? "—") <small class="text-muted">@item.SourceCurrency</small></td>
+                            <td><span class="stock-pill @(item.SourceStock.GetValueOrDefault() > 0 ? "in-stock" : "no-stock")">@(item.SourceStock?.ToString() ?? "N/A")</span></td>
+                            <td><span class="publication-status @(published ? "published" : "draft")"><i></i> @(published ? "Publicado" : "Sin publicar")</span></td>
+                            <td class="text-end"><a asp-controller="Products" asp-action="Edit" asp-route-id="@item.Id" class="dashboard-row-action">Administrar</a></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
 </div>

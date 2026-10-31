@@ -311,6 +311,7 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="~/css/app.css" asp-append-version="true" />
 </head>
 
 <body>
@@ -331,63 +332,51 @@
         <a class="sidebar-link @IsActive("Home", "Index")"
            asp-controller="Home"
            asp-action="Index">
-            <span class="sidebar-icon">🏠</span>
+            <span class="sidebar-icon">⌂</span>
             <span>Dashboard</span>
         </a>
 
         @if (isAuthenticated)
         {
+            <div class="sidebar-section-title">Operación</div>
+
+            <a class="sidebar-link @IsActive("Orders")"
+               asp-controller="Orders"
+               asp-action="Index">
+                <span class="sidebar-icon">≡</span>
+                <span>Pedidos</span>
+            </a>
+
+            <a class="sidebar-link @IsActive("Inventory")"
+               asp-controller="Inventory"
+               asp-action="Index">
+                <span class="sidebar-icon">▦</span>
+                <span>Inventario</span>
+            </a>
+
+            <div class="sidebar-section-title">Catálogo</div>
+
             <a class="sidebar-link @IsActive("Products", "Index")"
                asp-controller="Products"
                asp-action="Index">
-                <span class="sidebar-icon">📦</span>
+                <span class="sidebar-icon">□</span>
                 <span>Productos</span>
             </a>
 
             <a class="sidebar-link @IsActive("Products", "CreateFromUrl")"
                asp-controller="Products"
                asp-action="CreateFromUrl">
-                <span class="sidebar-icon">🔗</span>
-                <span>Agregar por link</span>
+                <span class="sidebar-icon">↗</span>
+                <span>Importar por enlace</span>
             </a>
 
-            <div class="sidebar-section-title">Integraciones</div>
+            <div class="sidebar-section-title">Canales</div>
 
             <a class="sidebar-link @IsActive("MercadoLibre", "Status")"
                asp-controller="MercadoLibre"
                asp-action="Status">
-                <span class="sidebar-icon">🛒</span>
+                <span class="sidebar-icon">M</span>
                 <span>Mercado Libre</span>
-            </a>
-
-            <a class="sidebar-link @IsActive("Products")"
-               asp-controller="Products"
-               asp-action="Index">
-                <span class="sidebar-icon">🌎</span>
-                <span>eBay / Amazon</span>
-            </a>
-
-            <div class="sidebar-section-title">Operación</div>
-
-            <a class="sidebar-link @IsActive("Inventory")"
-               asp-controller="Inventory"
-               asp-action="Index">
-                <span class="sidebar-icon">📊</span>
-                <span>Inventario</span>
-            </a>
-
-            <a class="sidebar-link @IsActive("Orders")"
-               asp-controller="Orders"
-               asp-action="Index">
-                <span class="sidebar-icon">🧾</span>
-                <span>Pedidos</span>
-            </a>
-
-            <a class="sidebar-link"
-               asp-controller="Products"
-               asp-action="Index">
-                <span class="sidebar-icon">🔄</span>
-                <span>Monitoreo stock</span>
             </a>
         }
         else
@@ -397,22 +386,22 @@
             <a class="sidebar-link @IsActive("Account", "Login")"
                asp-controller="Account"
                asp-action="Login">
-                <span class="sidebar-icon">🔐</span>
+                <span class="sidebar-icon">→</span>
                 <span>Iniciar sesión</span>
             </a>
 
             <a class="sidebar-link @IsActive("Account", "Register")"
                asp-controller="Account"
                asp-action="Register">
-                <span class="sidebar-icon">✨</span>
+                <span class="sidebar-icon">＋</span>
                 <span>Crear cuenta</span>
             </a>
         }
 
         <div class="sidebar-footer">
-            <div class="sidebar-footer-title">Estado del sistema</div>
+            <div class="sidebar-footer-title"><span class="system-dot"></span> Sistema operativo</div>
             <div class="sidebar-footer-text">
-                Plataforma lista para sincronizar productos, revisar stock y preparar publicaciones.
+                Pedidos e inventario sincronizados en segundo plano.
             </div>
         </div>
     </aside>
@@ -483,6 +472,10 @@
             <div class="topbar-actions">
                 @if (isAuthenticated)
                 {
+                    <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-app-primary topbar-create">
+                        <span>＋</span> Producto
+                    </a>
+
                     <div class="user-badge">
                         <div class="user-avatar">
                             @(User.Identity?.Name?.Substring(0, 1).ToUpper() ?? "U")
@@ -495,7 +488,7 @@
                           method="post"
                           class="d-inline">
                         @Html.AntiForgeryToken()
-                        <button type="submit" class="btn btn-outline-danger rounded-pill px-3 fw-semibold">
+                        <button type="submit" class="btn topbar-logout">
                             Salir
                         </button>
                     </form>

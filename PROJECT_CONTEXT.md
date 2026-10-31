@@ -40,6 +40,7 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 - Los pedidos pagados descuentan automáticamente las variantes que coinciden por `seller_sku`; una cancelación o cambio de cantidad genera el movimiento compensatorio. Los SKU sin variante se registran en logs y no modifican otro producto por aproximación.
 - La pantalla de inventario está aislada por organización e incluye existencias, ventas netas, alertas, sobreventas, ajustes manuales e historial enlazado al pedido.
 - La migración `20261031030150_AddInventoryMovements` agrega el umbral con valor inicial 5, la tabla de movimientos y el índice único de idempotencia.
+- La interfaz global usa una navegación lateral clara y compacta, topbar con acción rápida y estilos consistentes para tarjetas, formularios y tablas. El dashboard prioriza pedidos, ventas, catálogo, alertas, tareas operativas y una guía de configuración de cuatro pasos.
 - `.gitignore` excluye `.DS_Store`, archivos locales de configuración y variantes de `.env` (excepto un posible `.env.example`). Los `.DS_Store` que ya estaban rastreados no se eliminaron porque contienen cambios previos ajenos a esta tarea.
 - La lista completa de variables de despliegue y el procedimiento de rotación está en `docs/deployment.md`; nunca se deben copiar valores reales a ese documento ni a `PROJECT_CONTEXT.md`.
 
@@ -53,9 +54,8 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 - Tras retirar los secretos versionados y habilitar User Secrets para desarrollo, `dotnet build --no-restore` pasó con 0 errores y sin advertencias; el escaneo del árbol de trabajo no encontró los tres valores retirados. Las integraciones incompletas no bloquean el arranque y se validan al utilizar sus endpoints.
 - Tras ampliar el centro de pedidos y agregar su vista de detalle, `dotnet build MarketplaceSync.Web.csproj --no-restore` pasó con 0 errores y sin advertencias.
 - La migración de inventario se generó con `dotnet-ef` 8.0.11 dentro del SDK oficial .NET 8, se aplicó sobre PostgreSQL local y se verificaron la tabla, el índice único, el valor predeterminado 5 y el arranque posterior.
-- Validar las cuatro migraciones en orden sobre una base PostgreSQL de desarrollo restaurada antes de aplicar cambios a cualquier entorno persistente. `dotnet-ef` no está disponible en este entorno, así que no se pudo ejecutar la verificación automática del snapshot.
-- Revisar la migración en un PostgreSQL de desarrollo/restauración antes de aplicarla a producción.
-- Instalar o habilitar `dotnet-ef` para generar/verificar el modelo snapshot de EF; no estaba disponible en el entorno al momento de escribir este archivo.
+- El rediseño del dashboard se validó con una cuenta y organización temporales: el registro respondió 302, el dashboard autenticado respondió HTTP 200 y renderizó métricas, tareas, configuración y productos; luego se eliminaron ambos registros temporales.
+- Mantener la validación de migraciones nuevas sobre PostgreSQL local antes de aplicarlas en producción. Cuando el runtime local no coincida con .NET 8, usar `dotnet-ef` 8.0.11 dentro de la imagen oficial del SDK como se hizo con inventario.
 - Completar pruebas manuales de registro, aislamiento entre organizaciones, importación y OAuth.
 - Mover secretos de `appsettings.json` a variables de entorno y cifrar tokens en reposo antes de operar con vendedores reales.
 - Rotar la contraseña local compartida, `Importer__Key` y `Ebay__MarketplaceDeletionVerificationToken` si los valores que antes estaban versionados llegaron a utilizarse. Configurar en Render solamente las integraciones que se habiliten.
