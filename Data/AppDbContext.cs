@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using MarketplaceSync.Web.Models.Marketplace;
 using MarketplaceSync.Web.Models.Orders;
+using MarketplaceSync.Web.Models.Inventory;
 namespace MarketplaceSync.Web.Data
 {
     public class AppDbContext : IdentityDbContext
@@ -23,6 +24,7 @@ namespace MarketplaceSync.Web.Data
         public DbSet<MercadoLibreToken> MercadoLibreTokens { get; set; }
         public DbSet<SalesOrder> SalesOrders { get; set; }
         public DbSet<SalesOrderItem> SalesOrderItems { get; set; }
+        public DbSet<InventoryMovement> InventoryMovements { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -110,6 +112,7 @@ namespace MarketplaceSync.Web.Data
                 entity.Property(x => x.Barcode).HasMaxLength(100);
                 entity.Property(x => x.AttributesJson).HasColumnType("jsonb");
                 entity.Property(x => x.Price).HasColumnType("numeric(18,2)");
+                entity.Property(x => x.LowStockThreshold).HasDefaultValue(5);
             });
 
             builder.Entity<MarketplacePublicationVariant>(entity =>
@@ -220,6 +223,34 @@ namespace MarketplaceSync.Web.Data
                 entity.Property(x => x.Title).HasMaxLength(500);
                 entity.Property(x => x.SellerSku).HasMaxLength(100);
                 entity.Property(x => x.CurrencyId).HasMaxLength(20);
+            });
+
+            builder.Entity<InventoryMovement>(entity =>
+            {
+                entity.HasOne(x => x.Organization)
+                    .WithMany()
+                    .HasForeignKey(x => x.OrganizationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.ProductVariant)
+                    .WithMany(x => x.InventoryMovements)
+                    .HasForeignKey(x => x.ProductVariantId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.SalesOrder)
+                    .WithMany()
+                    .HasForeignKey(x => x.SalesOrderId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(x => new { x.OrganizationId, x.CreatedAt });
+                entity.HasIndex(x => new { x.ProductVariantId, x.CreatedAt });
+                entity.HasIndex(x => new { x.OrganizationId, x.ReferenceKey })
+                    .IsUnique()
+                    .HasFilter("\"ReferenceKey\" IS NOT NULL");
+                entity.Property(x => x.Type).HasMaxLength(40);
+                entity.Property(x => x.ReferenceKey).HasMaxLength(300);
+                entity.Property(x => x.Notes).HasMaxLength(500);
+                entity.Property(x => x.CreatedByUserId).HasMaxLength(450);
             });
 
             builder.Entity<Organization>(entity =>

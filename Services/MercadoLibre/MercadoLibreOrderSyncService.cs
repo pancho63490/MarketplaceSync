@@ -18,17 +18,20 @@ public sealed class MercadoLibreOrderSyncService : IMercadoLibreOrderSyncService
     private readonly AppDbContext _dbContext;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMercadoLibreAuthService _authService;
+    private readonly IInventoryService _inventoryService;
     private readonly ILogger<MercadoLibreOrderSyncService> _logger;
 
     public MercadoLibreOrderSyncService(
         AppDbContext dbContext,
         IHttpClientFactory httpClientFactory,
         IMercadoLibreAuthService authService,
+        IInventoryService inventoryService,
         ILogger<MercadoLibreOrderSyncService> logger)
     {
         _dbContext = dbContext;
         _httpClientFactory = httpClientFactory;
         _authService = authService;
+        _inventoryService = inventoryService;
         _logger = logger;
     }
 
@@ -133,6 +136,7 @@ public sealed class MercadoLibreOrderSyncService : IMercadoLibreOrderSyncService
                 .Where(x => x.MarketplaceAccountId == account.Id &&
                             externalOrderIds.Contains(x.ExternalOrderId))
                 .ToDictionaryAsync(x => x.ExternalOrderId, cancellationToken);
+            var synchronizedOrders = new List<SalesOrder>();
 
             foreach (var orderJson in results.EnumerateArray())
             {
@@ -159,9 +163,17 @@ public sealed class MercadoLibreOrderSyncService : IMercadoLibreOrderSyncService
                 }
 
                 MapOrder(order, orderJson);
+                synchronizedOrders.Add(order);
             }
 
             await _dbContext.SaveChangesAsync(cancellationToken);
+
+            foreach (var synchronizedOrder in synchronizedOrders)
+            {
+                await _inventoryService.ReconcileOrderAsync(
+                    synchronizedOrder.Id,
+                    cancellationToken);
+            }
 
             var total = root.TryGetProperty("paging", out var paging) &&
                         paging.TryGetProperty("total", out var totalElement) &&

@@ -36,6 +36,10 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 - Tanto el modo `--migrate` como el servidor web requieren solamente la configuración de PostgreSQL.
 - El modo `--migrate-and-run` aplica migraciones y continúa con el servidor. Es el `ENTRYPOINT` predeterminado de la imagen para que Render Free no dependa de comandos personalizados ni encadenamiento mediante shell.
 - El centro de pedidos incluye indicadores de ventas, búsqueda por pedido/comprador/producto/SKU, filtros por estado, cuenta y fechas, paginación y detalle protegido por organización. Esta capa reutiliza los pedidos sincronizados y no requiere una migración adicional.
+- El inventario centralizado reutiliza `ProductVariant.Stock`, agrega un umbral de stock bajo y registra cada venta, reversión o ajuste manual en `InventoryMovement`. La conciliación usa una referencia única por estado de pedido/variante para no descontar dos veces al resincronizar.
+- Los pedidos pagados descuentan automáticamente las variantes que coinciden por `seller_sku`; una cancelación o cambio de cantidad genera el movimiento compensatorio. Los SKU sin variante se registran en logs y no modifican otro producto por aproximación.
+- La pantalla de inventario está aislada por organización e incluye existencias, ventas netas, alertas, sobreventas, ajustes manuales e historial enlazado al pedido.
+- La migración `20261031030150_AddInventoryMovements` agrega el umbral con valor inicial 5, la tabla de movimientos y el índice único de idempotencia.
 - `.gitignore` excluye `.DS_Store`, archivos locales de configuración y variantes de `.env` (excepto un posible `.env.example`). Los `.DS_Store` que ya estaban rastreados no se eliminaron porque contienen cambios previos ajenos a esta tarea.
 - La lista completa de variables de despliegue y el procedimiento de rotación está en `docs/deployment.md`; nunca se deben copiar valores reales a ese documento ni a `PROJECT_CONTEXT.md`.
 
@@ -48,6 +52,7 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 - Tras eliminar la migración por HTTP, agregar el modo `--migrate` y limitar el dashboard de Hangfire a `Development`, `dotnet build --no-restore` pasó con 0 errores y sin advertencias; `git diff --check` también pasó.
 - Tras retirar los secretos versionados y habilitar User Secrets para desarrollo, `dotnet build --no-restore` pasó con 0 errores y sin advertencias; el escaneo del árbol de trabajo no encontró los tres valores retirados. Las integraciones incompletas no bloquean el arranque y se validan al utilizar sus endpoints.
 - Tras ampliar el centro de pedidos y agregar su vista de detalle, `dotnet build MarketplaceSync.Web.csproj --no-restore` pasó con 0 errores y sin advertencias.
+- La migración de inventario se generó con `dotnet-ef` 8.0.11 dentro del SDK oficial .NET 8, se aplicó sobre PostgreSQL local y se verificaron la tabla, el índice único, el valor predeterminado 5 y el arranque posterior.
 - Validar las cuatro migraciones en orden sobre una base PostgreSQL de desarrollo restaurada antes de aplicar cambios a cualquier entorno persistente. `dotnet-ef` no está disponible en este entorno, así que no se pudo ejecutar la verificación automática del snapshot.
 - Revisar la migración en un PostgreSQL de desarrollo/restauración antes de aplicarla a producción.
 - Instalar o habilitar `dotnet-ef` para generar/verificar el modelo snapshot de EF; no estaba disponible en el entorno al momento de escribir este archivo.
@@ -58,7 +63,7 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 
 ## Siguiente módulo
 
-Validar las migraciones en PostgreSQL y probar OAuth, variantes y publicación en Render. Después implementar inventario centralizado y pedidos, con historial de sincronización por publicación.
+Publicar el stock central de cada variante hacia Mercado Libre con cola, reintentos e historial por publicación. Después agregar reservas y preparación de envíos sin mezclar el estado comercial del pedido con el estado logístico.
 
 ## Decisiones del modelo
 

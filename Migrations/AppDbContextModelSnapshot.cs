@@ -22,6 +22,64 @@ namespace MarketplaceSync.Web.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Inventory.InventoryMovement", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ProductVariantId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("QuantityDelta")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReferenceKey")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int?>("SalesOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StockAfter")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SalesOrderId");
+
+                    b.HasIndex("OrganizationId", "CreatedAt");
+
+                    b.HasIndex("OrganizationId", "ReferenceKey")
+                        .IsUnique()
+                        .HasFilter("\"ReferenceKey\" IS NOT NULL");
+
+                    b.HasIndex("ProductVariantId", "CreatedAt");
+
+                    b.ToTable("InventoryMovements");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", b =>
                 {
                     b.Property<int>("Id")
@@ -563,6 +621,11 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<int>("LowStockThreshold")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(5);
+
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
@@ -787,6 +850,32 @@ namespace MarketplaceSync.Web.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("AspNetUserTokens", (string)null);
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Inventory.InventoryMovement", b =>
+                {
+                    b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MarketplaceSync.Web.Models.ProductVariant", "ProductVariant")
+                        .WithMany("InventoryMovements")
+                        .HasForeignKey("ProductVariantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MarketplaceSync.Web.Models.Orders.SalesOrder", "SalesOrder")
+                        .WithMany()
+                        .HasForeignKey("SalesOrderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Organization");
+
+                    b.Navigation("ProductVariant");
+
+                    b.Navigation("SalesOrder");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", b =>
@@ -1036,6 +1125,8 @@ namespace MarketplaceSync.Web.Migrations
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.ProductVariant", b =>
                 {
+                    b.Navigation("InventoryMovements");
+
                     b.Navigation("MarketplacePublications");
                 });
 #pragma warning restore 612, 618

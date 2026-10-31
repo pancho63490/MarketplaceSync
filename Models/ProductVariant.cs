@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using MarketplaceSync.Web.Models.Marketplace;
+using MarketplaceSync.Web.Models.Inventory;
 
 namespace MarketplaceSync.Web.Models;
 
@@ -25,9 +26,12 @@ public class ProductVariant
     public decimal? Price { get; set; }
 
     public int Stock { get; set; }
+    public int LowStockThreshold { get; set; } = 5;
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public ICollection<MarketplacePublicationVariant> MarketplacePublications { get; set; }
         = new List<MarketplacePublicationVariant>();
+    public ICollection<InventoryMovement> InventoryMovements { get; set; }
+        = new List<InventoryMovement>();
 }

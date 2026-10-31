@@ -369,6 +369,13 @@
 
             <div class="sidebar-section-title">Operación</div>
 
+            <a class="sidebar-link @IsActive("Inventory")"
+               asp-controller="Inventory"
+               asp-action="Index">
+                <span class="sidebar-icon">📊</span>
+                <span>Inventario</span>
+            </a>
+
             <a class="sidebar-link @IsActive("Orders")"
                asp-controller="Orders"
                asp-action="Index">
@@ -444,6 +451,9 @@
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" asp-controller="Orders" asp-action="Index">Pedidos</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Inventory" asp-action="Index">Inventario</a>
                             </li>
                         }
                         else

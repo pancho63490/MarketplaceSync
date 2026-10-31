@@ -1,0 +1,158 @@
+@model MarketplaceSync.Web.ViewModels.Inventory.InventoryIndexViewModel
+
+@functions {
+    private static string MovementLabel(string type) => type switch
+    {
+        "OrderSale" => "Venta",
+        "OrderReversal" => "Reversión",
+        "ManualAdjustment" => "Ajuste manual",
+        _ => type
+    };
+}
+
+@{
+    ViewData["Title"] = "Inventario";
+}
+
+<div class="inventory-page">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+        <div>
+            <div class="inventory-eyebrow">CONTROL DE EXISTENCIAS</div>
+            <h2 class="inventory-title mb-1">Inventario centralizado</h2>
+            <div class="text-muted">Controla el stock por SKU y revisa cada movimiento generado por tus ventas.</div>
+        </div>
+        <a asp-controller="Products" asp-action="Index" class="btn btn-app-light">Administrar productos</a>
+    </div>
+
+    @if (TempData["Success"] is string success)
+    {
+        <div class="alert alert-success border-0 shadow-sm">@success</div>
+    }
+    @if (TempData["Error"] is string error)
+    {
+        <div class="alert alert-danger border-0 shadow-sm">@error</div>
+    }
+
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-xl-3"><div class="inventory-kpi"><div class="inventory-kpi-icon kpi-indigo">▦</div><div><div class="inventory-kpi-label">SKU activos</div><div class="inventory-kpi-value">@Model.TotalVariants.ToString("N0")</div></div></div></div>
+        <div class="col-sm-6 col-xl-3"><div class="inventory-kpi"><div class="inventory-kpi-icon kpi-green">Σ</div><div><div class="inventory-kpi-label">Unidades disponibles</div><div class="inventory-kpi-value">@Model.TotalUnits.ToString("N0")</div></div></div></div>
+        <div class="col-sm-6 col-xl-3"><div class="inventory-kpi"><div class="inventory-kpi-icon kpi-amber">!</div><div><div class="inventory-kpi-label">Stock bajo</div><div class="inventory-kpi-value">@Model.LowStockVariants.ToString("N0")</div></div></div></div>
+        <div class="col-sm-6 col-xl-3"><div class="inventory-kpi"><div class="inventory-kpi-icon kpi-red">0</div><div><div class="inventory-kpi-label">Agotados / sobreventa</div><div class="inventory-kpi-value">@Model.OutOfStockVariants.ToString("N0")</div></div></div></div>
+    </div>
+
+    <div class="card border-0 shadow-sm inventory-card mb-4">
+        <div class="card-body p-3 p-lg-4">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-7 col-lg-5">
+                    <label for="search" class="form-label inventory-label">Buscar inventario</label>
+                    <input id="search" name="search" value="@Model.Search" class="form-control" placeholder="SKU, producto o código de barras" />
+                </div>
+                <div class="col-md-5 col-lg-3">
+                    <div class="form-check form-switch inventory-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="lowStockOnly" name="lowStockOnly" value="true" checked="@Model.LowStockOnly" />
+                        <label class="form-check-label fw-semibold" for="lowStockOnly">Solo stock bajo</label>
+                    </div>
+                </div>
+                <div class="col-lg-4 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">Aplicar filtros</button>
+                    <a asp-action="Index" class="btn btn-outline-secondary">Limpiar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm inventory-card mb-4">
+        <div class="card-header bg-white border-0 px-3 px-lg-4 py-3"><h3 class="h6 fw-bold mb-1">Existencias por SKU</h3><div class="small text-muted">Los pedidos pagados descuentan stock automáticamente.</div></div>
+        <div class="table-responsive">
+            <table class="table inventory-table align-middle mb-0">
+                <thead><tr><th>Producto / SKU</th><th class="text-center">Disponible</th><th class="text-center">Vendido</th><th>Alerta mínima</th><th>Ajustar existencias</th></tr></thead>
+                <tbody>
+                @if (Model.Variants.Count == 0)
+                {
+                    <tr><td colspan="5" class="text-center py-5"><div class="inventory-empty">▦</div><div class="fw-bold mt-3">No hay variantes para mostrar</div><div class="text-muted small mt-1">Agrega variantes con SKU desde el catálogo de productos.</div></td></tr>
+                }
+                else
+                {
+                    @foreach (var row in Model.Variants)
+                    {
+                        var variant = row.Variant;
+                        var stockClass = variant.Stock <= 0 ? "stock-danger" : variant.Stock <= variant.LowStockThreshold ? "stock-warning" : "stock-success";
+                        <tr>
+                            <td>
+                                <div class="fw-bold inventory-product-title">@variant.Product.Title</div>
+                                <div class="d-flex flex-wrap align-items-center gap-2 mt-1"><span class="inventory-sku">@variant.Sku</span>@if (!string.IsNullOrWhiteSpace(variant.Barcode)) { <span class="small text-muted">@variant.Barcode</span> }</div>
+                            </td>
+                            <td class="text-center"><span class="inventory-stock @stockClass">@variant.Stock</span>@if (variant.Stock < 0) { <div class="small text-danger mt-1">Sobreventa</div> }</td>
+                            <td class="text-center fw-semibold">@Math.Max(0, row.NetSoldUnits)</td>
+                            <td>
+                                <form asp-action="SetThreshold" method="post" class="d-flex gap-2 threshold-form">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="variantId" value="@variant.Id" />
+                                    <input type="number" name="lowStockThreshold" value="@variant.LowStockThreshold" min="0" max="1000000" class="form-control form-control-sm" aria-label="Alerta mínima para @variant.Sku" />
+                                    <button class="btn btn-sm btn-outline-secondary" type="submit">Guardar</button>
+                                </form>
+                            </td>
+                            <td>
+                                <form asp-action="Adjust" method="post" class="adjust-form">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="variantId" value="@variant.Id" />
+                                    <div class="d-flex gap-2">
+                                        <input type="number" name="newStock" value="@Math.Max(0, variant.Stock)" min="0" max="1000000" class="form-control form-control-sm" aria-label="Nuevo stock para @variant.Sku" />
+                                        <input type="text" name="notes" maxlength="500" class="form-control form-control-sm inventory-note" placeholder="Motivo del ajuste" />
+                                        <button class="btn btn-sm btn-primary" type="submit">Ajustar</button>
+                                    </div>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm inventory-card">
+        <div class="card-header bg-white border-0 px-3 px-lg-4 py-3"><h3 class="h6 fw-bold mb-1">Movimientos recientes</h3><div class="small text-muted">Historial auditable de ventas, reversiones y ajustes.</div></div>
+        <div class="table-responsive">
+            <table class="table inventory-table align-middle mb-0">
+                <thead><tr><th>Fecha</th><th>SKU / Producto</th><th>Tipo</th><th>Referencia</th><th class="text-end">Movimiento</th><th class="text-end">Existencia final</th></tr></thead>
+                <tbody>
+                @if (Model.RecentMovements.Count == 0)
+                {
+                    <tr><td colspan="6" class="text-center text-muted py-4">Todavía no hay movimientos de inventario.</td></tr>
+                }
+                else
+                {
+                    @foreach (var movement in Model.RecentMovements)
+                    {
+                        <tr>
+                            <td><div class="fw-semibold">@movement.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy")</div><div class="small text-muted">@movement.CreatedAt.ToLocalTime().ToString("HH:mm")</div></td>
+                            <td><div class="fw-semibold">@movement.ProductVariant.Sku</div><div class="small text-muted inventory-movement-product">@movement.ProductVariant.Product.Title</div></td>
+                            <td><span class="movement-type">@MovementLabel(movement.Type)</span></td>
+                            <td>@if (movement.SalesOrder is not null) { <a asp-controller="Orders" asp-action="Details" asp-route-id="@movement.SalesOrderId" class="text-decoration-none">#@movement.SalesOrder.ExternalOrderId</a> } else { <span class="text-muted">@(movement.Notes ?? "—")</span> }</td>
+                            <td class="text-end fw-bold @(movement.QuantityDelta >= 0 ? "text-success" : "text-danger")">@(movement.QuantityDelta >= 0 ? "+" : "")@movement.QuantityDelta</td>
+                            <td class="text-end fw-bold">@movement.StockAfter</td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+    .inventory-eyebrow { color: #4f46e5; font-size: .72rem; font-weight: 800; letter-spacing: .12em; margin-bottom: .35rem; } .inventory-title { font-size: 1.65rem; font-weight: 850; letter-spacing: -.025em; }
+    .inventory-kpi { align-items: center; background: #fff; border: 1px solid #e8edf5; border-radius: 16px; display: flex; gap: 14px; min-height: 96px; padding: 17px; box-shadow: 0 8px 28px rgba(15,23,42,.045); }
+    .inventory-kpi-icon { align-items: center; border-radius: 13px; display: flex; flex: 0 0 44px; font-size: 1.15rem; font-weight: 900; height: 44px; justify-content: center; } .kpi-indigo { background: #e0e7ff; color: #4f46e5; } .kpi-green { background: #dcfce7; color: #16a34a; } .kpi-amber { background: #fef3c7; color: #d97706; } .kpi-red { background: #fee2e2; color: #dc2626; }
+    .inventory-kpi-label { color: #64748b; font-size: .76rem; font-weight: 700; } .inventory-kpi-value { color: #0f172a; font-size: 1.45rem; font-weight: 850; }
+    .inventory-card { border-radius: 18px; overflow: hidden; } .inventory-label { color: #475569; font-size: .76rem; font-weight: 750; } .inventory-switch { padding-bottom: .45rem; }
+    .inventory-table thead th { background: #f8fafc; border-color: #edf1f5; color: #64748b; font-size: .69rem; font-weight: 800; letter-spacing: .055em; padding: .8rem 1rem; text-transform: uppercase; white-space: nowrap; }
+    .inventory-table tbody td { border-color: #eef2f7; color: #334155; font-size: .82rem; padding: .9rem 1rem; } .inventory-product-title { max-width: 300px; }
+    .inventory-sku { background: #eef2ff; border-radius: 6px; color: #4338ca; font-family: ui-monospace, monospace; font-size: .72rem; font-weight: 800; padding: .18rem .4rem; }
+    .inventory-stock { border-radius: 10px; display: inline-flex; font-size: 1rem; font-weight: 850; justify-content: center; min-width: 42px; padding: .35rem .55rem; } .stock-success { background: #dcfce7; color: #15803d; } .stock-warning { background: #fef3c7; color: #a16207; } .stock-danger { background: #fee2e2; color: #b91c1c; }
+    .threshold-form input { max-width: 78px; } .adjust-form { min-width: 330px; } .adjust-form input[type="number"] { max-width: 88px; } .inventory-note { min-width: 145px; }
+    .movement-type { background: #f1f5f9; border-radius: 999px; color: #475569; font-size: .7rem; font-weight: 800; padding: .35rem .6rem; } .inventory-movement-product { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .inventory-empty { align-items: center; background: #eef2ff; border-radius: 50%; color: #4f46e5; display: inline-flex; font-size: 1.5rem; height: 58px; justify-content: center; width: 58px; }
+    @@media (max-width: 767px) { .inventory-title { font-size: 1.4rem; } .inventory-kpi { min-height: 82px; } }
+</style>

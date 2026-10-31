@@ -4,6 +4,7 @@ using MarketplaceSync.Services.Interfaces;
 using MarketplaceSync.Services.MercadoLibre;
 using MarketplaceSync.Services.Auth;
 using MarketplaceSync.Services.Jobs;
+using MarketplaceSync.Services.Inventory;
 using MarketplaceSync.Web.Services.Tenancy;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Identity;
@@ -105,6 +106,7 @@ builder.Services.AddScoped<
     MercadoLibreAuthService>();
 
 builder.Services.AddScoped<MarketplaceJobsService>();
+builder.Services.AddScoped<IInventoryService, InventoryService>();
 
 builder.Services.AddScoped<MarketplaceDetectorService>();
 
