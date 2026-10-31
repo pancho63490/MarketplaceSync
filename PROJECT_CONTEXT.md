@@ -42,6 +42,7 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 - La migración `20261031030150_AddInventoryMovements` agrega el umbral con valor inicial 5, la tabla de movimientos y el índice único de idempotencia.
 - La interfaz global usa una navegación lateral clara y compacta, topbar con acción rápida y estilos consistentes para tarjetas, formularios y tablas. El dashboard prioriza pedidos, ventas, catálogo, alertas, tareas operativas y una guía de configuración de cuatro pasos.
 - La publicación en Mercado Libre permite sugerir categorías por título, seleccionar una sugerencia, validar IDs mexicanos `MLM`, cargar atributos obligatorios sin requerir token para el recurso público y enviar al API los valores elegidos. Los atributos de lista usan `value_id`, los libres usan `value_name` y marca/modelo se precargan cuando existen.
+- Los botones parciales de sugerir categoría y cargar atributos omiten la validación completa del formulario (`formnovalidate` y clase `cancel`); de lo contrario, la validación cliente impedía solicitar una sugerencia precisamente porque `CategoryId` todavía estaba vacío.
 - `.gitignore` excluye `.DS_Store`, archivos locales de configuración y variantes de `.env` (excepto un posible `.env.example`). Los `.DS_Store` que ya estaban rastreados no se eliminaron porque contienen cambios previos ajenos a esta tarea.
 - La lista completa de variables de despliegue y el procedimiento de rotación está en `docs/deployment.md`; nunca se deben copiar valores reales a ese documento ni a `PROJECT_CONTEXT.md`.
 
