@@ -53,6 +53,18 @@ namespace MarketplaceSync.Web.ViewModels
 
         public string? AttributeLoadError { get; set; }
 
+        [Range(0, 999999999, ErrorMessage = "El costo unitario no puede ser negativo.")]
+        public decimal? UnitCost { get; set; }
+
+        [Range(0, 999999999, ErrorMessage = "El costo de envío no puede ser negativo.")]
+        public decimal ShippingCost { get; set; }
+
+        [Range(0, 999999999, ErrorMessage = "Los otros costos no pueden ser negativos.")]
+        public decimal OtherCosts { get; set; }
+
+        [Range(0, 100, ErrorMessage = "La tasa de impuestos debe estar entre 0 y 100.")]
+        public decimal TaxRate { get; set; }
+
         public List<MercadoLibreCategorySuggestion> CategorySuggestions { get; set; } = new();
     }
 

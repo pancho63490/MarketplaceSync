@@ -483,6 +483,76 @@
                 </div>
             }
 
+            <div class="card border-0 shadow-sm mb-4 profitability-card">
+                <div class="card-header bg-white border-0 py-3 d-flex flex-wrap justify-content-between align-items-start gap-2">
+                    <div>
+                        <h5 class="fw-bold mb-0">Calculadora de rentabilidad</h5>
+                        <div class="small text-muted">La comisión se consulta en tiempo real con Mercado Libre.</div>
+                    </div>
+                    <span class="profitability-estimate-badge">Estimación</span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6 col-xl-3">
+                            <label asp-for="UnitCost" class="form-label fw-semibold">Costo del producto</label>
+                            <input asp-for="UnitCost" class="form-control" type="number" min="0" step="0.01" placeholder="0.00" />
+                            <span asp-validation-for="UnitCost" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6 col-xl-3">
+                            <label asp-for="ShippingCost" class="form-label fw-semibold">Envío a tu cargo</label>
+                            <input asp-for="ShippingCost" class="form-control" type="number" min="0" step="0.01" />
+                            <span asp-validation-for="ShippingCost" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6 col-xl-3">
+                            <label asp-for="OtherCosts" class="form-label fw-semibold">Otros costos</label>
+                            <input asp-for="OtherCosts" class="form-control" type="number" min="0" step="0.01" />
+                            <span asp-validation-for="OtherCosts" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6 col-xl-3">
+                            <label asp-for="TaxRate" class="form-label fw-semibold">Impuestos estimados %</label>
+                            <input asp-for="TaxRate" class="form-control" type="number" min="0" max="100" step="0.01" />
+                            <span asp-validation-for="TaxRate" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-wrap align-items-center gap-3 mt-3">
+                        <button type="button" id="calculate-profitability" class="btn btn-outline-primary">
+                            Calcular rentabilidad
+                        </button>
+                        <span id="profitability-loading" class="small text-muted d-none">Consultando comisión oficial…</span>
+                        <span id="profitability-error" class="small text-danger"></span>
+                    </div>
+
+                    <div id="profitability-result" class="profitability-result mt-4 d-none">
+                        <div class="profitability-metric">
+                            <span>Comisión ML</span>
+                            <strong id="profitability-fee">—</strong>
+                            <small id="profitability-fee-detail"></small>
+                        </div>
+                        <div class="profitability-metric">
+                            <span>Utilidad neta</span>
+                            <strong id="profitability-profit">—</strong>
+                            <small>Después de los costos capturados</small>
+                        </div>
+                        <div class="profitability-metric">
+                            <span>Margen</span>
+                            <strong id="profitability-margin">—</strong>
+                            <small>Utilidad / precio de venta</small>
+                        </div>
+                        <div class="profitability-metric">
+                            <span>Precio mínimo</span>
+                            <strong id="profitability-break-even">—</strong>
+                            <small>Estimado para no perder</small>
+                        </div>
+                        <div class="profitability-status" id="profitability-status">—</div>
+                    </div>
+
+                    <div class="form-text mt-3">
+                        El envío e impuestos son editables. El costo oficial puede variar por logística, peso, situación fiscal y condiciones comerciales de tu cuenta.
+                    </div>
+                </div>
+            </div>
+
             <div class="card border-0 shadow-sm mb-5">
                 <div class="card-body">
                     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
@@ -540,11 +610,116 @@
                 }
             });
         });
+
+        (function () {
+            var button = document.getElementById('calculate-profitability');
+            if (!button) return;
+
+            function numberValue(id) {
+                var element = document.getElementById(id);
+                var value = element ? Number.parseFloat(element.value) : 0;
+                return Number.isFinite(value) ? value : 0;
+            }
+
+            function money(value, currency) {
+                return new Intl.NumberFormat('es-MX', {
+                    style: 'currency',
+                    currency: currency || 'MXN'
+                }).format(value);
+            }
+
+            button.addEventListener('click', async function () {
+                var error = document.getElementById('profitability-error');
+                var loading = document.getElementById('profitability-loading');
+                var result = document.getElementById('profitability-result');
+                var account = document.getElementById('MarketplaceAccountId');
+                var category = document.getElementById('CategoryId');
+                var listingType = document.getElementById('ListingTypeId');
+                var currency = document.getElementById('CurrencyId');
+                var price = numberValue('Price');
+                var unitCost = numberValue('UnitCost');
+
+                error.textContent = '';
+                result.classList.add('d-none');
+                if (!account || !account.value || !category || !category.value || price <= 0 || unitCost <= 0) {
+                    error.textContent = 'Completa cuenta, categoría, precio de venta y costo del producto.';
+                    return;
+                }
+
+                loading.classList.remove('d-none');
+                button.disabled = true;
+                try {
+                    var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+                    var body = new URLSearchParams({
+                        __RequestVerificationToken: token,
+                        MarketplaceAccountId: account.value,
+                        CategoryId: category.value,
+                        Price: price.toString(),
+                        CurrencyId: currency.value,
+                        ListingTypeId: listingType.value
+                    });
+                    var response = await fetch('@Url.Action("EstimateMercadoLibreFees", "Products")', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                        body: body.toString()
+                    });
+                    var payload = await response.json();
+                    if (!response.ok) throw new Error(payload.message || 'No fue posible calcular la comisión.');
+
+                    var shipping = numberValue('ShippingCost');
+                    var other = numberValue('OtherCosts');
+                    var taxRate = numberValue('TaxRate');
+                    var taxes = price * taxRate / 100;
+                    var profit = price - payload.saleFeeAmount - taxes - unitCost - shipping - other;
+                    var margin = price > 0 ? profit / price * 100 : 0;
+                    var variableRate = (payload.percentageFee + taxRate) / 100;
+                    var breakEven = variableRate < 1
+                        ? (unitCost + shipping + other + payload.fixedFee) / (1 - variableRate)
+                        : 0;
+                    var status = document.getElementById('profitability-status');
+
+                    document.getElementById('profitability-fee').textContent = money(payload.saleFeeAmount, payload.currencyId);
+                    document.getElementById('profitability-fee-detail').textContent =
+                        payload.percentageFee.toFixed(2) + '% + cargo fijo ' + money(payload.fixedFee, payload.currencyId);
+                    document.getElementById('profitability-profit').textContent = money(profit, payload.currencyId);
+                    document.getElementById('profitability-margin').textContent = margin.toFixed(2) + '%';
+                    document.getElementById('profitability-break-even').textContent =
+                        breakEven > 0 ? money(breakEven, payload.currencyId) : 'Revisar costos';
+
+                    status.className = 'profitability-status';
+                    if (profit < 0) {
+                        status.textContent = 'Publicación con pérdida';
+                        status.classList.add('loss');
+                    } else if (margin < 10) {
+                        status.textContent = 'Margen bajo';
+                        status.classList.add('low');
+                    } else {
+                        status.textContent = 'Rentable';
+                        status.classList.add('healthy');
+                    }
+                    result.classList.remove('d-none');
+                } catch (exception) {
+                    error.textContent = exception.message;
+                } finally {
+                    loading.classList.add('d-none');
+                    button.disabled = false;
+                }
+            });
+        })();
     </script>
 }
 
 <style>
     .publication-readiness { background: #edf4ff; border-radius: 999px; color: #1857d8; font-size: .72rem; font-weight: 850; padding: .35rem .6rem; }
+    .profitability-card { overflow: hidden; }
+    .profitability-estimate-badge { background: #fff5d9; border-radius: 999px; color: #946800; font-size: .65rem; font-weight: 800; padding: .38rem .62rem; text-transform: uppercase; }
+    .profitability-result { background: #f7f9fc; border: 1px solid #e7ebf1; border-radius: 12px; display: grid; gap: 1px; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; overflow: hidden; }
+    .profitability-metric { background: #fff; min-width: 0; padding: 14px; }
+    .profitability-metric span, .profitability-metric small { color: #8490a2; display: block; font-size: .62rem; }
+    .profitability-metric strong { color: #172033; display: block; font-size: 1rem; font-weight: 850; margin: 4px 0; }
+    .profitability-status { align-items: center; background: #eef1f5; color: #5f6b7c; display: flex; font-size: .7rem; font-weight: 850; justify-content: center; min-width: 115px; padding: 14px; text-align: center; text-transform: uppercase; }
+    .profitability-status.healthy { background: #e5f8ef; color: #128457; } .profitability-status.low { background: #fff5d9; color: #946800; } .profitability-status.loss { background: #fdecec; color: #c83b45; }
+    @@media (max-width: 991px) { .profitability-result { grid-template-columns: repeat(2, minmax(0, 1fr)); } .profitability-status { grid-column: 1 / -1; } }
     .category-suggestion { align-items: center; background: #fff; border: 1px solid #dce2ea; border-radius: 10px; color: #435067; display: flex; gap: 10px; padding: 10px 12px; text-align: left; width: 100%; }
     .category-suggestion:hover { background: #f8faff; border-color: #9cbcff; }
     .category-suggestion.selected { background: #edf4ff; border-color: #246bfd; color: #1857d8; }

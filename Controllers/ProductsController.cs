@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using MarketplaceSync.Web.Services.Tenancy;
+using MarketplaceSync.Services.Interfaces;
 namespace MarketplaceSync.Web.Controllers
 {
     [Authorize]
@@ -91,6 +92,8 @@ private readonly ProductExtractorService _extractor;
     private readonly MercadoLibreCategoryService _mercadoLibreCategoryService;
     private readonly IOrganizationContext _organizationContext;
     private readonly ILogger<ProductsController> _logger;
+    private readonly IMercadoLibreAuthService _mercadoLibreAuthService;
+    private readonly IMercadoLibreFeeService _mercadoLibreFeeService;
 
 public ProductsController(
     AppDbContext context,
@@ -99,6 +102,8 @@ public ProductsController(
     IHttpClientFactory httpClientFactory,
     MercadoLibreCategoryService mercadoLibreCategoryService,
     IOrganizationContext organizationContext,
+    IMercadoLibreAuthService mercadoLibreAuthService,
+    IMercadoLibreFeeService mercadoLibreFeeService,
     ILogger<ProductsController> logger
 )
 {
@@ -108,6 +113,8 @@ public ProductsController(
     _httpClientFactory = httpClientFactory;
     _mercadoLibreCategoryService = mercadoLibreCategoryService;
     _organizationContext = organizationContext;
+    _mercadoLibreAuthService = mercadoLibreAuthService;
+    _mercadoLibreFeeService = mercadoLibreFeeService;
     _logger = logger;
 }
         
@@ -636,7 +643,13 @@ var product = await _context.Products
         ImageUrl = product.ImageUrl,
         Brand = product.Brand,
         Model = product.Model,
-        MarketplaceAccountId = marketplaceAccountId
+        MarketplaceAccountId = marketplaceAccountId,
+        UnitCost = string.Equals(
+            product.SourceMarketplace,
+            "MercadoLibreInsights",
+            StringComparison.OrdinalIgnoreCase)
+                ? null
+                : product.SourcePrice
     };
 
     await PopulateMarketplaceAccountsAsync(model, organizationId);
@@ -678,6 +691,55 @@ var product = await _context.Products
     }
 
     return View(model);
+}
+
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> EstimateMercadoLibreFees(
+    MercadoLibreFeeEstimateRequest request,
+    CancellationToken cancellationToken)
+{
+    if (!ModelState.IsValid || !request.MarketplaceAccountId.HasValue)
+        return BadRequest(new { message = "Completa cuenta, categoría, precio y tipo de publicación." });
+
+    var organizationId = await _organizationContext
+        .RequireCurrentOrganizationIdAsync(cancellationToken);
+    var accountExists = await _context.MarketplaceAccounts
+        .AsNoTracking()
+        .AnyAsync(x => x.Id == request.MarketplaceAccountId.Value &&
+                       x.OrganizationId == organizationId &&
+                       x.Marketplace == "MercadoLibre" &&
+                       x.Status == "Connected" &&
+                       x.Tokens.Any(token => token.IsActive),
+            cancellationToken);
+    if (!accountExists)
+        return BadRequest(new { message = "La cuenta de Mercado Libre no está conectada." });
+
+    try
+    {
+        var accessToken = await _mercadoLibreAuthService.GetValidAccessTokenAsync(
+            organizationId,
+            request.MarketplaceAccountId.Value);
+        var estimate = await _mercadoLibreFeeService.EstimateAsync(
+            accessToken,
+            request.CategoryId.Trim().ToUpperInvariant(),
+            request.Price,
+            request.CurrencyId.Trim().ToUpperInvariant(),
+            request.ListingTypeId,
+            cancellationToken);
+        return Json(estimate);
+    }
+    catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+    {
+        _logger.LogWarning(
+            exception,
+            "Could not estimate Mercado Libre fees for category {CategoryId}.",
+            request.CategoryId);
+        return BadRequest(new
+        {
+            message = "Mercado Libre no pudo calcular la comisión. Verifica categoría, precio y tipo de publicación."
+        });
+    }
 }
 [HttpPost]
 [ValidateAntiForgeryToken]
