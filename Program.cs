@@ -92,6 +92,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 });
 
 builder.Services.AddHttpClient();
+builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IOrganizationContext, OrganizationContext>();
 
@@ -107,6 +108,7 @@ builder.Services.AddScoped<
 
 builder.Services.AddScoped<MarketplaceJobsService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddScoped<IMercadoLibreBestSellerService, MercadoLibreBestSellerService>();
 
 builder.Services.AddScoped<MarketplaceDetectorService>();
 

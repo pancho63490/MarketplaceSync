@@ -378,6 +378,13 @@
                 <span class="sidebar-icon">M</span>
                 <span>Mercado Libre</span>
             </a>
+
+            <a class="sidebar-link @IsActive("MarketInsights")"
+               asp-controller="MarketInsights"
+               asp-action="Index">
+                <span class="sidebar-icon">★</span>
+                <span>Más vendidos MX</span>
+            </a>
         }
         else
         {
@@ -443,6 +450,9 @@
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" asp-controller="Inventory" asp-action="Index">Inventario</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="MarketInsights" asp-action="Index">Más vendidos MX</a>
                             </li>
                         }
                         else
