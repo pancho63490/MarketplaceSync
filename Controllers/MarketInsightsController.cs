@@ -235,6 +235,7 @@ public sealed class MarketInsightsController : Controller
                     SourceCurrency = rankedItem.CurrencyId ?? "MXN",
                     ImageUrl = Truncate(rankedItem.ImageUrl, 1000),
                     Brand = Truncate(rankedItem.Brand, 200),
+                    Model = Truncate(rankedItem.Model, 200),
                     SourceStatus = "MarketOpportunity",
                     Status = "NeedsReview",
                     CreatedAt = DateTime.UtcNow,

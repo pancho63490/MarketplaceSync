@@ -116,6 +116,7 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
                            ReadString(root, "thumbnail") ??
                            ReadFirstPicture(root);
             var brand = ReadAttributeValue(root, "BRAND");
+            var model = ReadAttributeValue(root, "MODEL");
             var price = ReadDecimal(root, "price") ??
                         (buyBox.ValueKind == JsonValueKind.Object ? ReadDecimal(buyBox, "price") : null);
             var currencyId = ReadString(root, "currency_id") ??
@@ -127,6 +128,7 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
                 type,
                 name,
                 brand,
+                model,
                 imageUrl,
                 price,
                 currencyId,
@@ -140,7 +142,7 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
     }
 
     private static MercadoLibreBestSellerItem Fallback(int position, string id, string type) =>
-        new(position, id, type, $"Producto {id}", null, null, null, null, null);
+        new(position, id, type, $"Producto {id}", null, null, null, null, null, null);
 
     private static async Task<JsonDocument> GetJsonAsync(
         HttpClient client,

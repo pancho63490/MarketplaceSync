@@ -200,6 +200,34 @@ public ProductsController(
 
     return result;
 }
+
+private static void PrefillKnownAttributes(PublishToMercadoLibreRequest request)
+{
+    foreach (var attribute in request.Attributes)
+    {
+        if (attribute.Id.Equals("BRAND", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(request.Brand))
+            PrefillAttribute(attribute, request.Brand);
+
+        if (attribute.Id.Equals("MODEL", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(request.Model))
+            PrefillAttribute(attribute, request.Model);
+    }
+}
+
+private static void PrefillAttribute(MercadoLibreAttributeInput attribute, string value)
+{
+    var matchingOption = attribute.Values.FirstOrDefault(option =>
+        string.Equals(option.Name, value, StringComparison.OrdinalIgnoreCase));
+    attribute.ValueName = matchingOption?.Name ?? value;
+    if (matchingOption is not null)
+    {
+        attribute.ValueId = string.IsNullOrWhiteSpace(matchingOption.Id)
+            ? $"name:{matchingOption.Name}"
+            : matchingOption.Id;
+    }
+}
+
 [HttpPost]
 [ValidateAntiForgeryToken]
 public async Task<IActionResult> LoadMercadoLibreAttributes(PublishToMercadoLibreRequest request)
@@ -224,16 +252,9 @@ public async Task<IActionResult> LoadMercadoLibreAttributes(PublishToMercadoLibr
     {
         request.CategoryId = request.CategoryId.Trim().ToUpperInvariant();
         request.Attributes = await GetRequiredAttributesAsync(request.CategoryId, request.MarketplaceAccountId);
-        foreach (var attribute in request.Attributes)
-        {
-            if (attribute.Id.Equals("BRAND", StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(request.Brand))
-                attribute.ValueName = request.Brand;
-
-            if (attribute.Id.Equals("MODEL", StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(request.Model))
-                attribute.ValueName = request.Model;
-        }
+        request.AttributesLoaded = true;
+        request.AttributeLoadError = null;
+        PrefillKnownAttributes(request);
         if (!request.Attributes.Any())
             TempData["Success"] = "La categoría es válida y no reportó atributos obligatorios adicionales.";
     }
@@ -636,6 +657,26 @@ var product = await _context.Products
         model.ListingTypeId = publication.ListingTypeId ?? model.ListingTypeId;
     }
 
+    if (!string.IsNullOrWhiteSpace(model.CategoryId))
+    {
+        try
+        {
+            model.Attributes = await GetRequiredAttributesAsync(
+                model.CategoryId,
+                model.MarketplaceAccountId);
+            model.AttributesLoaded = true;
+            PrefillKnownAttributes(model);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Could not automatically load Mercado Libre attributes for category {CategoryId}.",
+                model.CategoryId);
+            model.AttributeLoadError = "No fue posible cargar automáticamente los atributos. Usa “Cargar atributos” para volver a intentar.";
+        }
+    }
+
     return View(model);
 }
 [HttpPost]
@@ -937,6 +978,7 @@ private async Task RepopulateMercadoLibreAttributeOptionsAsync(PublishToMercadoL
         }
 
         model.Attributes = refreshedAttributes;
+        model.AttributesLoaded = true;
     }
     catch (Exception exception)
     {

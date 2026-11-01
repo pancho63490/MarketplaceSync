@@ -22,6 +22,7 @@ public sealed record MercadoLibreBestSellerItem(
     string Type,
     string Name,
     string? Brand,
+    string? Model,
     string? ImageUrl,
     decimal? Price,
     string? CurrencyId,

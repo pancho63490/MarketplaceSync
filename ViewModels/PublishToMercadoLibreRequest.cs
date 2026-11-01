@@ -49,6 +49,10 @@ namespace MarketplaceSync.Web.ViewModels
 
         public List<MercadoLibreAttributeInput> Attributes { get; set; } = new();
 
+        public bool AttributesLoaded { get; set; }
+
+        public string? AttributeLoadError { get; set; }
+
         public List<MercadoLibreCategorySuggestion> CategorySuggestions { get; set; } = new();
     }
 
