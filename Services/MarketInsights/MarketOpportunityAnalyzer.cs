@@ -69,7 +69,7 @@ public sealed class MarketOpportunityAnalyzer : IMarketOpportunityAnalyzer
             competitionScore,
             level,
             BuildRecommendation(score, item.Price, medianPrice),
-            item.Type.Equals("ITEM", StringComparison.OrdinalIgnoreCase) && existingItemIds.Contains(item.Id));
+            existingItemIds.Contains(item.Id));
     }
 
     private static int GetPriceScore(decimal? price, decimal? medianPrice)

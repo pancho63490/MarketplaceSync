@@ -1,6 +1,9 @@
 using System.Text.RegularExpressions;
+using System.Security.Claims;
 using MarketplaceSync.Services.Interfaces;
 using MarketplaceSync.Web.Data;
+using MarketplaceSync.Web.Models;
+using MarketplaceSync.Web.Models.Marketplace;
 using MarketplaceSync.Web.Services.Tenancy;
 using MarketplaceSync.Web.ViewModels.MarketInsights;
 using Microsoft.AspNetCore.Authorization;
@@ -123,7 +126,15 @@ public sealed class MarketInsightsController : Controller
                                 x.ExternalItemId != null)
                     .Select(x => x.ExternalItemId!)
                     .ToListAsync(cancellationToken);
+                var importedOpportunityIds = await _dbContext.Products
+                    .AsNoTracking()
+                    .Where(x => x.OrganizationId == organizationId &&
+                                x.SourceMarketplace == "MercadoLibreInsights" &&
+                                x.SourceProductId != null)
+                    .Select(x => x.SourceProductId!)
+                    .ToListAsync(cancellationToken);
                 var existingItemIds = existingItemIdList.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                existingItemIds.UnionWith(importedOpportunityIds);
                 opportunityAnalysis = _opportunityAnalyzer.Analyze(ranking, existingItemIds);
             }
             catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
@@ -148,4 +159,151 @@ public sealed class MarketInsightsController : Controller
             ErrorMessage = errorMessage
         });
     }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PrepareForPublishing(
+        string categoryId,
+        int marketplaceAccountId,
+        string itemId,
+        CancellationToken cancellationToken)
+    {
+        categoryId = categoryId?.Trim().ToUpperInvariant() ?? string.Empty;
+        itemId = itemId?.Trim() ?? string.Empty;
+        if (categoryId.Length > 100 ||
+            itemId.Length > 200 ||
+            !MexicoCategoryPattern.IsMatch(categoryId) ||
+            string.IsNullOrWhiteSpace(itemId))
+        {
+            TempData["Error"] = "La oportunidad seleccionada no contiene una categoría o producto válido.";
+            return RedirectToAction(nameof(Index), new { categoryId, marketplaceAccountId });
+        }
+
+        var organizationId = await _organizationContext
+            .RequireCurrentOrganizationIdAsync(cancellationToken);
+        var accountExists = await _dbContext.MarketplaceAccounts
+            .AsNoTracking()
+            .AnyAsync(x => x.Id == marketplaceAccountId &&
+                           x.OrganizationId == organizationId &&
+                           x.Marketplace == "MercadoLibre" &&
+                           x.Status == "Connected" &&
+                           x.Tokens.Any(token => token.IsActive),
+                cancellationToken);
+        if (!accountExists)
+        {
+            TempData["Error"] = "La cuenta de Mercado Libre ya no está conectada.";
+            return RedirectToAction(nameof(Index), new { categoryId });
+        }
+
+        try
+        {
+            var accessToken = await _authService.GetValidAccessTokenAsync(
+                organizationId,
+                marketplaceAccountId);
+            var ranking = await _bestSellerService.GetTopAsync(
+                categoryId,
+                accessToken,
+                10,
+                cancellationToken);
+            var rankedItem = ranking.Items.FirstOrDefault(x =>
+                string.Equals(x.Id, itemId, StringComparison.OrdinalIgnoreCase));
+            if (rankedItem is null)
+            {
+                TempData["Error"] = "El producto ya no forma parte del Top 10. Actualiza el ranking e inténtalo nuevamente.";
+                return RedirectToAction(nameof(Index), new { categoryId, marketplaceAccountId });
+            }
+
+            var product = await _dbContext.Products
+                .Include(x => x.MarketplacePublications)
+                .FirstOrDefaultAsync(x => x.OrganizationId == organizationId &&
+                                          x.SourceMarketplace == "MercadoLibreInsights" &&
+                                          x.SourceProductId == rankedItem.Id,
+                    cancellationToken);
+            var created = product is null;
+            if (product is null)
+            {
+                product = new Product
+                {
+                    OrganizationId = organizationId,
+                    CreatedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier),
+                    SourceUrl = Truncate(BuildSourceUrl(rankedItem), 1000)!,
+                    SourceMarketplace = "MercadoLibreInsights",
+                    SourceProductId = rankedItem.Id,
+                    Title = Truncate(rankedItem.Name, 300),
+                    Description = "Borrador creado desde el detector de oportunidades de Mercado Libre México. Verifica descripción, imágenes, proveedor, propiedad intelectual, precio, stock y atributos antes de publicar.",
+                    SourcePrice = rankedItem.Price,
+                    SourceCurrency = rankedItem.CurrencyId ?? "MXN",
+                    ImageUrl = Truncate(rankedItem.ImageUrl, 1000),
+                    Brand = Truncate(rankedItem.Brand, 200),
+                    SourceStatus = "MarketOpportunity",
+                    Status = "NeedsReview",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _dbContext.Products.Add(product);
+            }
+
+            var publication = product.MarketplacePublications.FirstOrDefault(x =>
+                x.Marketplace == "MercadoLibre" &&
+                x.MarketplaceAccountId == marketplaceAccountId);
+            if (publication is null)
+            {
+                publication = new MarketplacePublication
+                {
+                    Product = product,
+                    Marketplace = "MercadoLibre",
+                    MarketplaceAccountId = marketplaceAccountId,
+                    Price = rankedItem.Price,
+                    Stock = 1,
+                    CurrencyId = rankedItem.CurrencyId ?? "MXN",
+                    CategoryId = categoryId,
+                    ListingTypeId = "gold_special",
+                    Condition = "new",
+                    Status = "Draft",
+                    IsPublished = false,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _dbContext.MarketplacePublications.Add(publication);
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            TempData["Success"] = created
+                ? "Borrador creado. Revisa los datos, completa los atributos y confirma stock y precio antes de publicar."
+                : "Este producto ya estaba en tu catálogo. Abrimos su borrador para continuar.";
+
+            return RedirectToAction(
+                "PublishToMercadoLibre",
+                "Products",
+                new { id = product.Id, marketplaceAccountId });
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                exception,
+                "Could not prepare market opportunity {ItemId} for publishing.",
+                itemId);
+            TempData["Error"] = "No fue posible preparar este producto. Actualiza el ranking y vuelve a intentar.";
+            return RedirectToAction(nameof(Index), new { categoryId, marketplaceAccountId });
+        }
+    }
+
+    private static string BuildSourceUrl(MercadoLibreBestSellerItem item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.Permalink))
+            return item.Permalink;
+
+        var resource = item.Type.ToUpperInvariant() switch
+        {
+            "PRODUCT" => "products",
+            "USER_PRODUCT" => "user-products",
+            _ => "items"
+        };
+        return $"https://api.mercadolibre.com/{resource}/{Uri.EscapeDataString(item.Id)}";
+    }
+
+    private static string? Truncate(string? value, int maxLength) =>
+        string.IsNullOrEmpty(value) || value.Length <= maxLength
+            ? value
+            : value[..maxLength];
 }

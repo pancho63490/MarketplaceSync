@@ -72,6 +72,11 @@
         </div>
     }
 
+    @if (TempData["Error"] is string actionError)
+    {
+        <div class="alert alert-danger border-0 shadow-sm">@actionError</div>
+    }
+
     @if (Model.Ranking is not null)
     {
         var analysis = Model.OpportunityAnalysis;
@@ -161,6 +166,15 @@
                                     <span>Competencia <strong>@opportunity.CompetitionScore</strong></span>
                                 </div>
                                 <p class="opportunity-recommendation">@opportunity.Recommendation</p>
+                                <form asp-action="PrepareForPublishing" method="post" class="mb-2">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="categoryId" value="@Model.Ranking.CategoryId" />
+                                    <input type="hidden" name="marketplaceAccountId" value="@Model.MarketplaceAccountId" />
+                                    <input type="hidden" name="itemId" value="@item.Id" />
+                                    <button type="submit" class="btn btn-sm btn-primary w-100 opportunity-publish-button">
+                                        Preparar para publicar
+                                    </button>
+                                </form>
                                 <div class="d-flex justify-content-between align-items-end gap-2 mt-auto">
                                     <div class="best-seller-price">
                                         @if (item.Price.HasValue)
@@ -228,6 +242,7 @@
     .opportunity-score-track { background: #edf0f4; border-radius: 999px; height: 6px; overflow: hidden; } .opportunity-score-track span { background: linear-gradient(90deg, #246bfd, #27b27b); border-radius: inherit; display: block; height: 100%; }
     .opportunity-components { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; } .opportunity-components span { background: #f5f7fa; border-radius: 6px; color: #8490a2; font-size: .55rem; padding: 3px 5px; } .opportunity-components strong { color: #526075; }
     .opportunity-recommendation { color: #68758a; font-size: .61rem; line-height: 1.35; margin: 7px 0; }
+    .opportunity-publish-button { border-radius: 8px; font-size: .66rem; font-weight: 800; padding: .42rem .65rem; }
     .best-seller-price strong, .best-seller-price small { display: block; } .best-seller-price strong { color: #172033; font-size: .86rem; } .best-seller-price small, .best-seller-price span { color: #9aa4b3; font-size: .6rem; }
     .best-seller-link { color: #246bfd; font-size: .67rem; font-weight: 750; text-decoration: none; }
     .insights-note { color: #7b8798; font-size: .68rem; line-height: 1.5; text-align: center; }

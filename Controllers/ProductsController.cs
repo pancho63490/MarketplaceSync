@@ -587,7 +587,7 @@ var product = await _context.Products
 }
 
 [HttpGet]
-public async Task<IActionResult> PublishToMercadoLibre(int id)
+public async Task<IActionResult> PublishToMercadoLibre(int id, int? marketplaceAccountId = null)
 {
    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
 
@@ -614,7 +614,8 @@ var product = await _context.Products
         ListingTypeId = "gold_special",
         ImageUrl = product.ImageUrl,
         Brand = product.Brand,
-        Model = product.Model
+        Model = product.Model,
+        MarketplaceAccountId = marketplaceAccountId
     };
 
     await PopulateMarketplaceAccountsAsync(model, organizationId);
