@@ -20,6 +20,7 @@ public sealed class MarketInsightsController : Controller
     private readonly IOrganizationContext _organizationContext;
     private readonly IMercadoLibreAuthService _authService;
     private readonly IMercadoLibreBestSellerService _bestSellerService;
+    private readonly IMarketOpportunityAnalyzer _opportunityAnalyzer;
     private readonly ILogger<MarketInsightsController> _logger;
 
     public MarketInsightsController(
@@ -27,12 +28,14 @@ public sealed class MarketInsightsController : Controller
         IOrganizationContext organizationContext,
         IMercadoLibreAuthService authService,
         IMercadoLibreBestSellerService bestSellerService,
+        IMarketOpportunityAnalyzer opportunityAnalyzer,
         ILogger<MarketInsightsController> logger)
     {
         _dbContext = dbContext;
         _organizationContext = organizationContext;
         _authService = authService;
         _bestSellerService = bestSellerService;
+        _opportunityAnalyzer = opportunityAnalyzer;
         _logger = logger;
     }
 
@@ -87,6 +90,7 @@ public sealed class MarketInsightsController : Controller
         marketplaceAccountId ??= accounts.Count > 0 ? int.Parse(accounts[0].Value!) : null;
 
         MercadoLibreBestSellerResult? ranking = null;
+        MarketOpportunityAnalysis? opportunityAnalysis = null;
         string? errorMessage = null;
         if (accounts.Count == 0)
         {
@@ -112,6 +116,15 @@ public sealed class MarketInsightsController : Controller
                     accessToken,
                     10,
                     cancellationToken);
+                var existingItemIdList = await _dbContext.MarketplacePublications
+                    .AsNoTracking()
+                    .Where(x => x.Product.OrganizationId == organizationId &&
+                                x.Marketplace == "MercadoLibre" &&
+                                x.ExternalItemId != null)
+                    .Select(x => x.ExternalItemId!)
+                    .ToListAsync(cancellationToken);
+                var existingItemIds = existingItemIdList.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                opportunityAnalysis = _opportunityAnalyzer.Analyze(ranking, existingItemIds);
             }
             catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
             {
@@ -131,6 +144,7 @@ public sealed class MarketInsightsController : Controller
             Accounts = accounts,
             SavedCategories = savedCategories,
             Ranking = ranking,
+            OpportunityAnalysis = opportunityAnalysis,
             ErrorMessage = errorMessage
         });
     }

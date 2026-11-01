@@ -12,6 +12,7 @@ public interface IMercadoLibreBestSellerService
 public sealed record MercadoLibreBestSellerResult(
     string CategoryId,
     string CategoryName,
+    int? TotalActiveListings,
     DateTime RetrievedAt,
     IReadOnlyList<MercadoLibreBestSellerItem> Items);
 
@@ -20,6 +21,7 @@ public sealed record MercadoLibreBestSellerItem(
     string Id,
     string Type,
     string Name,
+    string? Brand,
     string? ImageUrl,
     decimal? Price,
     string? CurrencyId,

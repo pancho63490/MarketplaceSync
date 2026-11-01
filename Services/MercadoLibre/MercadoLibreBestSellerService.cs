@@ -69,6 +69,7 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
         var result = new MercadoLibreBestSellerResult(
             categoryId,
             categoryName,
+            ReadInt32(category.RootElement, "total_items_in_this_category"),
             DateTime.UtcNow,
             resolved.OrderBy(x => x.Position).ToArray());
 
@@ -114,6 +115,7 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
             var imageUrl = ReadString(root, "secure_thumbnail") ??
                            ReadString(root, "thumbnail") ??
                            ReadFirstPicture(root);
+            var brand = ReadAttributeValue(root, "BRAND");
             var price = ReadDecimal(root, "price") ??
                         (buyBox.ValueKind == JsonValueKind.Object ? ReadDecimal(buyBox, "price") : null);
             var currencyId = ReadString(root, "currency_id") ??
@@ -124,6 +126,7 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
                 id,
                 type,
                 name,
+                brand,
                 imageUrl,
                 price,
                 currencyId,
@@ -137,7 +140,7 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
     }
 
     private static MercadoLibreBestSellerItem Fallback(int position, string id, string type) =>
-        new(position, id, type, $"Producto {id}", null, null, null, null);
+        new(position, id, type, $"Producto {id}", null, null, null, null, null);
 
     private static async Task<JsonDocument> GetJsonAsync(
         HttpClient client,
@@ -167,6 +170,23 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
 
         var picture = pictures[0];
         return ReadString(picture, "secure_url") ?? ReadString(picture, "url");
+    }
+
+    private static string? ReadAttributeValue(JsonElement root, string attributeId)
+    {
+        if (!root.TryGetProperty("attributes", out var attributes) ||
+            attributes.ValueKind != JsonValueKind.Array)
+            return null;
+
+        foreach (var attribute in attributes.EnumerateArray())
+        {
+            if (!string.Equals(ReadString(attribute, "id"), attributeId, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            return ReadString(attribute, "value_name");
+        }
+
+        return null;
     }
 
     private static string? ReadString(JsonElement element, string name) =>
