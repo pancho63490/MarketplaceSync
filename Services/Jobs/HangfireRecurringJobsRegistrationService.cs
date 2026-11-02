@@ -35,6 +35,11 @@ public sealed class HangfireRecurringJobsRegistrationService : BackgroundService
                     job => job.SyncMercadoLibreOrders(),
                     "*/5 * * * *");
 
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "capture-mercadolibre-ranking-history",
+                    job => job.CaptureMercadoLibreRankingHistory(),
+                    "15 12 * * *");
+
                 _logger.LogInformation("Hangfire recurring jobs registered.");
                 return;
             }

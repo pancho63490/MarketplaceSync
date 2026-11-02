@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using MarketplaceSync.Web.Models.Marketplace;
 using MarketplaceSync.Web.Models.Orders;
 using MarketplaceSync.Web.Models.Inventory;
+using MarketplaceSync.Web.Models.MarketInsights;
 namespace MarketplaceSync.Web.Data
 {
     public class AppDbContext : IdentityDbContext
@@ -25,6 +26,8 @@ namespace MarketplaceSync.Web.Data
         public DbSet<SalesOrder> SalesOrders { get; set; }
         public DbSet<SalesOrderItem> SalesOrderItems { get; set; }
         public DbSet<InventoryMovement> InventoryMovements { get; set; }
+        public DbSet<MarketRankingSnapshot> MarketRankingSnapshots { get; set; }
+        public DbSet<MarketRankingSnapshotItem> MarketRankingSnapshotItems { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -181,6 +184,47 @@ namespace MarketplaceSync.Web.Data
                 entity.Property(x => x.DisplayName).HasMaxLength(300);
                 entity.Property(x => x.Status).HasMaxLength(30);
                 entity.Property(x => x.LastOrdersSyncError).HasMaxLength(1000);
+            });
+
+            builder.Entity<MarketRankingSnapshot>(entity =>
+            {
+                entity.HasOne(x => x.Organization)
+                    .WithMany()
+                    .HasForeignKey(x => x.OrganizationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(x => x.MarketplaceAccount)
+                    .WithMany()
+                    .HasForeignKey(x => x.MarketplaceAccountId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(x => new
+                {
+                    x.OrganizationId,
+                    x.CategoryId,
+                    x.SnapshotDate
+                }).IsUnique().HasDatabaseName("IX_MarketRankingSnapshots_Daily");
+                entity.HasIndex(x => new { x.OrganizationId, x.CategoryId, x.CapturedAt });
+                entity.Property(x => x.CategoryId).HasMaxLength(100);
+                entity.Property(x => x.CategoryName).HasMaxLength(300);
+                entity.Property(x => x.SnapshotDate).HasColumnType("date");
+            });
+
+            builder.Entity<MarketRankingSnapshotItem>(entity =>
+            {
+                entity.HasOne(x => x.MarketRankingSnapshot)
+                    .WithMany(x => x.Items)
+                    .HasForeignKey(x => x.MarketRankingSnapshotId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(x => new { x.MarketRankingSnapshotId, x.ExternalId }).IsUnique();
+                entity.HasIndex(x => x.ExternalId);
+                entity.Property(x => x.ExternalId).HasMaxLength(200);
+                entity.Property(x => x.Type).HasMaxLength(30);
+                entity.Property(x => x.Name).HasMaxLength(500);
+                entity.Property(x => x.Brand).HasMaxLength(200);
+                entity.Property(x => x.Model).HasMaxLength(200);
+                entity.Property(x => x.ImageUrl).HasMaxLength(1000);
+                entity.Property(x => x.Price).HasColumnType("numeric(18,2)");
+                entity.Property(x => x.CurrencyId).HasMaxLength(20);
+                entity.Property(x => x.Permalink).HasMaxLength(1000);
             });
 
             builder.Entity<SalesOrder>(entity =>

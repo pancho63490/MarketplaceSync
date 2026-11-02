@@ -112,6 +112,7 @@ builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IMercadoLibreBestSellerService, MercadoLibreBestSellerService>();
 builder.Services.AddScoped<IMercadoLibreFeeService, MercadoLibreFeeService>();
 builder.Services.AddSingleton<IMarketOpportunityAnalyzer, MarketOpportunityAnalyzer>();
+builder.Services.AddScoped<IMarketRankingHistoryService, MarketRankingHistoryService>();
 
 builder.Services.AddScoped<MarketplaceDetectorService>();
 

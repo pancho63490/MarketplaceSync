@@ -24,6 +24,7 @@ public sealed class MarketInsightsController : Controller
     private readonly IMercadoLibreAuthService _authService;
     private readonly IMercadoLibreBestSellerService _bestSellerService;
     private readonly IMarketOpportunityAnalyzer _opportunityAnalyzer;
+    private readonly IMarketRankingHistoryService _rankingHistoryService;
     private readonly ILogger<MarketInsightsController> _logger;
 
     public MarketInsightsController(
@@ -32,6 +33,7 @@ public sealed class MarketInsightsController : Controller
         IMercadoLibreAuthService authService,
         IMercadoLibreBestSellerService bestSellerService,
         IMarketOpportunityAnalyzer opportunityAnalyzer,
+        IMarketRankingHistoryService rankingHistoryService,
         ILogger<MarketInsightsController> logger)
     {
         _dbContext = dbContext;
@@ -39,6 +41,7 @@ public sealed class MarketInsightsController : Controller
         _authService = authService;
         _bestSellerService = bestSellerService;
         _opportunityAnalyzer = opportunityAnalyzer;
+        _rankingHistoryService = rankingHistoryService;
         _logger = logger;
     }
 
@@ -46,7 +49,8 @@ public sealed class MarketInsightsController : Controller
     public async Task<IActionResult> Index(
         string? categoryId,
         int? marketplaceAccountId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int days = 30)
     {
         var organizationId = await _organizationContext
             .RequireCurrentOrganizationIdAsync(cancellationToken);
@@ -94,6 +98,7 @@ public sealed class MarketInsightsController : Controller
 
         MercadoLibreBestSellerResult? ranking = null;
         MarketOpportunityAnalysis? opportunityAnalysis = null;
+        MarketRankingHistory? history = null;
         string? errorMessage = null;
         if (accounts.Count == 0)
         {
@@ -136,6 +141,22 @@ public sealed class MarketInsightsController : Controller
                 var existingItemIds = existingItemIdList.ToHashSet(StringComparer.OrdinalIgnoreCase);
                 existingItemIds.UnionWith(importedOpportunityIds);
                 opportunityAnalysis = _opportunityAnalyzer.Analyze(ranking, existingItemIds);
+                try
+                {
+                    await _rankingHistoryService.CaptureAsync(
+                        organizationId,
+                        marketplaceAccountId.Value,
+                        ranking,
+                        opportunityAnalysis,
+                        cancellationToken);
+                }
+                catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogWarning(
+                        exception,
+                        "Could not save ranking history for category {CategoryId}.",
+                        categoryId);
+                }
             }
             catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
             {
@@ -144,6 +165,25 @@ public sealed class MarketInsightsController : Controller
                     "Could not retrieve Mercado Libre best sellers for category {CategoryId}.",
                     categoryId);
                 errorMessage = "No fue posible obtener el ranking. Verifica que sea una categoría final de Mercado Libre y vuelve a intentar.";
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(categoryId) && MexicoCategoryPattern.IsMatch(categoryId))
+        {
+            try
+            {
+                history = await _rankingHistoryService.GetHistoryAsync(
+                    organizationId,
+                    categoryId,
+                    days,
+                    cancellationToken);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Could not load ranking history for category {CategoryId}.",
+                    categoryId);
             }
         }
 
@@ -156,6 +196,7 @@ public sealed class MarketInsightsController : Controller
             SavedCategories = savedCategories,
             Ranking = ranking,
             OpportunityAnalysis = opportunityAnalysis,
+            History = history,
             ErrorMessage = errorMessage
         });
     }

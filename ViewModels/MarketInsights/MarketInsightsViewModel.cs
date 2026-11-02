@@ -13,6 +13,7 @@ public sealed class MarketInsightsViewModel
         = Array.Empty<SavedMarketplaceCategory>();
     public MercadoLibreBestSellerResult? Ranking { get; init; }
     public MarketOpportunityAnalysis? OpportunityAnalysis { get; init; }
+    public MarketRankingHistory? History { get; init; }
     public string? ErrorMessage { get; init; }
 }
 

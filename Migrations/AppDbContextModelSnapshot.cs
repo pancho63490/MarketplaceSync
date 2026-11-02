@@ -80,6 +80,117 @@ namespace MarketplaceSync.Web.Migrations
                     b.ToTable("InventoryMovements");
                 });
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.MarketInsights.MarketRankingSnapshot", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CapturedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CategoryId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("CategoryName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int?>("MarketplaceAccountId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("SnapshotDate")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("TotalActiveListings")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MarketplaceAccountId");
+
+                    b.HasIndex("OrganizationId", "CategoryId", "CapturedAt");
+
+                    b.HasIndex("OrganizationId", "CategoryId", "SnapshotDate")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MarketRankingSnapshots_Daily");
+
+                    b.ToTable("MarketRankingSnapshots");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.MarketInsights.MarketRankingSnapshotItem", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Brand")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("CurrencyId")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ImageUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<long>("MarketRankingSnapshotId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("OpportunityScore")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Permalink")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("Price")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExternalId");
+
+                    b.HasIndex("MarketRankingSnapshotId", "ExternalId")
+                        .IsUnique();
+
+                    b.ToTable("MarketRankingSnapshotItems");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", b =>
                 {
                     b.Property<int>("Id")
@@ -878,6 +989,35 @@ namespace MarketplaceSync.Web.Migrations
                     b.Navigation("SalesOrder");
                 });
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.MarketInsights.MarketRankingSnapshot", b =>
+                {
+                    b.HasOne("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", "MarketplaceAccount")
+                        .WithMany()
+                        .HasForeignKey("MarketplaceAccountId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MarketplaceAccount");
+
+                    b.Navigation("Organization");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.MarketInsights.MarketRankingSnapshotItem", b =>
+                {
+                    b.HasOne("MarketplaceSync.Web.Models.MarketInsights.MarketRankingSnapshot", "MarketRankingSnapshot")
+                        .WithMany("Items")
+                        .HasForeignKey("MarketRankingSnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MarketRankingSnapshot");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", b =>
                 {
                     b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
@@ -1084,6 +1224,11 @@ namespace MarketplaceSync.Web.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.MarketInsights.MarketRankingSnapshot", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", b =>
