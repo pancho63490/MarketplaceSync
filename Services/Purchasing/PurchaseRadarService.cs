@@ -34,19 +34,22 @@ public sealed class PurchaseRadarService : IPurchaseRadarService
     private readonly ICrossBorderPricingService _pricingService;
     private readonly SourceSearchQueryBuilder _queryBuilder;
     private readonly ILogger<PurchaseRadarService> _logger;
+    private readonly MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler _stockSync;
 
     public PurchaseRadarService(
         AppDbContext context,
         EbayApiService ebayApiService,
         ICrossBorderPricingService pricingService,
         SourceSearchQueryBuilder queryBuilder,
-        ILogger<PurchaseRadarService> logger)
+        ILogger<PurchaseRadarService> logger,
+        MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler stockSync)
     {
         _context = context;
         _ebayApiService = ebayApiService;
         _pricingService = pricingService;
         _queryBuilder = queryBuilder;
         _logger = logger;
+        _stockSync = stockSync;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -914,6 +917,7 @@ public sealed class PurchaseRadarService : IPurchaseRadarService
 
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        _stockSync.RequestPush(new[] { variant.ProductId });
     }
 
     // ─────────────────────────────────────────────────────────────

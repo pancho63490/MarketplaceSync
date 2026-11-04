@@ -14,13 +14,16 @@ public sealed class InventoryController : Controller
 {
     private readonly AppDbContext _dbContext;
     private readonly IOrganizationContext _organizationContext;
+    private readonly MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler _stockSync;
 
     public InventoryController(
         AppDbContext dbContext,
-        IOrganizationContext organizationContext)
+        IOrganizationContext organizationContext,
+        MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler stockSync)
     {
         _dbContext = dbContext;
         _organizationContext = organizationContext;
+        _stockSync = stockSync;
     }
 
     [HttpGet]
@@ -144,7 +147,8 @@ public sealed class InventoryController : Controller
         });
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        TempData["Success"] = $"Stock de {variant.Sku} actualizado a {newStock} unidades.";
+        _stockSync.RequestPush(new[] { variant.ProductId });
+        TempData["Success"] = $"Stock de {variant.Sku} actualizado a {newStock} unidades. Se enviará a Mercado Libre en unos segundos.";
         return RedirectToAction(nameof(Index));
     }
 

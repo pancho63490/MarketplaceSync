@@ -10,19 +10,22 @@ namespace MarketplaceSync.Services.Jobs
         private readonly IMarketRankingHistoryService _rankingHistoryService;
         private readonly ISourcePriceMonitorService _sourcePriceMonitor;
         private readonly IPurchaseRadarService _purchaseRadarService;
+        private readonly MarketplaceSync.Services.MercadoLibre.IMercadoLibreListingSyncService _listingSync;
 
         public MarketplaceJobsService(
             IMercadoLibreAuthService authService,
             IMercadoLibreOrderSyncService orderSyncService,
             IMarketRankingHistoryService rankingHistoryService,
             ISourcePriceMonitorService sourcePriceMonitor,
-            IPurchaseRadarService purchaseRadarService)
+            IPurchaseRadarService purchaseRadarService,
+            MarketplaceSync.Services.MercadoLibre.IMercadoLibreListingSyncService listingSync)
         {
             _authService = authService;
             _orderSyncService = orderSyncService;
             _rankingHistoryService = rankingHistoryService;
             _sourcePriceMonitor = sourcePriceMonitor;
             _purchaseRadarService = purchaseRadarService;
+            _listingSync = listingSync;
         }
 
         public async Task RefreshMercadoLibreToken()
@@ -59,6 +62,20 @@ namespace MarketplaceSync.Services.Jobs
         public async Task RefreshPurchaseRadar()
         {
             await _purchaseRadarService.RefreshAllAsync();
+        }
+    
+        /// <summary>Lee publicaciones de Mercado Libre y corrige diferencias de stock.</summary>
+        [DisableConcurrentExecution(timeoutInSeconds: 1800)]
+        public async Task SyncMercadoLibreListings()
+        {
+            await _listingSync.SyncAllAsync();
+        }
+
+        /// <summary>Envía el stock de un producto a Mercado Libre (después de una venta, recepción o ajuste).</summary>
+        [AutomaticRetry(Attempts = 3)]
+        public async Task PushStockForProduct(int productId)
+        {
+            await _listingSync.PushStockAsync(productId);
         }
     }
 }

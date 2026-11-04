@@ -136,6 +136,51 @@ public sealed class CrossBorderPricingService : ICrossBorderPricingService
             netProfitMxn >= settings.MinProfitAmountMxn);
     }
 
+    public decimal LandedCostMxn(decimal sourceCost, string? currency, CrossBorderSettings settings)
+    {
+        if (string.Equals(currency, "MXN", StringComparison.OrdinalIgnoreCase))
+            return Math.Round(sourceCost, 2); // ya está en pesos y en Juárez
+
+        var exchangeRate = settings.UsdToMxnRate > 0 ? settings.UsdToMxnRate : 20.0000m;
+        var productCostMxn = sourceCost * exchangeRate;
+        var importFeeRate = Math.Max(0m, settings.ImportFeePercent / 100m);
+        return Math.Round(productCostMxn * (1 + importFeeRate) + settings.AdditionalHandlingFeeUsd * exchangeRate, 2);
+    }
+
+    public CrossBorderProfitEstimate CalculateProfitFromLandedCost(
+        decimal landedCostMxn,
+        decimal listingPriceMxn,
+        CrossBorderSettings settings,
+        decimal? actualSaleFeeMxn = null)
+    {
+        const decimal freeShippingThresholdMxn = 299m;
+        const decimal fixedFeeBelowThresholdMxn = 25m;
+        var exchangeRate = settings.UsdToMxnRate > 0 ? settings.UsdToMxnRate : 20.0000m;
+
+        // La comisión real (listing_prices) ya incluye el cargo fijo de productos baratos.
+        var marketplaceFeeMxn = actualSaleFeeMxn ?? Math.Round(listingPriceMxn * (settings.DefaultMarketplaceFeePercent / 100m), 2);
+        var shippingOrFixedFeeMxn = listingPriceMxn >= freeShippingThresholdMxn
+            ? settings.EstimatedShippingMxn
+            : actualSaleFeeMxn.HasValue ? 0m : fixedFeeBelowThresholdMxn;
+        var taxWithholdingMxn = Math.Round(listingPriceMxn * (settings.PlatformTaxWithholdingPercent / 100m), 2);
+
+        var netProfitMxn = Math.Round(
+            listingPriceMxn - landedCostMxn - shippingOrFixedFeeMxn - marketplaceFeeMxn - taxWithholdingMxn, 2);
+        var netMarginPercent = listingPriceMxn > 0 ? Math.Round(netProfitMxn / listingPriceMxn * 100m, 2) : 0m;
+
+        return new CrossBorderProfitEstimate(
+            exchangeRate > 0 ? Math.Round(landedCostMxn / exchangeRate, 2) : 0m,
+            exchangeRate,
+            landedCostMxn,
+            listingPriceMxn,
+            shippingOrFixedFeeMxn,
+            marketplaceFeeMxn,
+            taxWithholdingMxn,
+            netProfitMxn,
+            netMarginPercent,
+            netProfitMxn >= settings.MinProfitAmountMxn);
+    }
+
     private static CrossBorderPricingBreakdown CalculateInternal(
         decimal sourcePriceUsd,
         decimal exchangeRate,

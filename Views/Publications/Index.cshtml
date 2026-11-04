@@ -1,0 +1,191 @@
+@model MarketplaceSync.Web.ViewModels.Publications.PublicationsIndexViewModel
+@using System.Globalization
+
+@{
+    ViewData["Title"] = "Publicados";
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    string Mxn(decimal? v) => v.HasValue ? v.Value.ToString("C0", mx) : "—";
+    var filters = new (string? Key, string Label, int Count)[]
+    {
+        (null, "Todas", Model.ActiveCount + Model.PausedCount),
+        ("loss", "Con pérdida", Model.LossCount),
+        ("nocost", "Sin costo", Model.NoCostCount),
+        ("mismatch", "Stock diferente", Model.MismatchCount),
+        ("paused", "Pausadas", Model.PausedCount)
+    };
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+    <div>
+        <h1 class="page-title">Publicados</h1>
+        <p class="text-muted mb-0">
+            Tus publicaciones en Mercado Libre, lo que te deja cada pieza y su stock.
+            @if (Model.LastSyncedAt.HasValue)
+            {
+                <span>Actualizado el @Model.LastSyncedAt.Value.ToLocalTime().ToString("dd/MM HH:mm"); se revisa solo cada 30 minutos.</span>
+            }
+        </p>
+    </div>
+    <form asp-action="Sync" method="post" id="syncForm">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn btn-primary" id="syncButton" @(Model.HasConnectedAccount ? "" : "disabled")>↻ Sincronizar con Mercado Libre</button>
+    </form>
+</div>
+
+@if (!Model.HasConnectedAccount)
+{
+    <div class="alert alert-warning">
+        Conecta tu cuenta en <a asp-controller="MercadoLibre" asp-action="Status" class="alert-link">Cuentas de Mercado Libre</a> para ver tus publicaciones.
+    </div>
+}
+
+<dl class="pub-summary">
+    <div><dt>Activas</dt><dd>@Model.ActiveCount</dd></div>
+    <div><dt>Piezas publicadas</dt><dd>@Model.UnitsListed.ToString("N0", mx)</dd></div>
+    <div><dt>Ganancia si vendes todo</dt><dd class="@(Model.PotentialProfitMxn < 0 ? "text-danger" : "")">@Mxn(Model.PotentialProfitMxn)</dd></div>
+    <div><dt>Sin costo registrado</dt><dd>@Model.NoCostCount</dd></div>
+</dl>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div class="pl-chips">
+        @foreach (var f in filters)
+        {
+            if (f.Key is not null && f.Count == 0) continue;
+            <a class="pub-chip @(Model.Filter == f.Key ? "active" : "")" asp-action="Index" asp-route-filter="@f.Key" asp-route-q="@Model.Search">@f.Label <span>@f.Count</span></a>
+        }
+    </div>
+    <form method="get" class="d-flex gap-2">
+        <input type="hidden" name="filter" value="@Model.Filter" />
+        <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm" placeholder="Buscar título o MLM…" aria-label="Buscar publicaciones" />
+    </form>
+</div>
+
+@if (Model.Rows.Count == 0)
+{
+    <div class="today-clear">
+        <div>
+            <div class="fw-bold">@(Model.ActiveCount + Model.PausedCount == 0 ? "Todavía no hay publicaciones" : "Nada con este filtro")</div>
+            <div class="text-muted small">
+                @(Model.ActiveCount + Model.PausedCount == 0
+                    ? "Presiona “Sincronizar con Mercado Libre” para traer las que ya tienes, o publica un producto desde Productos."
+                    : "Prueba con otro filtro.")
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="pub-list">
+        <div class="pub-row pub-head">
+            <div></div>
+            <div>Publicación</div>
+            <div class="text-end">Precio</div>
+            <div class="text-end">Te cuesta</div>
+            <div class="text-end">Ganas por pieza</div>
+            <div class="text-center">Stock</div>
+            <div class="text-center">Vendidos</div>
+        </div>
+
+        @foreach (var r in Model.Rows)
+        {
+            var profit = r.Profit;
+            <div class="pub-row @(r.Status != "active" ? "is-paused" : "")">
+                <div>
+                    <span class="recent-thumb pub-thumb">
+                        @if (!string.IsNullOrWhiteSpace(r.ImageUrl))
+                        {
+                            <img src="@r.ImageUrl" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" />
+                        }
+                    </span>
+                </div>
+
+                <div class="min-w-0">
+                    <a asp-controller="Products" asp-action="Details" asp-route-id="@r.ProductId" class="pl-title" title="@r.Title">@r.Title</a>
+                    <div class="pl-meta">
+                        <span>@r.ItemId</span>
+                        @if (r.Status != "active") { <span class="text-danger">@(r.Status == "paused" ? "Pausada" : r.Status)</span> }
+                        @if (!string.IsNullOrWhiteSpace(r.Permalink)) { <span><a href="@r.Permalink" target="_blank" rel="noopener noreferrer">Ver en ML ↗</a></span> }
+                    </div>
+                </div>
+
+                <div class="text-end">
+                    <div class="pl-value">@Mxn(r.Price)</div>
+                    @if (profit != null)
+                    {
+                        <div class="pl-sub" title="Comisión @(r.FeeIsReal ? "real de Mercado Libre" : "estimada con tu porcentaje")">comisión @Mxn(profit.MarketplaceFeeMxn)@(r.FeeIsReal ? "" : "*")</div>
+                    }
+                </div>
+
+                <div class="text-end">
+                    @if (r.CostKnown)
+                    {
+                        <div class="pl-value">@Mxn(r.LandedCostMxn)</div>
+                        <div class="pl-sub">@(r.CostCurrency == "MXN" ? "en Juárez" : $"US${r.CostValue:0.00} + cruce")</div>
+                    }
+                    else
+                    {
+                        <form asp-action="SetCost" method="post" class="pub-cost-form">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="productId" value="@r.ProductId" />
+                            <input type="hidden" name="filter" value="@Model.Filter" />
+                            <div class="input-group input-group-sm">
+                                <input type="text" inputmode="decimal" name="cost" class="form-control" placeholder="38.50" aria-label="Costo por pieza de @r.Title" required />
+                                <select name="currency" class="form-select" aria-label="Moneda del costo">
+                                    <option value="USD">USD</option>
+                                    <option value="MXN">MXN</option>
+                                </select>
+                                <button class="btn btn-outline-secondary" type="submit">Guardar</button>
+                            </div>
+                        </form>
+                    }
+                </div>
+
+                <div class="text-end">
+                    @if (profit != null)
+                    {
+                        <div class="pl-value @(profit.NetProfitMxn < 0 ? "text-danger" : profit.IsProfitable ? "text-success" : "")">@Mxn(profit.NetProfitMxn)</div>
+                        <div class="pl-sub">margen @profit.NetMarginPercent.ToString("0.#", mx)%</div>
+                    }
+                    else
+                    {
+                        <div class="pl-sub">Agrega el costo</div>
+                    }
+                </div>
+
+                <div class="text-center">
+                    <div class="pl-value">@(r.MercadoLibreStock?.ToString() ?? "—")</div>
+                    @if (r.AppStock.HasValue)
+                    {
+                        if (r.StockMismatch)
+                        {
+                            <div class="pl-sub text-warning" title="@(r.LastStockPushError ?? "Se corregirá en la próxima sincronización")">inventario: @r.AppStock</div>
+                        }
+                        else
+                        {
+                            <div class="pl-sub text-success">sincronizado</div>
+                        }
+                    }
+                    else if (!r.HasRemoteVariations)
+                    {
+                        <form asp-action="ManageStock" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="publicationId" value="@r.PublicationId" />
+                            <button type="submit" class="btn btn-link btn-sm p-0 pub-manage" title="Crea un SKU con este stock y lo sincroniza desde Inventario">Controlar desde la app</button>
+                        </form>
+                    }
+                </div>
+
+                <div class="text-center pl-value">@(r.Sold?.ToString("N0", mx) ?? "—")</div>
+            </div>
+        }
+    </div>
+    <p class="small text-muted mt-2">* Comisión estimada con tu porcentaje de Costos de cruce; la real se carga al sincronizar. La ganancia descuenta envío, comisión y retenciones.</p>
+}
+
+@section Scripts {
+    <script>
+        document.getElementById('syncForm')?.addEventListener('submit', function () {
+            var b = document.getElementById('syncButton'); b.disabled = true; b.textContent = 'Sincronizando…';
+        });
+    </script>
+}

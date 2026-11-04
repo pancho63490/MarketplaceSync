@@ -333,6 +333,16 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<bool>("IsPublished")
                         .HasColumnType("boolean");
 
+                    b.Property<DateTime?>("LastStockPushAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastStockPushError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("ListingTypeId")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
@@ -358,6 +368,15 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("SaleFeeForPrice")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("SaleFeeMxn")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int?>("SoldQuantity")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Status")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -369,6 +388,8 @@ namespace MarketplaceSync.Web.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ExternalItemId");
 
                     b.HasIndex("MarketplaceAccountId");
 

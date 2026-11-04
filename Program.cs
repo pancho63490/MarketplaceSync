@@ -134,6 +134,8 @@ builder.Services.AddScoped<ClaudeClient>();
 builder.Services.AddScoped<IProductAiEnricherService, ClaudeProductAiEnricherService>();
 builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient>();
 builder.Services.AddScoped<IListingAutopilotService, ListingAutopilotService>();
+builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.IMercadoLibreListingSyncService, MarketplaceSync.Services.MercadoLibre.MercadoLibreListingSyncService>();
+builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler, MarketplaceSync.Services.MercadoLibre.StockSyncScheduler>();
 
 builder.Services.AddScoped<ISourcePriceMonitorService, SourcePriceMonitorService>();
 builder.Services.AddScoped<SourceSearchQueryBuilder>();

@@ -63,4 +63,17 @@ public interface ICrossBorderPricingService
         decimal listingPriceMxn,
         CrossBorderSettings settings,
         decimal? customMarketplaceFeePercent = null);
+
+    /// <summary>
+    /// Ganancia por pieza cuando ya conoces el costo puesto en Juárez (MXN) y, si la tienes,
+    /// la comisión real de Mercado Libre para ese precio.
+    /// </summary>
+    CrossBorderProfitEstimate CalculateProfitFromLandedCost(
+        decimal landedCostMxn,
+        decimal listingPriceMxn,
+        CrossBorderSettings settings,
+        decimal? actualSaleFeeMxn = null);
+
+    /// <summary>Costo puesto en Juárez (MXN) a partir del costo de compra y su moneda.</summary>
+    decimal LandedCostMxn(decimal sourceCost, string? currency, CrossBorderSettings settings);
 }

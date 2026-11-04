@@ -13,8 +13,14 @@ public sealed class InventoryService : IInventoryService
     private readonly AppDbContext _dbContext;
     private readonly ILogger<InventoryService> _logger;
 
-    public InventoryService(AppDbContext dbContext, ILogger<InventoryService> logger)
+    private readonly MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler _stockSync;
+
+    public InventoryService(
+        AppDbContext dbContext,
+        ILogger<InventoryService> logger,
+        MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler stockSync)
     {
+        _stockSync = stockSync;
         _dbContext = dbContext;
         _logger = logger;
     }
@@ -110,7 +116,12 @@ public sealed class InventoryService : IInventoryService
         }
 
         if (movementsCreated > 0)
+        {
             await _dbContext.SaveChangesAsync(cancellationToken);
+            _stockSync.RequestPush(targetDeltasByVariant.Keys
+                .Where(variantsById.ContainsKey)
+                .Select(id => variantsById[id].ProductId));
+        }
 
         if (unmatchedSkus > 0)
         {

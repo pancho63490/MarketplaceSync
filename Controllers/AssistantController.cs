@@ -96,6 +96,7 @@ public sealed class AssistantController : Controller
             - Más vendidos en México: /MarketInsights
             - Costos de cruce: /CrossBorder
             - Productos: /Products  (filtros: ?stage=Draft, ?stage=NeedsReview, ?stage=Ready)
+            - Publicados en Mercado Libre con ganancia y stock: /Publications  (filtros: ?filter=loss, ?filter=nocost, ?filter=mismatch)
             - Importar producto con IA: /Products/CreateFromUrl
             - Inventario: /Inventory
             - Pedidos: /Orders

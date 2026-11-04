@@ -40,6 +40,12 @@ public sealed class HangfireRecurringJobsRegistrationService : BackgroundService
                     job => job.CaptureMercadoLibreRankingHistory(),
                     "15 12 * * *");
 
+                // Publicaciones y stock con Mercado Libre: cada 30 minutos
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "sync-mercadolibre-listings",
+                    job => job.SyncMercadoLibreListings(),
+                    "*/30 * * * *");
+
                 // Radar de compra: después de la captura diaria del ranking (12:15 UTC)
                 _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
                     "refresh-purchase-radar",

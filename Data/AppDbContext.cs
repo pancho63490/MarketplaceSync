@@ -100,6 +100,9 @@ namespace MarketplaceSync.Web.Data
                 entity.Property(x => x.Condition).HasMaxLength(50);
                 entity.Property(x => x.Status).HasMaxLength(100);
                 entity.Property(x => x.AttributesJson).HasColumnType("jsonb");
+                entity.Property(x => x.SaleFeeMxn).HasColumnType("numeric(18,2)");
+                entity.Property(x => x.SaleFeeForPrice).HasColumnType("numeric(18,2)");
+                entity.HasIndex(x => x.ExternalItemId);
             });
 
             builder.Entity<ProductVariant>(entity =>
