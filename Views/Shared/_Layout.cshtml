@@ -1,15 +1,54 @@
-﻿@{
+@{
     var currentController = ViewContext.RouteData.Values["controller"]?.ToString();
     var currentAction = ViewContext.RouteData.Values["action"]?.ToString();
 
     bool isAuthenticated = User.Identity != null && User.Identity.IsAuthenticated;
+
+    // Menú único: la barra lateral y el menú de celular se generan de esta misma lista.
+    // (Controller, Action, Icono, Texto)
+    var menu = isAuthenticated
+        ? new (string Title, (string Controller, string Action, string Icon, string Label)[] Items)[]
+        {
+            ("Principal", new[]
+            {
+                ("Home", "Index", "⌂", "Dashboard")
+            }),
+            ("Vender", new[]
+            {
+                ("Orders", "Index", "≡", "Pedidos"),
+                ("Products", "Index", "□", "Productos"),
+                ("Inventory", "Index", "▦", "Inventario")
+            }),
+            ("Comprar en EE.UU.", new[]
+            {
+                ("Purchasing", "Index", "◎", "Radar de compra"),
+                ("MarketInsights", "Index", "★", "Más vendidos MX"),
+                ("CrossBorder", "Index", "⇄", "Costeo El Paso ➔ Juárez")
+            }),
+            ("Configuración", new[]
+            {
+                ("MercadoLibre", "Status", "M", "Cuentas de Mercado Libre")
+            })
+        }
+        : new (string Title, (string Controller, string Action, string Icon, string Label)[] Items)[]
+        {
+            ("Acceso", new[]
+            {
+                ("Account", "Login", "→", "Iniciar sesión"),
+                ("Account", "Register", "＋", "Crear cuenta")
+            })
+        };
 
     string IsActive(string controller, string? action = null)
     {
         if (!string.Equals(currentController, controller, StringComparison.OrdinalIgnoreCase))
             return "";
 
-        if (action != null && !string.Equals(currentAction, action, StringComparison.OrdinalIgnoreCase))
+        // Dentro de un módulo todas sus pantallas marcan el mismo elemento (ej. Productos > Editar).
+        // Solo Account distingue por acción porque Login y Registro son elementos distintos.
+        if (action != null &&
+            string.Equals(controller, "Account", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(currentAction, action, StringComparison.OrdinalIgnoreCase))
             return "";
 
         return "active";
@@ -327,98 +366,19 @@
             </div>
         </a>
 
-        <div class="sidebar-section-title">Principal</div>
-
-        <a class="sidebar-link @IsActive("Home", "Index")"
-           asp-controller="Home"
-           asp-action="Index">
-            <span class="sidebar-icon">⌂</span>
-            <span>Dashboard</span>
-        </a>
-
-        @if (isAuthenticated)
+        @foreach (var menuSection in menu)
         {
-            <div class="sidebar-section-title">Operación</div>
+            <div class="sidebar-section-title">@menuSection.Title</div>
 
-            <a class="sidebar-link @IsActive("Orders")"
-               asp-controller="Orders"
-               asp-action="Index">
-                <span class="sidebar-icon">≡</span>
-                <span>Pedidos</span>
-            </a>
-
-            <a class="sidebar-link @IsActive("Inventory")"
-               asp-controller="Inventory"
-               asp-action="Index">
-                <span class="sidebar-icon">▦</span>
-                <span>Inventario</span>
-            </a>
-
-            <div class="sidebar-section-title">Catálogo</div>
-
-            <a class="sidebar-link @IsActive("Products", "Index")"
-               asp-controller="Products"
-               asp-action="Index">
-                <span class="sidebar-icon">□</span>
-                <span>Productos</span>
-            </a>
-
-            <a class="sidebar-link @IsActive("Products", "CreateFromUrl")"
-               asp-controller="Products"
-               asp-action="CreateFromUrl">
-                <span class="sidebar-icon">↗</span>
-                <span>Importar por enlace</span>
-            </a>
-
-            <div class="sidebar-section-title">Canales</div>
-
-            <a class="sidebar-link @IsActive("MercadoLibre", "Status")"
-               asp-controller="MercadoLibre"
-               asp-action="Status">
-                <span class="sidebar-icon">M</span>
-                <span>Mercado Libre</span>
-            </a>
-
-            <a class="sidebar-link @IsActive("MarketInsights")"
-               asp-controller="MarketInsights"
-               asp-action="Index">
-                <span class="sidebar-icon">★</span>
-                <span>Más vendidos MX</span>
-            </a>
-
-            <div class="sidebar-section-title">Frontera & Arbitraje</div>
-
-            <a class="sidebar-link @IsActive("Purchasing")"
-               asp-controller="Purchasing"
-               asp-action="Index">
-                <span class="sidebar-icon">◎</span>
-                <span>Radar de compra</span>
-            </a>
-
-            <a class="sidebar-link @IsActive("CrossBorder")"
-               asp-controller="CrossBorder"
-               asp-action="Index">
-                <span class="sidebar-icon">⇄</span>
-                <span>Costeo El Paso ➔ Juárez</span>
-            </a>
-        }
-        else
-        {
-            <div class="sidebar-section-title">Acceso</div>
-
-            <a class="sidebar-link @IsActive("Account", "Login")"
-               asp-controller="Account"
-               asp-action="Login">
-                <span class="sidebar-icon">→</span>
-                <span>Iniciar sesión</span>
-            </a>
-
-            <a class="sidebar-link @IsActive("Account", "Register")"
-               asp-controller="Account"
-               asp-action="Register">
-                <span class="sidebar-icon">＋</span>
-                <span>Crear cuenta</span>
-            </a>
+            @foreach (var item in menuSection.Items)
+            {
+                <a class="sidebar-link @IsActive(item.Controller, item.Action)"
+                   asp-controller="@item.Controller"
+                   asp-action="@item.Action">
+                    <span class="sidebar-icon">@item.Icon</span>
+                    <span>@item.Label</span>
+                </a>
+            }
         }
 
         <div class="sidebar-footer">
@@ -446,42 +406,17 @@
 
                 <div class="collapse navbar-collapse" id="mobileMenu">
                     <ul class="navbar-nav mt-3">
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="Home" asp-action="Index">Dashboard</a>
-                        </li>
-
-                        @if (isAuthenticated)
+                        @foreach (var menuSection in menu)
                         {
-                            <li class="nav-item">
-                                <a class="nav-link" asp-controller="Products" asp-action="Index">Productos</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-controller="Products" asp-action="CreateFromUrl">Agregar por link</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-controller="MercadoLibre" asp-action="Status">Mercado Libre</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-controller="Orders" asp-action="Index">Pedidos</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-controller="Inventory" asp-action="Index">Inventario</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-controller="MarketInsights" asp-action="Index">Más vendidos MX</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-controller="Purchasing" asp-action="Index">Radar de compra</a>
-                            </li>
-                        }
-                        else
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link" asp-controller="Account" asp-action="Login">Iniciar sesión</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-controller="Account" asp-action="Register">Crear cuenta</a>
-                            </li>
+                            <li class="nav-item small text-uppercase text-muted fw-semibold mt-2">@menuSection.Title</li>
+                            @foreach (var item in menuSection.Items)
+                            {
+                                <li class="nav-item">
+                                    <a class="nav-link @IsActive(item.Controller, item.Action)"
+                                       asp-controller="@item.Controller"
+                                       asp-action="@item.Action">@item.Label</a>
+                                </li>
+                            }
                         }
                     </ul>
                 </div>
@@ -502,7 +437,7 @@
                 @if (isAuthenticated)
                 {
                     <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-app-primary topbar-create">
-                        <span>＋</span> Producto
+                        <span>＋</span> Importar producto
                     </a>
 
                     <div class="user-badge">
