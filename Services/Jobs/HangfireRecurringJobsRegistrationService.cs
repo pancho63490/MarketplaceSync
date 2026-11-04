@@ -40,6 +40,18 @@ public sealed class HangfireRecurringJobsRegistrationService : BackgroundService
                     job => job.CaptureMercadoLibreRankingHistory(),
                     "15 12 * * *");
 
+                // Radar de compra: después de la captura diaria del ranking (12:15 UTC)
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "refresh-purchase-radar",
+                    job => job.RefreshPurchaseRadar(),
+                    "45 12 * * *");
+
+                // Source price & stock monitor: runs every 4 hours
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "monitor-source-prices-and-stock",
+                    job => job.MonitorSourcePricesAndStock(),
+                    "0 */4 * * *");
+
                 _logger.LogInformation("Hangfire recurring jobs registered.");
                 return;
             }

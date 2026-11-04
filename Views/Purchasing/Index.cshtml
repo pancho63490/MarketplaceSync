@@ -1,0 +1,498 @@
+@model MarketplaceSync.Web.ViewModels.Purchasing.PurchasingIndexViewModel
+@using System.Globalization
+@using MarketplaceSync.Web.Models.Purchasing
+
+@functions {
+    private static readonly CultureInfo Mx = CultureInfo.GetCultureInfo("es-MX");
+
+    private static string Mxn(decimal? value) => value.HasValue ? value.Value.ToString("C0", Mx) : "—";
+    private static string Usd(decimal? value) => value.HasValue ? "US$" + value.Value.ToString("N2", CultureInfo.InvariantCulture) : "—";
+
+    private static (string Label, string Css) TrendBadge(string trend) => trend switch
+    {
+        PurchaseTrend.Rising => ("▲ Subiendo", "radar-trend-up"),
+        PurchaseTrend.Falling => ("▼ Bajando", "radar-trend-down"),
+        PurchaseTrend.New => ("★ Nuevo en el Top", "radar-trend-new"),
+        PurchaseTrend.Exited => ("Salió del Top", "radar-trend-down"),
+        _ => ("● Estable", "radar-trend-flat")
+    };
+
+    private static string DemandCss(int score) => score switch
+    {
+        >= 70 => "radar-score-high",
+        >= 50 => "radar-score-mid",
+        _ => "radar-score-low"
+    };
+
+    private static string ConfidenceLabel(int confidence) => confidence switch
+    {
+        >= 80 => "Coincidencia alta",
+        >= 60 => "Coincidencia media",
+        _ => "Verifica que sea el mismo producto"
+    };
+}
+
+@{
+    ViewData["Title"] = "Radar de compra";
+    var tab = Model.Tab;
+    int? publishProductId = TempData["PublishProductId"] as int?;
+    int? publishAccountId = TempData["PublishAccountId"] as int?;
+}
+
+<style>
+    .radar-eyebrow { font-size: .75rem; font-weight: 700; letter-spacing: .06em; color: #4f46e5; }
+    .radar-kpi { background: #fff; border-radius: 14px; padding: 1rem 1.25rem; box-shadow: 0 1px 3px rgba(15,23,42,.08); height: 100%; }
+    .radar-kpi-label { font-size: .78rem; color: #64748b; font-weight: 600; }
+    .radar-kpi-value { font-size: 1.45rem; font-weight: 800; color: #0f172a; }
+    .radar-kpi-hint { font-size: .75rem; color: #94a3b8; }
+    .radar-tabs .nav-link { font-weight: 600; color: #475569; border-radius: 10px; }
+    .radar-tabs .nav-link.active { background: #4f46e5; color: #fff; }
+    .radar-tabs .badge { font-size: .7rem; }
+    .radar-card { background: #fff; border-radius: 16px; box-shadow: 0 1px 3px rgba(15,23,42,.08); padding: 1.1rem; height: 100%; display: flex; flex-direction: column; gap: .75rem; }
+    .radar-img { width: 72px; height: 72px; object-fit: contain; border-radius: 10px; background: #f8fafc; flex-shrink: 0; }
+    .radar-title { font-weight: 700; font-size: .95rem; line-height: 1.25; color: #0f172a; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .radar-meta { font-size: .78rem; color: #64748b; }
+    .radar-score { min-width: 54px; text-align: center; border-radius: 12px; padding: .35rem .5rem; font-weight: 800; font-size: 1.1rem; line-height: 1; }
+    .radar-score small { display: block; font-size: .62rem; font-weight: 600; margin-top: .2rem; }
+    .radar-score-high { background: #dcfce7; color: #166534; }
+    .radar-score-mid { background: #fef9c3; color: #854d0e; }
+    .radar-score-low { background: #f1f5f9; color: #475569; }
+    .radar-pill { display: inline-block; font-size: .72rem; font-weight: 600; padding: .15rem .55rem; border-radius: 999px; background: #f1f5f9; color: #334155; }
+    .radar-trend-up { background: #dcfce7; color: #166534; }
+    .radar-trend-down { background: #fee2e2; color: #991b1b; }
+    .radar-trend-new { background: #e0e7ff; color: #3730a3; }
+    .radar-trend-flat { background: #f1f5f9; color: #475569; }
+    .radar-box { background: #f8fafc; border-radius: 12px; padding: .65rem .8rem; font-size: .82rem; }
+    .radar-box-title { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #64748b; margin-bottom: .25rem; }
+    .radar-money { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; text-align: center; }
+    .radar-money div span { display: block; font-size: .68rem; color: #64748b; font-weight: 600; }
+    .radar-money div strong { font-size: .95rem; }
+    .radar-profit { color: #15803d; }
+    .radar-loss { color: #b91c1c; }
+    .radar-actions { margin-top: auto; }
+    .radar-empty { text-align: center; padding: 3rem 1rem; color: #64748b; }
+    .radar-empty-icon { font-size: 2rem; }
+    .radar-table td, .radar-table th { vertical-align: middle; font-size: .86rem; }
+</style>
+
+<div class="container-fluid px-0">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+        <div>
+            <div class="radar-eyebrow">FRONTERA &amp; ARBITRAJE</div>
+            <h1 class="h3 fw-bold mb-1">Radar de compra</h1>
+            <div class="text-muted small">
+                Qué traer del Paso: productos que se mantienen en el Top de Mercado Libre, con oferta en eBay EE.UU. y ganancia mínima de @Mxn(Model.MinProfitAmountMxn) por pieza.
+                @if (Model.LastEvaluatedAt.HasValue)
+                {
+                    <span>· Última actualización: @Model.LastEvaluatedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+                }
+            </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a asp-action="ExportShoppingList" class="btn btn-outline-secondary">⬇ Lista de compras (Excel)</a>
+            <form asp-action="Refresh" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-primary">↻ Actualizar radar</button>
+            </form>
+        </div>
+    </div>
+
+    @if (TempData["Success"] is string success)
+    {
+        <div class="alert alert-success border-0 shadow-sm">
+            @success
+            @if (publishProductId.HasValue)
+            {
+                <a asp-controller="Products" asp-action="PublishToMercadoLibre"
+                   asp-route-id="@publishProductId" asp-route-marketplaceAccountId="@publishAccountId"
+                   class="alert-link ms-1">Preparar publicación →</a>
+            }
+        </div>
+    }
+    @if (TempData["Warning"] is string warning)
+    {
+        <div class="alert alert-warning border-0 shadow-sm">@warning</div>
+    }
+    @if (TempData["Error"] is string error)
+    {
+        <div class="alert alert-danger border-0 shadow-sm">@error</div>
+    }
+
+    @if (!Model.HasRankingHistory)
+    {
+        <div class="alert alert-info border-0 shadow-sm">
+            El radar se alimenta del historial de <a asp-controller="MarketInsights" asp-action="Index" class="alert-link">Más vendidos MX</a>.
+            Consulta las categorías que te interesan (autopartes, accesorios, etc.); cada consulta guarda la captura del día y el sistema
+            captura las 12 categorías más usadas diariamente. Con 7 días de historial la señal de demanda es mucho más confiable.
+        </div>
+    }
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3">
+            <div class="radar-kpi">
+                <div class="radar-kpi-label">Listos para comprar</div>
+                <div class="radar-kpi-value">@Model.ToBuy.Count</div>
+                <div class="radar-kpi-hint">@Model.ShoppingListUnits piezas sugeridas</div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="radar-kpi">
+                <div class="radar-kpi-label">Inversión estimada</div>
+                <div class="radar-kpi-value">@Usd(Model.ShoppingListTotalUsd)</div>
+                <div class="radar-kpi-hint">≈ @Mxn(Model.ShoppingListTotalUsd * Model.UsdToMxnRate) antes de cruce</div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="radar-kpi">
+                <div class="radar-kpi-label">Ganancia esperada</div>
+                <div class="radar-kpi-value radar-profit">@Mxn(Model.ShoppingListExpectedProfitMxn)</div>
+                <div class="radar-kpi-hint">si vendes todo al precio del mercado</div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="radar-kpi">
+                <div class="radar-kpi-label">Volver a comprar</div>
+                <div class="radar-kpi-value">@Model.Restock.Count</div>
+                <div class="radar-kpi-hint">SKU propios que se están agotando</div>
+            </div>
+        </div>
+    </div>
+
+    <ul class="nav nav-pills radar-tabs gap-2 mb-3 flex-wrap">
+        <li class="nav-item"><a class="nav-link @(tab == "buy" ? "active" : "")" asp-action="Index" asp-route-tab="buy">Comprar <span class="badge bg-light text-dark">@Model.ToBuy.Count</span></a></li>
+        <li class="nav-item"><a class="nav-link @(tab == "review" ? "active" : "")" asp-action="Index" asp-route-tab="review">Por revisar <span class="badge bg-light text-dark">@Model.ToReview.Count</span></a></li>
+        <li class="nav-item"><a class="nav-link @(tab == "restock" ? "active" : "")" asp-action="Index" asp-route-tab="restock">Volver a comprar <span class="badge bg-light text-dark">@Model.Restock.Count</span></a></li>
+        <li class="nav-item"><a class="nav-link @(tab == "transit" ? "active" : "")" asp-action="Index" asp-route-tab="transit">En camino <span class="badge bg-light text-dark">@Model.InTransit.Count</span></a></li>
+        <li class="nav-item"><a class="nav-link @(tab == "discarded" ? "active" : "")" asp-action="Index" asp-route-tab="discarded">Descartados</a></li>
+    </ul>
+
+    @* ───────────── COMPRAR ───────────── *@
+    @if (tab == "buy")
+    {
+        @if (Model.ToBuy.Count == 0)
+        {
+            <div class="radar-card radar-empty">
+                <div class="radar-empty-icon">◎</div>
+                <div class="fw-bold">Todavía no hay productos validados</div>
+                <div class="small">Pulsa <strong>Actualizar radar</strong>. Si ya lo hiciste, revisa la pestaña <em>Por revisar</em>: ahí están los que tienen demanda pero sin oferta clara en eBay o sin margen suficiente.</div>
+            </div>
+        }
+        else
+        {
+            <div class="row g-3">
+                @foreach (var c in Model.ToBuy)
+                {
+                    var trend = TrendBadge(c.Trend);
+                    var unitUsd = (c.SourcePriceUsd ?? 0m) + (c.SourceShippingUsd ?? 0m);
+                    <div class="col-md-6 col-xxl-4">
+                        <div class="radar-card">
+                            <div class="d-flex gap-3">
+                                @if (!string.IsNullOrWhiteSpace(c.MarketImageUrl))
+                                {
+                                    <img src="@c.MarketImageUrl" alt="" class="radar-img" loading="lazy" referrerpolicy="no-referrer" />
+                                }
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="radar-title" title="@c.MarketName">@c.MarketName</div>
+                                    <div class="radar-meta mt-1">@c.CategoryName</div>
+                                    <div class="d-flex flex-wrap gap-1 mt-2">
+                                        <span class="radar-pill @trend.Css">@trend.Label</span>
+                                        <span class="radar-pill">Mejor posición #@c.BestPosition</span>
+                                        <span class="radar-pill">@c.DaysInTop de @c.SnapshotDaysObserved días en Top</span>
+                                    </div>
+                                </div>
+                                <div class="radar-score @DemandCss(c.DemandScore)">@c.DemandScore<small>demanda</small></div>
+                            </div>
+
+                            <div class="radar-box">
+                                <div class="radar-box-title">Dónde comprarlo</div>
+                                <div class="d-flex justify-content-between gap-2">
+                                    <a href="@c.SourceUrl" target="_blank" rel="noopener noreferrer" class="text-decoration-none text-truncate" title="@c.SourceTitle">@c.SourceMarketplace: @c.SourceTitle</a>
+                                    <strong class="text-nowrap">@Usd(c.SourcePriceUsd)</strong>
+                                </div>
+                                <div class="d-flex justify-content-between radar-meta mt-1">
+                                    <span>@ConfidenceLabel(c.MatchConfidence) (@c.MatchConfidence%)</span>
+                                    <span>Envío EE.UU.: @(c.SourceShippingUsd is null ? "no informado" : c.SourceShippingUsd == 0 ? "gratis" : Usd(c.SourceShippingUsd))</span>
+                                </div>
+                            </div>
+
+                            <div class="radar-money">
+                                <div><span>Costo en Juárez</span><strong>@Mxn(c.LandedCostMxn)</strong></div>
+                                <div><span>Vender a</span><strong>@Mxn(c.RecommendedListingPriceMxn)</strong></div>
+                                <div><span>Ganas / pieza</span><strong class="radar-profit">@Mxn(c.EstimatedNetProfitMxn)</strong></div>
+                            </div>
+                            <div class="radar-meta text-center">Margen neto @(c.EstimatedMarginPercent?.ToString("0.#") ?? "—")% al precio actual del mercado</div>
+
+                            <div class="radar-actions">
+                                <form asp-action="MarkPurchased" method="post" class="d-flex gap-2 align-items-end">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@c.Id" />
+                                    <div style="width: 80px;">
+                                        <label class="form-label small mb-1" for="qty-@c.Id">Piezas</label>
+                                        <input id="qty-@c.Id" type="number" name="quantity" value="@Math.Max(1, c.SuggestedQuantity)" min="1" max="500" class="form-control form-control-sm" />
+                                    </div>
+                                    <div style="width: 110px;">
+                                        <label class="form-label small mb-1" for="cost-@c.Id">Costo real US$</label>
+                                        <input id="cost-@c.Id" type="text" inputmode="decimal" name="unitCostUsd" value="@unitUsd.ToString("0.00", CultureInfo.InvariantCulture)" class="form-control form-control-sm" />
+                                    </div>
+                                    <button type="submit" class="btn btn-sm btn-success flex-grow-1">✓ Ya lo compré</button>
+                                </form>
+                                <div class="d-flex justify-content-between mt-2">
+                                    @if (!string.IsNullOrWhiteSpace(c.MarketPermalink))
+                                    {
+                                        <a href="@c.MarketPermalink" target="_blank" rel="noopener noreferrer" class="small text-decoration-none">Ver en Mercado Libre ↗</a>
+                                    }
+                                    else
+                                    {
+                                        <span></span>
+                                    }
+                                    <form asp-action="Discard" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@c.Id" />
+                                        <input type="hidden" name="tab" value="buy" />
+                                        <button type="submit" class="btn btn-link btn-sm text-muted p-0">No me interesa</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+
+    @* ───────────── POR REVISAR ───────────── *@
+    @if (tab == "review")
+    {
+        @if (Model.ToReview.Count == 0)
+        {
+            <div class="radar-card radar-empty"><div class="radar-empty-icon">✓</div><div class="fw-bold">Nada pendiente de revisar</div></div>
+        }
+        else
+        {
+            <div class="row g-3">
+                @foreach (var c in Model.ToReview)
+                {
+                    var trend = TrendBadge(c.Trend);
+                    <div class="col-md-6 col-xxl-4">
+                        <div class="radar-card">
+                            <div class="d-flex gap-3">
+                                @if (!string.IsNullOrWhiteSpace(c.MarketImageUrl))
+                                {
+                                    <img src="@c.MarketImageUrl" alt="" class="radar-img" loading="lazy" referrerpolicy="no-referrer" />
+                                }
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="radar-title" title="@c.MarketName">@c.MarketName</div>
+                                    <div class="radar-meta mt-1">@c.CategoryName · se vende a @Mxn(c.MarketPriceMxn)</div>
+                                    <div class="d-flex flex-wrap gap-1 mt-2">
+                                        <span class="radar-pill @trend.Css">@trend.Label</span>
+                                        <span class="radar-pill">#@c.BestPosition · @c.DaysInTop/@c.SnapshotDaysObserved días</span>
+                                    </div>
+                                </div>
+                                <div class="radar-score @DemandCss(c.DemandScore)">@c.DemandScore<small>demanda</small></div>
+                            </div>
+
+                            @if (c.Status == PurchaseCandidateStatus.LowMargin)
+                            {
+                                <div class="radar-box">
+                                    <div class="radar-box-title">Sin margen al precio del mercado</div>
+                                    <div>
+                                        En @c.SourceMarketplace cuesta <strong>@Usd(c.SourcePriceUsd)</strong> (puesto en Juárez @Mxn(c.LandedCostMxn)).
+                                        Vendiendo a @Mxn(c.MarketPriceMxn) ganarías
+                                        <strong class="@((c.EstimatedNetProfitMxn ?? 0) > 0 ? "" : "radar-loss")">@Mxn(c.EstimatedNetProfitMxn)</strong>.
+                                        Para ganar lo mínimo tendrías que vender a <strong>@Mxn(c.RecommendedListingPriceMxn)</strong>.
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(c.SourceUrl))
+                                    {
+                                        <a href="@c.SourceUrl" target="_blank" rel="noopener noreferrer" class="small">Ver oferta usada ↗</a>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="radar-box">
+                                    <div class="radar-box-title">No encontramos la oferta en eBay</div>
+                                    <div>
+                                        Búsqueda usada: <code>@(c.SourceSearchQuery ?? "—")</code>.
+                                        Si lo encuentras tú (eBay, en tienda en El Paso, etc.), pega el link de eBay para calcular el margen.
+                                    </div>
+                                </div>
+                            }
+
+                            <div class="radar-actions">
+                                <form asp-action="SetSource" method="post" class="d-flex gap-2">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@c.Id" />
+                                    <input type="hidden" name="tab" value="review" />
+                                    <input type="text" name="sourceUrl" maxlength="1000" required class="form-control form-control-sm" placeholder="Link o ID del artículo en eBay" />
+                                    <button type="submit" class="btn btn-sm btn-outline-primary text-nowrap">Vincular</button>
+                                </form>
+                                <div class="d-flex justify-content-between mt-2">
+                                    @if (!string.IsNullOrWhiteSpace(c.MarketPermalink))
+                                    {
+                                        <a href="@c.MarketPermalink" target="_blank" rel="noopener noreferrer" class="small text-decoration-none">Ver en Mercado Libre ↗</a>
+                                    }
+                                    else
+                                    {
+                                        <span></span>
+                                    }
+                                    <form asp-action="Discard" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@c.Id" />
+                                        <input type="hidden" name="tab" value="review" />
+                                        <button type="submit" class="btn btn-link btn-sm text-muted p-0">Descartar</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+
+    @* ───────────── VOLVER A COMPRAR ───────────── *@
+    @if (tab == "restock")
+    {
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white border-0 px-4 pt-3">
+                <h3 class="h6 fw-bold mb-1">Lo que ya vendes y se está acabando</h3>
+                <div class="small text-muted">Basado en tus pedidos de los últimos 30 días. La cantidad sugerida cubre unos 21 días de ventas.</div>
+            </div>
+            <div class="table-responsive">
+                <table class="table radar-table mb-0">
+                    <thead>
+                        <tr><th>Producto / SKU</th><th class="text-center">Vendidos 30 días</th><th class="text-center">Stock</th><th class="text-center">Te alcanza para</th><th class="text-center">Comprar</th><th>Fuente</th></tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Restock.Count == 0)
+                        {
+                            <tr><td colspan="6" class="text-center text-muted py-4">Todavía no hay ventas con SKU que requieran resurtido.</td></tr>
+                        }
+                        @foreach (var r in Model.Restock)
+                        {
+                            var urgent = r.DaysOfCover is not null && r.DaysOfCover < 7;
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">@r.Title</div>
+                                    <div class="small text-muted">@r.Sku · precio promedio @Mxn(r.AverageSalePriceMxn)</div>
+                                </td>
+                                <td class="text-center fw-semibold">@r.UnitsSold30Days</td>
+                                <td class="text-center">@r.CurrentStock</td>
+                                <td class="text-center"><span class="radar-pill @(urgent ? "radar-trend-down" : "")">@(r.DaysOfCover is null ? "—" : r.DaysOfCover.Value.ToString("0.#") + " días")</span></td>
+                                <td class="text-center fw-bold">@r.SuggestedQuantity</td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(r.SourceUrl) && Uri.TryCreate(r.SourceUrl, UriKind.Absolute, out _))
+                                    {
+                                        <a href="@r.SourceUrl" target="_blank" rel="noopener noreferrer" class="text-decoration-none">@(r.SourceMarketplace ?? "Fuente") ↗</a>
+                                        @if (r.SourcePrice.HasValue)
+                                        {
+                                            <div class="small text-muted">@(string.Equals(r.SourceCurrency, "MXN", StringComparison.OrdinalIgnoreCase) ? Mxn(r.SourcePrice) : Usd(r.SourcePrice))</div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">Sin fuente registrada</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    @* ───────────── EN CAMINO ───────────── *@
+    @if (tab == "transit")
+    {
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white border-0 px-4 pt-3">
+                <h3 class="h6 fw-bold mb-1">Compras en camino a Juárez</h3>
+                <div class="small text-muted">Al recibirlas, el stock se suma al SKU y queda registrado en el historial de inventario.</div>
+            </div>
+            <div class="table-responsive">
+                <table class="table radar-table mb-0">
+                    <thead>
+                        <tr><th>Producto</th><th class="text-center">Compradas</th><th class="text-end">Costo unitario</th><th>Comprado</th><th>Recibir</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.InTransit.Count == 0)
+                        {
+                            <tr><td colspan="6" class="text-center text-muted py-4">No hay compras pendientes de recibir.</td></tr>
+                        }
+                        @foreach (var c in Model.InTransit)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">@c.MarketName</div>
+                                    @if (!string.IsNullOrWhiteSpace(c.SourceUrl))
+                                    {
+                                        <a href="@c.SourceUrl" target="_blank" rel="noopener noreferrer" class="small text-decoration-none">@c.SourceMarketplace ↗</a>
+                                    }
+                                </td>
+                                <td class="text-center fw-semibold">@c.PurchasedQuantity</td>
+                                <td class="text-end">@Usd(c.PurchasedUnitCostUsd)</td>
+                                <td>@c.PurchasedAt?.ToLocalTime().ToString("dd/MM/yyyy")</td>
+                                <td>
+                                    <form asp-action="MarkReceived" method="post" class="d-flex gap-2">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@c.Id" />
+                                        <input type="number" name="quantity" value="@c.PurchasedQuantity" min="1" max="500" class="form-control form-control-sm" style="width: 80px;" aria-label="Piezas recibidas" />
+                                        <button type="submit" class="btn btn-sm btn-success text-nowrap">Recibido</button>
+                                    </form>
+                                </td>
+                                <td class="text-end">
+                                    @if (c.ProductId.HasValue)
+                                    {
+                                        <a asp-controller="Products" asp-action="PublishToMercadoLibre"
+                                           asp-route-id="@c.ProductId" asp-route-marketplaceAccountId="@c.MarketplaceAccountId"
+                                           class="btn btn-sm btn-outline-primary text-nowrap">Preparar publicación</a>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    @* ───────────── DESCARTADOS ───────────── *@
+    @if (tab == "discarded")
+    {
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="table-responsive">
+                <table class="table radar-table mb-0">
+                    <thead><tr><th>Producto</th><th>Categoría</th><th class="text-end">Precio mercado</th><th></th></tr></thead>
+                    <tbody>
+                        @if (Model.Discarded.Count == 0)
+                        {
+                            <tr><td colspan="4" class="text-center text-muted py-4">No has descartado productos.</td></tr>
+                        }
+                        @foreach (var c in Model.Discarded)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@c.MarketName</td>
+                                <td class="small text-muted">@c.CategoryName</td>
+                                <td class="text-end">@Mxn(c.MarketPriceMxn)</td>
+                                <td class="text-end">
+                                    <form asp-action="Restore" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@c.Id" />
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary">Restaurar</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <div class="small text-muted mt-4">
+        La demanda se calcula con el ranking por categoría de Mercado Libre (posición y constancia), no con unidades vendidas exactas, que Mercado Libre no publica.
+        Verifica siempre que la oferta de eBay sea el mismo producto (número de parte, compatibilidad y condición) antes de comprar.
+        Los costos de cruce usan tus reglas de <a asp-controller="CrossBorder" asp-action="Index">Costeo El Paso ➔ Juárez</a>.
+    </div>
+</div>

@@ -1,48 +1,85 @@
 @model MarketplaceSync.Web.ViewModels.CreateProductFromUrlViewModel
 
 @{
-    ViewData["Title"] = "Agregar producto por link";
+    ViewData["Title"] = "🎯 Cazar Oferta";
 }
 
-<div class="container mt-5">
-    <div class="row justify-content-center">
-        <div class="col-lg-7">
-            <div class="card shadow-sm border-0">
-                <div class="card-body p-4">
-                    <h1 class="fw-bold mb-2">Agregar producto por link</h1>
-                    <p class="text-muted mb-4">
-                        Pega un link de Amazon, eBay o Mercado Libre. El sistema detectará el marketplace y guardará el producto como borrador.
-                    </p>
+<div class="mb-4">
+    <h1 class="fw-bold mb-1">🎯 Cazar Oferta</h1>
+    <p class="text-muted mb-0">Pega el link de un producto en eBay, Amazon o AliExpress para importarlo y publicarlo en Mercado Libre.</p>
+</div>
 
-                    <form asp-action="CreateFromUrl" method="post">
-                        @Html.AntiForgeryToken()
+<div class="card border-0 shadow-sm mb-3" style="max-width:720px;">
+    <div class="card-body p-4">
+        <form asp-action="CreateFromUrl" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="action" id="actionField" value="draft" />
 
-                        <div class="mb-3">
-                            <label asp-for="SourceUrl" class="form-label fw-semibold"></label>
-                            <input asp-for="SourceUrl" class="form-control form-control-lg" placeholder="https://www.amazon.com.mx/dp/..." />
-                            <span asp-validation-for="SourceUrl" class="text-danger"></span>
-                        </div>
-
-                        <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-primary">
-                                Analizar y guardar borrador
-                            </button>
-
-                            <a asp-controller="Products" asp-action="Index" class="btn btn-outline-secondary">
-                                Cancelar
-                            </a>
-                        </div>
-                    </form>
+            <div class="mb-3">
+                <label asp-for="SourceUrl" class="form-label fw-semibold"></label>
+                <div class="input-group input-group-lg">
+                    <input asp-for="SourceUrl"
+                           id="urlInput"
+                           class="form-control form-control-lg"
+                           placeholder="https://www.ebay.com/itm/..." />
+                    <span class="input-group-text bg-white" id="marketplaceBadge">
+                        <span class="badge bg-secondary">❓ Desconocido</span>
+                    </span>
                 </div>
+                <span asp-validation-for="SourceUrl" class="text-danger small"></span>
             </div>
 
-            <div class="alert alert-info mt-4">
-                <strong>Nota:</strong> por ahora se guardará como borrador. Después conectaremos las APIs de Amazon/eBay para llenar título, precio, stock e imágenes automáticamente.
+            <div class="d-flex gap-2 mt-4">
+                <button type="submit"
+                        class="btn btn-outline-secondary"
+                        onclick="document.getElementById('actionField').value='draft'">
+                    Guardar borrador
+                </button>
+                <button type="submit"
+                        class="btn btn-success"
+                        onclick="document.getElementById('actionField').value='enrich'">
+                    ⚡ Enriquecer con IA y Publicar
+                </button>
+                <a asp-controller="Products" asp-action="Index" class="btn btn-link ms-auto text-muted">
+                    Cancelar
+                </a>
             </div>
-        </div>
+        </form>
     </div>
+</div>
+
+<div class="text-muted small" style="max-width:720px;">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-info-circle me-1" viewBox="0 0 16 16">
+        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+        <path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0"/>
+    </svg>
+    Soporta eBay, Amazon y AliExpress. El precio se convierte automáticamente usando tu configuración de costeo El Paso → Juárez.
 </div>
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script>
+        (function () {
+            var input = document.getElementById('urlInput');
+            var badgeContainer = document.getElementById('marketplaceBadge');
+
+            function detectMarketplace(url) {
+                if (!url) return { label: '❓ Desconocido', cls: 'bg-secondary' };
+                var u = url.toLowerCase();
+                if (u.includes('ebay.')) return { label: '🛍️ eBay', cls: 'bg-primary' };
+                if (u.includes('amazon.')) return { label: '📦 Amazon', cls: 'bg-warning text-dark' };
+                if (u.includes('aliexpress.')) return { label: '🛒 AliExpress', cls: 'bg-danger' };
+                if (u.includes('mercadolibre.') || u.includes('mercadolivre.')) return { label: '🟡 Mercado Libre', cls: 'bg-warning text-dark' };
+                return { label: '❓ Desconocido', cls: 'bg-secondary' };
+            }
+
+            function update() {
+                var d = detectMarketplace(input.value);
+                badgeContainer.innerHTML = '<span class="badge ' + d.cls + '">' + d.label + '</span>';
+            }
+
+            input.addEventListener('input', update);
+            update();
+        })();
+    </script>
 }

@@ -95,6 +95,7 @@ private readonly ProductExtractorService _extractor;
     private readonly IMercadoLibreAuthService _mercadoLibreAuthService;
     private readonly IMercadoLibreFeeService _mercadoLibreFeeService;
     private readonly ICrossBorderPricingService _crossBorderPricingService;
+    private readonly IProductAiEnricherService _aiEnricher;
 
 public ProductsController(
     AppDbContext context,
@@ -106,6 +107,7 @@ public ProductsController(
     IMercadoLibreAuthService mercadoLibreAuthService,
     IMercadoLibreFeeService mercadoLibreFeeService,
     ICrossBorderPricingService crossBorderPricingService,
+    IProductAiEnricherService aiEnricher,
     ILogger<ProductsController> logger
 )
 {
@@ -118,6 +120,7 @@ public ProductsController(
     _mercadoLibreAuthService = mercadoLibreAuthService;
     _mercadoLibreFeeService = mercadoLibreFeeService;
     _crossBorderPricingService = crossBorderPricingService;
+    _aiEnricher = aiEnricher;
     _logger = logger;
 }
         
@@ -1503,7 +1506,64 @@ public async Task<IActionResult> CreateFromUrl(CreateProductFromUrlViewModel mod
     _context.Products.Add(product);
     await _context.SaveChangesAsync();
 
+    var actionValue = Request.Form["action"].ToString();
+    if (actionValue == "enrich")
+        return RedirectToAction(nameof(EnrichWithAi), new { id = product.Id });
+
     return RedirectToAction(nameof(Index));
+}
+
+[HttpGet]
+public async Task<IActionResult> EnrichWithAi(int id, CancellationToken ct)
+{
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+
+    var product = await _context.Products
+        .FirstOrDefaultAsync(x => x.Id == id && x.OrganizationId == organizationId, ct);
+
+    if (product == null)
+        return NotFound();
+
+    // Suggest category from MeLi
+    string? categoryId = null;
+    string? categoryName = null;
+    try
+    {
+        var suggestions = await _mercadoLibreCategoryService.SuggestCategoriesAsync(product.Title ?? "");
+        var top = suggestions.FirstOrDefault();
+        categoryId = top?.Category_Id;
+        categoryName = top?.Category_Name;
+    }
+    catch (Exception ex)
+    {
+        _logger.LogWarning(ex, "Could not get MeLi category suggestion for product {Id}", id);
+    }
+
+    var request = new ProductAiEnrichmentRequest(
+        RawTitle: product.Title ?? "",
+        RawDescription: product.Description,
+        RawBrand: product.Brand,
+        RawModel: product.Model,
+        SourcePriceUsd: product.SourcePrice,
+        SourceUrl: product.SourceUrl,
+        SourceMarketplace: product.SourceMarketplace,
+        CategoryId: categoryId ?? "",
+        CategoryName: categoryName,
+        RequiredAttributes: new List<CategoryAttributeSchema>()
+    );
+
+    var result = await _aiEnricher.EnrichProductAsync(request, ct);
+
+    product.Title = result.OptimizedTitle;
+    product.Description = result.CleanDescription;
+    product.Brand = result.Brand ?? product.Brand;
+    product.Model = result.Model ?? product.Model;
+    product.Status = "ReadyToPublish";
+
+    await _context.SaveChangesAsync(ct);
+
+    TempData["SuccessMessage"] = "✅ Producto enriquecido con IA. Revisa el título y descripción antes de publicar.";
+    return RedirectToAction(nameof(PublishToMercadoLibre), new { id = product.Id });
 }
     }
 }

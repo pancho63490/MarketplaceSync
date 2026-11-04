@@ -16,6 +16,9 @@ namespace MarketplaceSync.Web.Services
             if (url.Contains("mercadolibre.", StringComparison.OrdinalIgnoreCase))
                 return "MERCADOLIBRE";
 
+            if (url.Contains("aliexpress.", StringComparison.OrdinalIgnoreCase))
+                return "ALIEXPRESS";
+
             return "UNKNOWN";
         }
 
@@ -28,6 +31,7 @@ namespace MarketplaceSync.Web.Services
                 "AMAZON" => ExtractAmazonAsin(url),
                 "EBAY" => ExtractEbayItemId(url),
                 "MERCADOLIBRE" => ExtractMercadoLibreItemId(url),
+                "ALIEXPRESS" => ExtractAliExpressItemId(url),
                 _ => null
             };
         }
@@ -97,6 +101,29 @@ namespace MarketplaceSync.Web.Services
 
                 if (match.Success)
                     return match.Groups[1].Value.Replace("-", "").ToUpper();
+            }
+
+            return null;
+        }
+
+        private string? ExtractAliExpressItemId(string url)
+        {
+            var patterns = new[]
+            {
+                @"/item/(\d+)\.html",
+                @"/i/(\d+)\.html"
+            };
+
+            foreach (var pattern in patterns)
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(
+                    url,
+                    pattern,
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                );
+
+                if (match.Success)
+                    return match.Groups[1].Value;
             }
 
             return null;

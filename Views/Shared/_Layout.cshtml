@@ -388,6 +388,13 @@
 
             <div class="sidebar-section-title">Frontera & Arbitraje</div>
 
+            <a class="sidebar-link @IsActive("Purchasing")"
+               asp-controller="Purchasing"
+               asp-action="Index">
+                <span class="sidebar-icon">◎</span>
+                <span>Radar de compra</span>
+            </a>
+
             <a class="sidebar-link @IsActive("CrossBorder")"
                asp-controller="CrossBorder"
                asp-action="Index">
@@ -462,6 +469,9 @@
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" asp-controller="MarketInsights" asp-action="Index">Más vendidos MX</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Purchasing" asp-action="Index">Radar de compra</a>
                             </li>
                         }
                         else

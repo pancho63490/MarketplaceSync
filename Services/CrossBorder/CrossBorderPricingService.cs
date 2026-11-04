@@ -92,6 +92,50 @@ public sealed class CrossBorderPricingService : ICrossBorderPricingService
             customMarketplaceFeePercent);
     }
 
+    public CrossBorderProfitEstimate CalculateProfitAtPrice(
+        decimal sourcePriceUsd,
+        decimal listingPriceMxn,
+        CrossBorderSettings settings,
+        decimal? customMarketplaceFeePercent = null)
+    {
+        const decimal freeShippingThresholdMxn = 299m;
+        const decimal fixedFeeBelowThresholdMxn = 25m;
+
+        var exchangeRate = settings.UsdToMxnRate > 0 ? settings.UsdToMxnRate : 20.0000m;
+        var productCostMxn = Math.Round(Math.Max(0m, sourcePriceUsd) * exchangeRate, 2);
+        var importFeeRate = Math.Max(0m, settings.ImportFeePercent / 100m);
+        var importTaxesMxn = Math.Round(
+            (productCostMxn * importFeeRate) + (settings.AdditionalHandlingFeeUsd * exchangeRate),
+            2);
+        var landedCostJuarezMxn = productCostMxn + importTaxesMxn;
+
+        var meliFeePercent = customMarketplaceFeePercent ?? settings.DefaultMarketplaceFeePercent;
+        var marketplaceFeeMxn = Math.Round(listingPriceMxn * (meliFeePercent / 100m), 2);
+        var taxWithholdingMxn = Math.Round(listingPriceMxn * (settings.PlatformTaxWithholdingPercent / 100m), 2);
+        var shippingOrFixedFeeMxn = listingPriceMxn >= freeShippingThresholdMxn
+            ? settings.EstimatedShippingMxn
+            : fixedFeeBelowThresholdMxn;
+
+        var netProfitMxn = Math.Round(
+            listingPriceMxn - landedCostJuarezMxn - shippingOrFixedFeeMxn - marketplaceFeeMxn - taxWithholdingMxn,
+            2);
+        var netMarginPercent = listingPriceMxn > 0
+            ? Math.Round((netProfitMxn / listingPriceMxn) * 100m, 2)
+            : 0m;
+
+        return new CrossBorderProfitEstimate(
+            sourcePriceUsd,
+            exchangeRate,
+            landedCostJuarezMxn,
+            listingPriceMxn,
+            shippingOrFixedFeeMxn,
+            marketplaceFeeMxn,
+            taxWithholdingMxn,
+            netProfitMxn,
+            netMarginPercent,
+            netProfitMxn >= settings.MinProfitAmountMxn);
+    }
+
     private static CrossBorderPricingBreakdown CalculateInternal(
         decimal sourcePriceUsd,
         decimal exchangeRate,

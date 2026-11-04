@@ -8,6 +8,8 @@ using MarketplaceSync.Services.Inventory;
 using MarketplaceSync.Services.MarketInsights;
 using MarketplaceSync.Services.CrossBorder;
 using MarketplaceSync.Services.Ai;
+using MarketplaceSync.Services.Monitor;
+using MarketplaceSync.Services.Purchasing;
 using MarketplaceSync.Web.Services.Tenancy;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Identity;
@@ -95,6 +97,14 @@ builder.Services.ConfigureApplicationCookie(options =>
 });
 
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("ScraperClient", client =>
+{
+    client.DefaultRequestHeaders.TryAddWithoutValidation(
+        "User-Agent",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Language", "en-US,en;q=0.9");
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IOrganizationContext, OrganizationContext>();
@@ -117,6 +127,10 @@ builder.Services.AddSingleton<IMarketOpportunityAnalyzer, MarketOpportunityAnaly
 builder.Services.AddScoped<IMarketRankingHistoryService, MarketRankingHistoryService>();
 builder.Services.AddScoped<ICrossBorderPricingService, CrossBorderPricingService>();
 builder.Services.AddScoped<IProductAiEnricherService, GeminiProductAiEnricherService>();
+
+builder.Services.AddScoped<ISourcePriceMonitorService, SourcePriceMonitorService>();
+builder.Services.AddScoped<SourceSearchQueryBuilder>();
+builder.Services.AddScoped<IPurchaseRadarService, PurchaseRadarService>();
 
 builder.Services.AddScoped<MarketplaceDetectorService>();
 

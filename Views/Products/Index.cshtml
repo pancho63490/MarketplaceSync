@@ -388,6 +388,14 @@
                                         </form>
 
                                         <a asp-controller="Products"
+                                           asp-action="EnrichWithAi"
+                                           asp-route-id="@item.Id"
+                                           class="btn btn-sm btn-warning"
+                                           title="Enriquecer con IA y preparar para publicar">
+                                            ⚡ IA
+                                        </a>
+
+                                        <a asp-controller="Products"
                                            asp-action="PublishToMercadoLibre"
                                            asp-route-id="@item.Id"
                                            class="btn btn-sm btn-success">

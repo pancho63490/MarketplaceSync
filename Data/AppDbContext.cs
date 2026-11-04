@@ -6,6 +6,7 @@ using MarketplaceSync.Web.Models.Orders;
 using MarketplaceSync.Web.Models.Inventory;
 using MarketplaceSync.Web.Models.MarketInsights;
 using MarketplaceSync.Web.Models.CrossBorder;
+using MarketplaceSync.Web.Models.Purchasing;
 namespace MarketplaceSync.Web.Data
 {
     public class AppDbContext : IdentityDbContext
@@ -30,6 +31,7 @@ namespace MarketplaceSync.Web.Data
         public DbSet<MarketRankingSnapshot> MarketRankingSnapshots { get; set; }
         public DbSet<MarketRankingSnapshotItem> MarketRankingSnapshotItems { get; set; }
         public DbSet<CrossBorderSettings> CrossBorderSettings { get; set; }
+        public DbSet<PurchaseCandidate> PurchaseCandidates { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -236,6 +238,54 @@ namespace MarketplaceSync.Web.Data
                     .HasForeignKey(x => x.OrganizationId)
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.HasIndex(x => x.OrganizationId).IsUnique();
+            });
+
+            builder.Entity<PurchaseCandidate>(entity =>
+            {
+                entity.HasOne(x => x.Organization)
+                    .WithMany()
+                    .HasForeignKey(x => x.OrganizationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(x => x.Product)
+                    .WithMany()
+                    .HasForeignKey(x => x.ProductId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(x => x.MarketplaceAccount)
+                    .WithMany()
+                    .HasForeignKey(x => x.MarketplaceAccountId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(x => new { x.OrganizationId, x.MarketExternalId })
+                    .IsUnique()
+                    .HasDatabaseName("IX_PurchaseCandidates_Org_MarketItem");
+                entity.HasIndex(x => new { x.OrganizationId, x.Status, x.DemandScore });
+
+                entity.Property(x => x.CategoryId).HasMaxLength(100);
+                entity.Property(x => x.CategoryName).HasMaxLength(300);
+                entity.Property(x => x.MarketExternalId).HasMaxLength(200);
+                entity.Property(x => x.MarketName).HasMaxLength(500);
+                entity.Property(x => x.MarketBrand).HasMaxLength(200);
+                entity.Property(x => x.MarketModel).HasMaxLength(200);
+                entity.Property(x => x.MarketImageUrl).HasMaxLength(1000);
+                entity.Property(x => x.MarketPermalink).HasMaxLength(1000);
+                entity.Property(x => x.MarketPriceMxn).HasColumnType("numeric(18,2)");
+                entity.Property(x => x.Trend).HasMaxLength(20);
+                entity.Property(x => x.SourceMarketplace).HasMaxLength(50);
+                entity.Property(x => x.SourceProductId).HasMaxLength(200);
+                entity.Property(x => x.SourceUrl).HasMaxLength(1000);
+                entity.Property(x => x.SourceTitle).HasMaxLength(500);
+                entity.Property(x => x.SourceImageUrl).HasMaxLength(1000);
+                entity.Property(x => x.SourceCondition).HasMaxLength(100);
+                entity.Property(x => x.SourcePriceUsd).HasColumnType("numeric(18,2)");
+                entity.Property(x => x.SourceShippingUsd).HasColumnType("numeric(18,2)");
+                entity.Property(x => x.SourceSearchQuery).HasMaxLength(300);
+                entity.Property(x => x.LandedCostMxn).HasColumnType("numeric(18,2)");
+                entity.Property(x => x.EstimatedNetProfitMxn).HasColumnType("numeric(18,2)");
+                entity.Property(x => x.EstimatedMarginPercent).HasColumnType("numeric(8,2)");
+                entity.Property(x => x.RecommendedListingPriceMxn).HasColumnType("numeric(18,2)");
+                entity.Property(x => x.Status).HasMaxLength(30);
+                entity.Property(x => x.PurchasedUnitCostUsd).HasColumnType("numeric(18,2)");
+                entity.Property(x => x.Notes).HasMaxLength(500);
             });
 
             builder.Entity<SalesOrder>(entity =>

@@ -108,6 +108,71 @@ namespace MarketplaceSync.Web.Services
             return MapItemToExtractedProductInfo(item, originalUrl);
         }
 
+        /// <summary>
+        /// Busca artículos nuevos de precio fijo ubicados en EE.UU. para el Radar de compra.
+        /// Devuelve varias coincidencias para que el llamador elija la mejor.
+        /// </summary>
+        public async Task<IReadOnlyList<EbaySearchHit>> SearchItemsAsync(
+            string searchText,
+            int limit = 15,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(searchText))
+                return Array.Empty<EbaySearchHit>();
+
+            var token = await GetApplicationTokenAsync();
+            var client = _httpClientFactory.CreateClient();
+
+            var query = Uri.EscapeDataString(searchText.Trim());
+            var filter = Uri.EscapeDataString(
+                "buyingOptions:{FIXED_PRICE},conditions:{NEW},itemLocationCountry:US,deliveryCountry:US");
+
+            var url =
+                $"https://api.ebay.com/buy/browse/v1/item_summary/search" +
+                $"?q={query}" +
+                $"&limit={Math.Clamp(limit, 1, 50)}" +
+                $"&filter={filter}";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("X-EBAY-C-MARKETPLACE-ID", "EBAY_US");
+            request.Headers.Add("X-EBAY-C-ENDUSERCTX", "contextualLocation=country%3DUS%2Czip%3D79901");
+
+            using var response = await client.SendAsync(request, cancellationToken);
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+                throw new Exception($"Error buscando productos en eBay: {content}");
+
+            var result = JsonSerializer.Deserialize<EbaySearchResponse>(content, JsonOptions());
+
+            return (result?.ItemSummaries ?? new List<EbayItemSummary>())
+                .Select(item =>
+                {
+                    var shipping = item.ShippingOptions?
+                        .Select(x => ParseDecimal(x.ShippingCost?.Value))
+                        .Where(x => x.HasValue)
+                        .Select(x => x!.Value)
+                        .DefaultIfEmpty()
+                        .Min();
+
+                    return new EbaySearchHit(
+                        item.ItemId,
+                        item.LegacyItemId,
+                        item.Title ?? string.Empty,
+                        ParseDecimal(item.Price?.Value),
+                        item.ShippingOptions is { Count: > 0 } ? shipping : null,
+                        item.Price?.Currency,
+                        item.Image?.ImageUrl,
+                        item.ItemWebUrl,
+                        item.Condition,
+                        item.Brand);
+                })
+                .Where(x => x.PriceUsd is > 0 &&
+                            string.Equals(x.Currency ?? "USD", "USD", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
         private async Task<string> GetApplicationTokenAsync()
         {
             var clientId = _configuration["Ebay:ClientId"];
@@ -390,7 +455,31 @@ namespace MarketplaceSync.Web.Services
 
         [JsonPropertyName("estimatedAvailabilities")]
         public List<EbayAvailability>? EstimatedAvailabilities { get; set; }
+
+        [JsonPropertyName("shippingOptions")]
+        public List<EbayShippingOption>? ShippingOptions { get; set; }
     }
+
+    public class EbayShippingOption
+    {
+        [JsonPropertyName("shippingCostType")]
+        public string? ShippingCostType { get; set; }
+
+        [JsonPropertyName("shippingCost")]
+        public EbayPrice? ShippingCost { get; set; }
+    }
+
+    public sealed record EbaySearchHit(
+        string? ItemId,
+        string? LegacyItemId,
+        string Title,
+        decimal? PriceUsd,
+        decimal? ShippingUsd,
+        string? Currency,
+        string? ImageUrl,
+        string? ItemWebUrl,
+        string? Condition,
+        string? Brand);
 
     public class EbayItemResponse
     {
