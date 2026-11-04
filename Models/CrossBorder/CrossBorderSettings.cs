@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 
 namespace MarketplaceSync.Web.Models.CrossBorder;
 
@@ -9,7 +10,9 @@ public class CrossBorderSettings
     public int Id { get; set; }
 
     public Guid OrganizationId { get; set; }
-    public Organization Organization { get; set; } = null!;
+
+    [ValidateNever]
+    public Organization? Organization { get; set; }
 
     /// <summary>
     /// Tipo de cambio USD a MXN (ej. 20.25).

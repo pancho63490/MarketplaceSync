@@ -47,6 +47,9 @@ public sealed class CrossBorderController : Controller
         var organizationId = await _organizationContext
             .RequireCurrentOrganizationIdAsync(cancellationToken);
 
+        ModelState.Remove(nameof(input.Organization));
+        ModelState.Remove(nameof(input.OrganizationId));
+
         if (input.UsdToMxnRate <= 0)
             ModelState.AddModelError(nameof(input.UsdToMxnRate), "El tipo de cambio debe ser mayor a 0.");
 
@@ -58,6 +61,13 @@ public sealed class CrossBorderController : Controller
 
         if (!ModelState.IsValid)
         {
+            var errors = ModelState.Values
+                .SelectMany(v => v.Errors)
+                .Select(e => e.ErrorMessage)
+                .Where(e => !string.IsNullOrWhiteSpace(e))
+                .ToList();
+            _logger.LogWarning("Validation failed saving CrossBorderSettings: {Errors}", string.Join("; ", errors));
+            TempData["Error"] = "Verifica los datos ingresados: " + string.Join(", ", errors);
             ViewBag.SampleCalculation = _pricingService.CalculatePricing(35.00m, input);
             return View(nameof(Index), input);
         }

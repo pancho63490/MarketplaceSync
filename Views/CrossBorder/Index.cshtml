@@ -39,6 +39,7 @@
                 <div class="card-body p-4">
                     <form asp-action="Save" method="post">
                         @Html.AntiForgeryToken()
+                        <div asp-validation-summary="ModelOnly" class="alert alert-danger border-0 shadow-sm mb-3"></div>
                         <input type="hidden" asp-for="Id" />
                         <input type="hidden" asp-for="OrganizationId" />
 
