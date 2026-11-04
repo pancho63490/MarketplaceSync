@@ -68,11 +68,14 @@ public interface IPurchaseRadarService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Vincula manualmente una oferta de eBay (link o ID) cuando la búsqueda automática no acertó.
+    /// Vincula manualmente la oferta donde se va a comprar. Con un link o ID de eBay se leen
+    /// los datos por API; para RockAuto u otras tiendas sin API el precio lo captura el usuario.
     /// </summary>
     Task SetSourceManuallyAsync(
         Guid organizationId,
         long candidateId,
-        string ebayUrlOrId,
+        string sourceUrlOrId,
+        decimal? priceUsd,
+        decimal? shippingUsd,
         CancellationToken cancellationToken = default);
 }

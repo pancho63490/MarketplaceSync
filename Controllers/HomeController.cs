@@ -62,6 +62,15 @@ namespace MarketplaceSync.Web.Controllers
                 x.Stock > 0 && x.Stock <= x.LowStockThreshold);
             ViewBag.OutOfStockVariants = await organizationVariants.CountAsync(x => x.Stock <= 0);
 
+            var candidates = _context.PurchaseCandidates.Where(x => x.OrganizationId == organizationId);
+            ViewBag.RadarToBuy = await candidates.CountAsync(x =>
+                x.Status == MarketplaceSync.Web.Models.Purchasing.PurchaseCandidateStatus.Suggested && x.DemandScore > 0);
+            ViewBag.RadarInTransit = await candidates.CountAsync(x =>
+                x.Status == MarketplaceSync.Web.Models.Purchasing.PurchaseCandidateStatus.Purchased);
+            ViewBag.ReadyProducts = await organizationProducts.CountAsync(x =>
+                x.Status == "ReadyToPublish" &&
+                !x.MarketplacePublications.Any(p => p.Marketplace == "MercadoLibre" && p.IsPublished));
+
             return View(products);
         }
 

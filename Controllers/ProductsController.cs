@@ -1,3 +1,4 @@
+using MarketplaceSync.Web.ViewModels.Products;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -393,8 +394,9 @@ public async Task<IActionResult> RefreshProduct(int id)
         product.SourceMarketplace = extracted.SourceMarketplace ?? product.SourceMarketplace;
         product.SourceProductId = extracted.SourceProductId ?? product.SourceProductId;
 
-        product.Title = extracted.Title ?? product.Title;
-        product.Description = extracted.Description ?? product.Description;
+        // No pisa títulos editados o generados con IA: solo se completa si está vacío.
+        if (string.IsNullOrWhiteSpace(product.Title)) product.Title = extracted.Title;
+        if (string.IsNullOrWhiteSpace(product.Description)) product.Description = extracted.Description;
 
         product.SourcePrice = extracted.SourcePrice ?? product.SourcePrice;
         product.SourceCurrency = extracted.SourceCurrency ?? product.SourceCurrency;
@@ -448,8 +450,9 @@ public async Task<IActionResult> RefreshSource(int id)
         product.SourceMarketplace = extracted.SourceMarketplace ?? product.SourceMarketplace;
         product.SourceProductId = extracted.SourceProductId ?? product.SourceProductId;
 
-        product.Title = extracted.Title ?? product.Title;
-        product.Description = extracted.Description ?? product.Description;
+        // No pisa títulos editados o generados con IA: solo se completa si está vacío.
+        if (string.IsNullOrWhiteSpace(product.Title)) product.Title = extracted.Title;
+        if (string.IsNullOrWhiteSpace(product.Description)) product.Description = extracted.Description;
         product.SourcePrice = extracted.SourcePrice ?? product.SourcePrice;
         product.SourceCurrency = extracted.SourceCurrency ?? product.SourceCurrency;
         product.SourceStock = extracted.SourceStock ?? product.SourceStock;
@@ -536,8 +539,9 @@ public async Task<IActionResult> RefreshAllSourceInfo()
             product.SourceMarketplace = extracted.SourceMarketplace ?? product.SourceMarketplace;
             product.SourceProductId = extracted.SourceProductId ?? product.SourceProductId;
 
-            product.Title = extracted.Title ?? product.Title;
-            product.Description = extracted.Description ?? product.Description;
+            // No pisa títulos editados o generados con IA: solo se completa si está vacío.
+        if (string.IsNullOrWhiteSpace(product.Title)) product.Title = extracted.Title;
+            if (string.IsNullOrWhiteSpace(product.Description)) product.Description = extracted.Description;
             product.SourcePrice = extracted.SourcePrice ?? product.SourcePrice;
             product.SourceCurrency = extracted.SourceCurrency ?? product.SourceCurrency;
             product.SourceStock = extracted.SourceStock ?? product.SourceStock;
@@ -598,7 +602,7 @@ public async Task<IActionResult> DeleteConfirmed(int id)
     _context.Products.Remove(product);
     await _context.SaveChangesAsync();
 
-    TempData["SuccessMessage"] = "Producto eliminado correctamente.";
+    TempData["Success"] = "Producto eliminado correctamente.";
 
     return RedirectToAction(nameof(Index));
 }
@@ -1089,17 +1093,70 @@ public IActionResult CreateFromUrl()
     return View(new CreateProductFromUrlViewModel());
 }
 // GET: /Products
-public async Task<IActionResult> Index()
+public async Task<IActionResult> Index(string? q, ProductStage? stage)
 {
     var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
 
     var products = await _context.Products
+        .AsNoTracking()
         .Where(x => x.OrganizationId == organizationId)
         .Include(x => x.MarketplacePublications)
-        .OrderByDescending(x => x.CreatedAt)
+        .Include(x => x.Variants)
+        .OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)
         .ToListAsync();
 
-    return View(products);
+    var rows = products
+        .Select(product =>
+        {
+            var publication = product.MarketplacePublications
+                .Where(p => p.Marketplace == "MercadoLibre")
+                .OrderByDescending(p => p.IsPublished)
+                .ThenByDescending(p => p.UpdatedAt)
+                .FirstOrDefault();
+            var activeVariants = product.Variants.Where(v => v.IsActive).ToList();
+
+            return new ProductListRow
+            {
+                Product = product,
+                Publication = publication,
+                Stage = ProductListRow.ResolveStage(product, publication),
+                OwnStock = activeVariants.Sum(v => Math.Max(0, v.Stock)),
+                SkuCount = activeVariants.Count
+            };
+        })
+        .ToList();
+
+    var counts = rows
+        .GroupBy(x => x.Stage)
+        .ToDictionary(g => g.Key, g => g.Count());
+
+    var search = q?.Trim();
+    IEnumerable<ProductListRow> filtered = rows;
+    if (!string.IsNullOrWhiteSpace(search))
+    {
+        filtered = filtered.Where(x =>
+            Contains(x.Product.Title, search) ||
+            Contains(x.Product.Brand, search) ||
+            Contains(x.Product.Model, search) ||
+            Contains(x.Product.SourceProductId, search) ||
+            Contains(x.Publication?.ExternalItemId, search) ||
+            x.Product.Variants.Any(v => Contains(v.Sku, search)));
+    }
+
+    if (stage.HasValue)
+        filtered = filtered.Where(x => x.Stage == stage.Value);
+
+    return View(new ProductListViewModel
+    {
+        Rows = filtered.ToList(),
+        Counts = counts,
+        TotalCount = rows.Count,
+        Search = search,
+        Stage = stage
+    });
+
+    static bool Contains(string? value, string term) =>
+        !string.IsNullOrWhiteSpace(value) && value.Contains(term, StringComparison.OrdinalIgnoreCase);
 }
 
 [HttpGet]
@@ -1562,7 +1619,7 @@ public async Task<IActionResult> EnrichWithAi(int id, CancellationToken ct)
 
     await _context.SaveChangesAsync(ct);
 
-    TempData["SuccessMessage"] = "✅ Producto enriquecido con IA. Revisa el título y descripción antes de publicar.";
+    TempData["Success"] = "Producto completado con IA. Revisa el título y descripción antes de publicar.";
     return RedirectToAction(nameof(PublishToMercadoLibre), new { id = product.Id });
 }
     }

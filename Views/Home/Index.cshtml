@@ -2,6 +2,10 @@
 
 @{
     ViewData["Title"] = "Resumen operativo";
+    ViewData["Subtitle"] = "Lo que necesita tu atención hoy.";
+    var radarToBuy = (int)(ViewBag.RadarToBuy ?? 0);
+    var radarInTransit = (int)(ViewBag.RadarInTransit ?? 0);
+    var readyProducts = (int)(ViewBag.ReadyProducts ?? 0);
     var totalProducts = (int)(ViewBag.TotalProducts ?? 0);
     var mercadoLibreProducts = (int)(ViewBag.MercadoLibreProducts ?? 0);
     var draftProducts = (int)(ViewBag.DraftProducts ?? 0);
@@ -26,7 +30,7 @@
         </div>
         <div class="dashboard-welcome-actions">
             <a asp-controller="Orders" asp-action="Index" class="btn btn-app-light">Ver pedidos</a>
-            <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-app-primary">＋ Agregar producto</a>
+            <a asp-controller="Purchasing" asp-action="Index" class="btn btn-app-light">◎ Qué comprar</a>
         </div>
     </section>
 
@@ -79,16 +83,34 @@
                         <span><strong>Stock bajo</strong><small>Variantes bajo el mínimo</small></span>
                         <b>@lowStockVariants</b><em>›</em>
                     </a>
-                    <a asp-controller="Products" asp-action="Index" class="dashboard-task">
+                    <a asp-controller="Products" asp-action="Index" asp-route-stage="Draft" class="dashboard-task">
                         <span class="dashboard-task-icon task-violet">□</span>
-                        <span><strong>Borradores</strong><small>Productos sin publicar</small></span>
+                        <span><strong>Borradores</strong><small>Completa sus datos con IA</small></span>
                         <b>@draftProducts</b><em>›</em>
                     </a>
-                    <a asp-controller="Products" asp-action="Index" class="dashboard-task">
+                    <a asp-controller="Products" asp-action="Index" asp-route-stage="NeedsReview" class="dashboard-task">
                         <span class="dashboard-task-icon task-red">◇</span>
-                        <span><strong>Por revisar</strong><small>Precio, categoría o disponibilidad</small></span>
+                        <span><strong>Por revisar</strong><small>Título, fotos y atributos</small></span>
                         <b>@needsReviewProducts</b><em>›</em>
                     </a>
+                    <a asp-controller="Products" asp-action="Index" asp-route-stage="Ready" class="dashboard-task">
+                        <span class="dashboard-task-icon task-blue">↑</span>
+                        <span><strong>Listos para publicar</strong><small>Solo falta publicarlos</small></span>
+                        <b>@readyProducts</b><em>›</em>
+                    </a>
+                    <a asp-controller="Purchasing" asp-action="Index" class="dashboard-task">
+                        <span class="dashboard-task-icon task-amber">◎</span>
+                        <span><strong>Qué comprar en EE.UU.</strong><small>Con demanda y margen validados</small></span>
+                        <b>@radarToBuy</b><em>›</em>
+                    </a>
+@if (radarInTransit > 0)
+                    {
+                    <a asp-controller="Purchasing" asp-action="Index" asp-route-tab="transit" class="dashboard-task">
+                        <span class="dashboard-task-icon task-violet">⇄</span>
+                        <span><strong>Compras en camino</strong><small>Márcalas al recibirlas en Juárez</small></span>
+                        <b>@radarInTransit</b><em>›</em>
+                    </a>
+                    }
                 </div>
             </section>
         </div>
@@ -117,7 +139,7 @@
         </div>
         @if (!Model.Any())
         {
-            <div class="dashboard-empty"><span>□</span><h4>Tu catálogo está vacío</h4><p>Agrega un producto para comenzar a publicar y controlar inventario.</p><a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-app-primary">Agregar producto</a></div>
+            <div class="dashboard-empty"><span>□</span><h4>Tu catálogo está vacío</h4><p>Agrega un producto para comenzar a publicar y controlar inventario.</p><a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-app-primary">＋ Importar producto</a></div>
         }
         else
         {
@@ -129,12 +151,12 @@
                     {
                         var published = item.MarketplacePublications.Any(p => p.Marketplace == "MercadoLibre" && p.IsPublished);
                         <tr>
-                            <td><div class="dashboard-product"><div class="dashboard-product-image">@if (!string.IsNullOrWhiteSpace(item.ImageUrl)) { <img src="@item.ImageUrl" alt="" /> } else { <span>□</span> }</div><div><strong>@(string.IsNullOrWhiteSpace(item.Title) ? "Sin título" : item.Title)</strong><small>@(item.Brand ?? $"Producto #{item.Id}")</small></div></div></td>
+                            <td><div class="dashboard-product"><div class="dashboard-product-image">@if (!string.IsNullOrWhiteSpace(item.ImageUrl)) { <img src="@item.ImageUrl" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'□'}))" /> } else { <span>□</span> }</div><div><strong>@(string.IsNullOrWhiteSpace(item.Title) ? "Sin título" : item.Title)</strong><small>@(item.Brand ?? $"Producto #{item.Id}")</small></div></div></td>
                             <td><span class="channel-badge">@(item.SourceMarketplace ?? "Manual")</span></td>
                             <td class="fw-semibold">@(item.SourcePrice?.ToString("N2") ?? "—") <small class="text-muted">@item.SourceCurrency</small></td>
                             <td><span class="stock-pill @(item.SourceStock.GetValueOrDefault() > 0 ? "in-stock" : "no-stock")">@(item.SourceStock?.ToString() ?? "N/A")</span></td>
                             <td><span class="publication-status @(published ? "published" : "draft")"><i></i> @(published ? "Publicado" : "Sin publicar")</span></td>
-                            <td class="text-end"><a asp-controller="Products" asp-action="Edit" asp-route-id="@item.Id" class="dashboard-row-action">Administrar</a></td>
+                            <td class="text-end"><a asp-controller="Products" asp-action="Details" asp-route-id="@item.Id" class="dashboard-row-action">Ver</a></td>
                         </tr>
                     }
                     </tbody>

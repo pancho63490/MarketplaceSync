@@ -1,4 +1,5 @@
 @model MarketplaceSync.Web.Models.CrossBorder.CrossBorderSettings
+@{ Context.Items["FlashRendered"] = true; }
 @{
     ViewData["Title"] = "Costeo e Impuestos El Paso ➔ Juárez";
     var sample = ViewBag.SampleCalculation as MarketplaceSync.Services.Interfaces.CrossBorderPricingBreakdown;

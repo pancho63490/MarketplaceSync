@@ -301,12 +301,30 @@ body {
   .user-badge span {
     display: none;
   }
+
+  /* En celular la barra superior queda en una sola línea: título a la izquierda, cuenta a la derecha. */
+  .topbar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .topbar-actions {
+    width: auto;
+    gap: 6px;
+  }
+
+  .topbar-title {
+    font-size: 1rem;
+    margin: 0;
+  }
 }
 
 @media (max-width: 575px) {
   .topbar-actions {
-    width: 100%;
-    justify-content: space-between;
+    width: auto;
+    justify-content: flex-end;
   }
 }
 

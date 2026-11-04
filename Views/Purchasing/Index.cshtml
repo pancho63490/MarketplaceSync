@@ -1,6 +1,7 @@
 @model MarketplaceSync.Web.ViewModels.Purchasing.PurchasingIndexViewModel
 @using System.Globalization
 @using MarketplaceSync.Web.Models.Purchasing
+@{ Context.Items["FlashRendered"] = true; }
 
 @functions {
     private static readonly CultureInfo Mx = CultureInfo.GetCultureInfo("es-MX");
@@ -52,7 +53,7 @@
     .radar-img { width: 72px; height: 72px; object-fit: contain; border-radius: 10px; background: #f8fafc; flex-shrink: 0; }
     .radar-title { font-weight: 700; font-size: .95rem; line-height: 1.25; color: #0f172a; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .radar-meta { font-size: .78rem; color: #64748b; }
-    .radar-score { min-width: 54px; text-align: center; border-radius: 12px; padding: .35rem .5rem; font-weight: 800; font-size: 1.1rem; line-height: 1; }
+    .radar-score { align-self: flex-start; min-width: 54px; text-align: center; border-radius: 12px; padding: .35rem .5rem; font-weight: 800; font-size: 1.1rem; line-height: 1; }
     .radar-score small { display: block; font-size: .62rem; font-weight: 600; margin-top: .2rem; }
     .radar-score-high { background: #dcfce7; color: #166534; }
     .radar-score-mid { background: #fef9c3; color: #854d0e; }
@@ -312,19 +313,31 @@
                                 <div class="radar-box">
                                     <div class="radar-box-title">No encontramos la oferta en eBay</div>
                                     <div>
-                                        Búsqueda usada: <code>@(c.SourceSearchQuery ?? "—")</code>.
-                                        Si lo encuentras tú (eBay, en tienda en El Paso, etc.), pega el link de eBay para calcular el margen.
+                                        Buscamos: <code>@(c.SourceSearchQuery ?? "—")</code>.
+                                        Si lo encuentras en otra tienda (RockAuto, Amazon, una tienda en El Paso), pega el link y el precio para calcular el margen.
                                     </div>
                                 </div>
                             }
 
                             <div class="radar-actions">
-                                <form asp-action="SetSource" method="post" class="d-flex gap-2">
+                                <form asp-action="SetSource" method="post">
                                     @Html.AntiForgeryToken()
                                     <input type="hidden" name="id" value="@c.Id" />
                                     <input type="hidden" name="tab" value="review" />
-                                    <input type="text" name="sourceUrl" maxlength="1000" required class="form-control form-control-sm" placeholder="Link o ID del artículo en eBay" />
-                                    <button type="submit" class="btn btn-sm btn-outline-primary text-nowrap">Vincular</button>
+                                    <label class="form-label small mb-1" for="src-@c.Id">¿Dónde lo vas a comprar?</label>
+                                    <input id="src-@c.Id" type="text" name="sourceUrl" maxlength="1000" required class="form-control form-control-sm mb-2" placeholder="Link de eBay, RockAuto, Amazon…" />
+                                    <div class="d-flex gap-2 align-items-end">
+                                        <div class="flex-fill">
+                                            <label class="form-label small mb-1" for="price-@c.Id">Precio US$</label>
+                                            <input id="price-@c.Id" type="text" inputmode="decimal" name="priceUsd" class="form-control form-control-sm" placeholder="eBay: auto" />
+                                        </div>
+                                        <div class="flex-fill">
+                                            <label class="form-label small mb-1" for="ship-@c.Id">Envío US$</label>
+                                            <input id="ship-@c.Id" type="text" inputmode="decimal" name="shippingUsd" class="form-control form-control-sm" placeholder="0.00" />
+                                        </div>
+                                        <button type="submit" class="btn btn-sm btn-primary text-nowrap">Calcular margen</button>
+                                    </div>
+                                    <div class="form-text">En eBay el precio se lee solo. En RockAuto y otras tiendas escríbelo tú.</div>
                                 </form>
                                 <div class="d-flex justify-content-between mt-2">
                                     @if (!string.IsNullOrWhiteSpace(c.MarketPermalink))

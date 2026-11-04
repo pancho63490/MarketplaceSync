@@ -1,4 +1,5 @@
 @model MarketplaceSync.Web.ViewModels.Orders.OrdersIndexViewModel
+@{ Context.Items["FlashRendered"] = true; }
 
 @functions {
     private static string StatusLabel(string status) => status.ToLowerInvariant() switch

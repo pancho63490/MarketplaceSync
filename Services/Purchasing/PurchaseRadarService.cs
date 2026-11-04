@@ -495,29 +495,59 @@ public sealed class PurchaseRadarService : IPurchaseRadarService
     public async Task SetSourceManuallyAsync(
         Guid organizationId,
         long candidateId,
-        string ebayUrlOrId,
+        string sourceUrlOrId,
+        decimal? priceUsd,
+        decimal? shippingUsd,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(ebayUrlOrId) || ebayUrlOrId.Length > 1000)
-            throw new ArgumentException("Pega el link o el ID del artículo de eBay.");
+        sourceUrlOrId = sourceUrlOrId?.Trim() ?? string.Empty;
+        if (sourceUrlOrId.Length == 0 || sourceUrlOrId.Length > 1000)
+            throw new ArgumentException("Pega el link del producto en la tienda donde lo vas a comprar.");
+        if (priceUsd is < 0 or > 100000 || shippingUsd is < 0 or > 10000)
+            throw new ArgumentException("El precio o el envío no son válidos.");
 
         var candidate = await RequireCandidateAsync(organizationId, candidateId, cancellationToken);
-        var item = await _ebayApiService.ExtractFromUrlOrSearchAsync(ebayUrlOrId.Trim());
+        var isUrl = Uri.TryCreate(sourceUrlOrId, UriKind.Absolute, out var uri) &&
+                    (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
+        var isEbay = !isUrl || uri!.Host.Contains("ebay.", StringComparison.OrdinalIgnoreCase);
 
-        if (item.SourcePrice is not > 0)
-            throw new InvalidOperationException("eBay no devolvió un precio para ese artículo.");
+        if (isEbay && priceUsd is null)
+        {
+            // eBay tiene API oficial: se lee precio, título e imagen automáticamente.
+            var item = await _ebayApiService.ExtractFromUrlOrSearchAsync(sourceUrlOrId);
+            if (item.SourcePrice is not > 0)
+                throw new InvalidOperationException("eBay no devolvió un precio para ese artículo.");
 
-        ApplySource(candidate, new EbaySearchHit(
-            item.SourceProductId,
-            item.SourceProductId,
-            item.Title ?? candidate.MarketName,
-            item.SourcePrice,
-            null,
-            item.SourceCurrency,
-            item.ImageUrl,
-            item.SourceUrl,
-            item.Condition,
-            item.Brand), 100);
+            ApplySource(candidate, new EbaySearchHit(
+                item.SourceProductId,
+                item.SourceProductId,
+                item.Title ?? candidate.MarketName,
+                item.SourcePrice,
+                shippingUsd,
+                item.SourceCurrency,
+                item.ImageUrl,
+                item.SourceUrl,
+                item.Condition,
+                item.Brand), 100);
+        }
+        else
+        {
+            // RockAuto, Amazon, tiendas en El Paso, etc.: sin API pública, el precio lo captura el usuario.
+            if (!isUrl)
+                throw new ArgumentException("Pega el link completo (https://...) del producto.");
+            if (priceUsd is not > 0)
+                throw new ArgumentException("Escribe el precio en dólares: esta tienda no tiene una API para leerlo automáticamente.");
+
+            candidate.SourceMarketplace = SourceNameFromHost(uri!.Host);
+            candidate.SourceProductId = null;
+            candidate.SourceUrl = Truncate(uri.ToString(), 1000);
+            candidate.SourceTitle = Truncate(candidate.MarketName, 500);
+            candidate.SourceImageUrl = null;
+            candidate.SourceCondition = "Nuevo";
+            candidate.SourcePriceUsd = Math.Round(priceUsd.Value, 2);
+            candidate.SourceShippingUsd = shippingUsd is null ? null : Math.Round(shippingUsd.Value, 2);
+            candidate.MatchConfidence = 100;
+        }
 
         candidate.SourceSearchQuery = "Vinculado manualmente";
         candidate.LastSourceSearchAt = DateTime.UtcNow;
@@ -530,6 +560,26 @@ public sealed class PurchaseRadarService : IPurchaseRadarService
 
         candidate.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private static string SourceNameFromHost(string host)
+    {
+        host = host.ToLowerInvariant();
+        if (host.StartsWith("www.", StringComparison.Ordinal))
+            host = host[4..];
+
+        return host switch
+        {
+            _ when host.Contains("rockauto.") => "RockAuto",
+            _ when host.Contains("amazon.") => "Amazon",
+            _ when host.Contains("aliexpress.") => "AliExpress",
+            _ when host.Contains("walmart.") => "Walmart",
+            _ when host.Contains("autozone.") => "AutoZone",
+            _ when host.Contains("oreillyauto.") => "O'Reilly",
+            _ when host.Contains("advanceautoparts.") => "Advance Auto Parts",
+            _ when host.Contains("summitracing.") => "Summit Racing",
+            _ => host.Length > 50 ? host[..50] : host
+        };
     }
 
     // ─────────────────────────────────────────────────────────────

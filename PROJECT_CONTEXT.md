@@ -69,6 +69,11 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 
 - La IA usa la API de Claude (Anthropic) en lugar de Gemini: `ClaudeClient` es compartido por `ClaudeProductAiEnricherService` y `SourceSearchQueryBuilder`. Se configura con `Anthropic:ApiKey` (o `ANTHROPIC_API_KEY`) y `Anthropic:Model` (predeterminado `claude-haiku-5-5`). Ante cualquier error devuelve null y cada servicio usa su respaldo por reglas.
 - El menú lateral y el de celular se generan de una sola lista en `_Layout.cshtml`, agrupada en Principal, Vender (Pedidos, Productos, Inventario), Comprar en EE.UU. (Radar de compra, Más vendidos MX, Costeo) y Configuración (Cuentas de Mercado Libre). Se quitó "Importar por enlace" del menú porque repetía el botón "Importar producto" de la barra superior; el menú de celular antes era una copia manual a la que le faltaban secciones.
+- **UX (nov 2026):** los avisos de éxito/error se muestran en todas las pantallas desde `_Layout` (`Views/Shared/_Flash.cshtml`); las vistas que dibujan los suyos marcan `Context.Items["FlashRendered"]`. Antes Productos y el Dashboard no mostraban ningún aviso tras una acción.
+- La lista de Productos se rehízo: búsqueda (título, marca, parte, SKU, ID de ML), filtros por estado en español (Borrador, Por revisar, Listo, Publicado, Pausado, Sin stock en fuente), stock propio por SKU, una acción principal según el estado y el resto en un menú "⋯". El subtítulo de la barra superior ahora es por pantalla (`ViewData["Subtitle"]`).
+- Actualizar desde la fuente ya no sobrescribe título ni descripción (solo los completa si están vacíos), para no perder ediciones ni el texto generado con IA.
+- El Dashboard agrega "Listos para publicar", "Qué comprar en EE.UU." y "Compras en camino", con enlaces filtrados. Más vendidos MX acepta texto libre ("bomba de agua") y lo convierte en categoría con `domain_discovery`; muestra nombres de categoría en lugar de IDs.
+- **RockAuto:** no tiene API pública y su `robots.txt` bloquea el acceso automatizado, así que no se integra por scraping. En el Radar, "Por revisar" permite pegar un link de RockAuto (u otra tienda) con el precio en USD capturado a mano; eBay sigue leyéndose por API.
 ## Verificación pendiente
 
 - `dotnet build --no-restore` pasó con 0 errores y sin advertencias.

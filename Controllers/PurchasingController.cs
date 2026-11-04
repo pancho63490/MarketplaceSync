@@ -205,21 +205,33 @@ public sealed class PurchasingController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SetSource(long id, string sourceUrl, string? tab, CancellationToken cancellationToken)
+    public async Task<IActionResult> SetSource(
+        long id,
+        string sourceUrl,
+        string? priceUsd,
+        string? shippingUsd,
+        string? tab,
+        CancellationToken cancellationToken)
     {
         var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
 
+        if (!TryParseUsd(priceUsd, out var price) || !TryParseUsd(shippingUsd, out var shipping))
+        {
+            TempData["Error"] = "El precio y el envío deben ser números, por ejemplo 38.50.";
+            return RedirectToAction(nameof(Index), new { tab });
+        }
+
         try
         {
-            await _radarService.SetSourceManuallyAsync(organizationId, id, sourceUrl, cancellationToken);
-            TempData["Success"] = "Oferta de eBay vinculada y margen recalculado.";
+            await _radarService.SetSourceManuallyAsync(organizationId, id, sourceUrl, price, shipping, cancellationToken);
+            TempData["Success"] = "Oferta vinculada y margen recalculado.";
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             _logger.LogInformation(ex, "Manual source link failed for candidate {Id}.", id);
             TempData["Error"] = ex is ArgumentException or InvalidOperationException or KeyNotFoundException
                 ? ex.Message
-                : "No fue posible leer ese artículo de eBay. Verifica el link.";
+                : "No fue posible leer ese artículo. Verifica el link o escribe el precio manualmente.";
         }
 
         return RedirectToAction(nameof(Index), new { tab });
@@ -333,6 +345,21 @@ public sealed class PurchasingController : Controller
             candidate.LastSourceSearchAt = null;
         candidate.UpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    private static bool TryParseUsd(string? value, out decimal? result)
+    {
+        result = null;
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+
+        var clean = value.Replace("$", string.Empty).Replace("US", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace(",", ".").Trim();
+        if (!decimal.TryParse(clean, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed))
+            return false;
+
+        result = parsed;
         return true;
     }
 

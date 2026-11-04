@@ -25,6 +25,7 @@ public sealed class MarketInsightsController : Controller
     private readonly IMercadoLibreBestSellerService _bestSellerService;
     private readonly IMarketOpportunityAnalyzer _opportunityAnalyzer;
     private readonly IMarketRankingHistoryService _rankingHistoryService;
+    private readonly MarketplaceSync.Web.Services.MercadoLibreCategoryService _categoryService;
     private readonly ILogger<MarketInsightsController> _logger;
 
     public MarketInsightsController(
@@ -34,6 +35,7 @@ public sealed class MarketInsightsController : Controller
         IMercadoLibreBestSellerService bestSellerService,
         IMarketOpportunityAnalyzer opportunityAnalyzer,
         IMarketRankingHistoryService rankingHistoryService,
+        MarketplaceSync.Web.Services.MercadoLibreCategoryService categoryService,
         ILogger<MarketInsightsController> logger)
     {
         _dbContext = dbContext;
@@ -42,6 +44,7 @@ public sealed class MarketInsightsController : Controller
         _bestSellerService = bestSellerService;
         _opportunityAnalyzer = opportunityAnalyzer;
         _rankingHistoryService = rankingHistoryService;
+        _categoryService = categoryService;
         _logger = logger;
     }
 
@@ -83,9 +86,53 @@ public sealed class MarketInsightsController : Controller
             .ThenBy(x => x.CategoryId)
             .Take(12)
             .ToListAsync(cancellationToken);
+        // Nombres legibles de las categorías ya consultadas (el historial guarda el nombre).
+        var categoryNames = await _dbContext.MarketRankingSnapshots
+            .AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId)
+            .GroupBy(x => x.CategoryId)
+            .Select(g => new { CategoryId = g.Key, Name = g.OrderByDescending(x => x.CapturedAt).Select(x => x.CategoryName).First() })
+            .ToDictionaryAsync(x => x.CategoryId, x => x.Name, StringComparer.OrdinalIgnoreCase, cancellationToken);
+
         var savedCategories = savedCategoryCounts
-            .Select(x => new SavedMarketplaceCategory(x.CategoryId, x.ProductCount))
+            .Select(x => new SavedMarketplaceCategory(x.CategoryId, x.ProductCount, categoryNames.GetValueOrDefault(x.CategoryId)))
             .ToList();
+
+        // Categorías consultadas antes aunque no tengan productos propios.
+        foreach (var (id, name) in categoryNames)
+        {
+            if (savedCategories.Count >= 16)
+                break;
+            if (savedCategories.All(x => !string.Equals(x.CategoryId, id, StringComparison.OrdinalIgnoreCase)))
+                savedCategories.Add(new SavedMarketplaceCategory(id, 0, name));
+        }
+
+        // El campo acepta un ID MLM o texto libre ("bomba de agua"): el texto se convierte en categoría.
+        string? searchText = null;
+        var categorySuggestions = new List<CategorySearchSuggestion>();
+        var typed = categoryId?.Trim();
+        if (!string.IsNullOrWhiteSpace(typed) && !MexicoCategoryPattern.IsMatch(typed))
+        {
+            searchText = typed.Length > 120 ? typed[..120] : typed;
+            try
+            {
+                var suggestions = await _categoryService.SuggestCategoriesAsync(searchText);
+                categorySuggestions = suggestions
+                    .Where(x => !string.IsNullOrWhiteSpace(x.Category_Id) && MexicoCategoryPattern.IsMatch(x.Category_Id!))
+                    .DistinctBy(x => x.Category_Id)
+                    .Select(x => new CategorySearchSuggestion(
+                        x.Category_Id!,
+                        x.Category_Name ?? x.Domain_Name ?? x.Category_Id!))
+                    .Take(6)
+                    .ToList();
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogInformation(exception, "Category search failed for '{Text}'.", searchText);
+            }
+
+            categoryId = categorySuggestions.FirstOrDefault()?.CategoryId;
+        }
 
         var automaticallySelected = string.IsNullOrWhiteSpace(categoryId) && savedCategories.Count > 0;
         categoryId = automaticallySelected
@@ -106,7 +153,9 @@ public sealed class MarketInsightsController : Controller
         }
         else if (string.IsNullOrWhiteSpace(categoryId))
         {
-            errorMessage = "Agrega una categoría MLM para consultar los productos más vendidos.";
+            errorMessage = searchText is null
+                ? null
+                : $"No encontramos una categoría de Mercado Libre para \"{searchText}\". Prueba con otras palabras, por ejemplo el nombre de la pieza.";
         }
         else if (!MexicoCategoryPattern.IsMatch(categoryId))
         {
@@ -192,6 +241,8 @@ public sealed class MarketInsightsController : Controller
             CategoryId = categoryId,
             MarketplaceAccountId = marketplaceAccountId,
             CategorySelectedAutomatically = automaticallySelected,
+            SearchText = searchText,
+            CategorySuggestions = categorySuggestions,
             Accounts = accounts,
             SavedCategories = savedCategories,
             Ranking = ranking,

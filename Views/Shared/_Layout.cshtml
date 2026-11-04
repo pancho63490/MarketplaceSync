@@ -428,9 +428,10 @@
                 <h1 class="topbar-title">
                     @(ViewData["Title"] ?? "Dashboard")
                 </h1>
-                <div class="topbar-subtitle">
-                    Administra productos, conexiones y publicaciones desde un solo panel.
-                </div>
+                @if (ViewData["Subtitle"] is string subtitle && !string.IsNullOrWhiteSpace(subtitle))
+                {
+                    <div class="topbar-subtitle">@subtitle</div>
+                }
             </div>
 
             <div class="topbar-actions">
@@ -475,7 +476,15 @@
         </header>
 
         <main class="content-wrap">
-            @RenderBody()
+            @{
+                // El cuerpo se dibuja antes que el layout: si la vista ya mostró sus avisos, no se repiten.
+                var pageBody = RenderBody();
+            }
+            @if (Context.Items["FlashRendered"] is not true)
+            {
+                <partial name="_Flash" />
+            }
+            @pageBody
         </main>
 
         <footer class="app-footer">

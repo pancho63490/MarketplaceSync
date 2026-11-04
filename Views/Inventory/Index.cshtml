@@ -1,4 +1,5 @@
 @model MarketplaceSync.Web.ViewModels.Inventory.InventoryIndexViewModel
+@{ Context.Items["FlashRendered"] = true; }
 
 @functions {
     private static string MovementLabel(string type) => type switch
