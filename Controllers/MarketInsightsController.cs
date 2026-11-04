@@ -213,7 +213,17 @@ public sealed class MarketInsightsController : Controller
                     exception,
                     "Could not retrieve Mercado Libre best sellers for category {CategoryId}.",
                     categoryId);
-                errorMessage = "No fue posible obtener el ranking. Verifica que sea una categoría final de Mercado Libre y vuelve a intentar.";
+                errorMessage = exception switch
+                {
+                    InvalidOperationException => "La conexión con tu cuenta de Mercado Libre expiró o no está activa. Vuelve a conectarla en Cuentas de Mercado Libre.",
+                    HttpRequestException { StatusCode: System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden } =>
+                        "Mercado Libre rechazó la conexión (permiso o sesión vencida). Desconecta y vuelve a conectar tu cuenta en Cuentas de Mercado Libre.",
+                    HttpRequestException { StatusCode: System.Net.HttpStatusCode.NotFound } =>
+                        "Mercado Libre no publica ranking para esa categoría. Prueba con otras palabras o con una categoría más general (por ejemplo \"refacciones\" o \"accesorios para vehículos\").",
+                    HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests } =>
+                        "Mercado Libre limitó las consultas por unos minutos. Intenta de nuevo en un momento.",
+                    _ => $"No fue posible obtener el ranking ({exception.Message}). Intenta de nuevo en unos minutos."
+                };
             }
         }
 

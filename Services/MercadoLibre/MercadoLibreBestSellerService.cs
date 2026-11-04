@@ -35,44 +35,76 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
             return cached;
 
         var client = _httpClientFactory.CreateClient();
-        var categoryTask = GetJsonAsync(
+
+        // La categoría trae su ruta (path_from_root). Mercado Libre no publica ranking para todas
+        // las subcategorías: si la elegida no tiene, se prueba con la categoría superior.
+        using var category = await GetJsonAsync(
             client,
             $"https://api.mercadolibre.com/categories/{Uri.EscapeDataString(categoryId)}",
             accessToken,
             cancellationToken);
 
-        JsonDocument highlights;
-        try
+        var candidates = new List<(string Id, string Name)>
         {
-            highlights = await GetJsonAsync(
-                client,
-                $"https://api.mercadolibre.com/highlights/MLM/category/{Uri.EscapeDataString(categoryId)}",
-                accessToken,
-                cancellationToken);
+            (categoryId, ReadString(category.RootElement, "name") ?? categoryId)
+        };
+        if (category.RootElement.TryGetProperty("path_from_root", out var path) && path.ValueKind == JsonValueKind.Array)
+        {
+            var parents = path.EnumerateArray()
+                .Select(x => (Id: ReadString(x, "id") ?? string.Empty, Name: ReadString(x, "name") ?? string.Empty))
+                .Where(x => x.Id.Length > 0 && !x.Id.Equals(categoryId, StringComparison.OrdinalIgnoreCase))
+                .Reverse()
+                .Take(3);
+            candidates.AddRange(parents);
         }
-        catch
+
+        JsonDocument? highlights = null;
+        (string Id, string Name) used = candidates[0];
+        HttpRequestException? lastError = null;
+        foreach (var candidate in candidates)
         {
-            _ = categoryTask.ContinueWith(t =>
+            try
             {
-                if (t.IsCompletedSuccessfully)
-                    t.Result.Dispose();
-            }, TaskScheduler.Default);
-            throw;
+                var document = await GetJsonAsync(
+                    client,
+                    $"https://api.mercadolibre.com/highlights/MLM/category/{Uri.EscapeDataString(candidate.Id)}",
+                    accessToken,
+                    cancellationToken);
+                if (document.RootElement.TryGetProperty("content", out var probe) &&
+                    probe.ValueKind == JsonValueKind.Array && probe.GetArrayLength() > 0)
+                {
+                    highlights = document;
+                    used = candidate;
+                    break;
+                }
+
+                document.Dispose();
+            }
+            catch (HttpRequestException exception) when (exception.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.BadRequest)
+            {
+                // Sin ranking en esta categoría: probar la superior.
+                lastError = exception;
+            }
+        }
+
+        if (highlights is null)
+        {
+            throw lastError ?? new HttpRequestException(
+                "Mercado Libre no tiene ranking de más vendidos para esta categoría ni para sus categorías superiores.",
+                null,
+                System.Net.HttpStatusCode.NotFound);
+        }
+
+        if (!used.Id.Equals(categoryId, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation(
+                "Category {CategoryId} has no best-seller ranking; using parent {ParentId}.",
+                categoryId, used.Id);
         }
 
         using (highlights)
         {
-            if (!highlights.RootElement.TryGetProperty("content", out var content) ||
-                content.ValueKind != JsonValueKind.Array)
-            {
-                _ = categoryTask.ContinueWith(t =>
-                {
-                    if (t.IsCompletedSuccessfully)
-                        t.Result.Dispose();
-                }, TaskScheduler.Default);
-                throw new InvalidOperationException("Mercado Libre no devolvió un ranking para esta categoría.");
-            }
-
+            var content = highlights.RootElement.GetProperty("content");
             var rankedEntries = content.EnumerateArray()
                 .Take(limit)
                 .Select((entry, index) => new
@@ -86,12 +118,13 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
                 .ToArray();
             var resolved = await Task.WhenAll(rankedEntries.Select(entry =>
                 ResolveEntryAsync(client, entry.Id, entry.Type, entry.Position, accessToken, cancellationToken)));
-            using var category = await categoryTask;
-            var categoryName = ReadString(category.RootElement, "name") ?? categoryId;
+
             var result = new MercadoLibreBestSellerResult(
-                categoryId,
-                categoryName,
-                ReadInt32(category.RootElement, "total_items_in_this_category"),
+                used.Id,
+                used.Name,
+                used.Id.Equals(categoryId, StringComparison.OrdinalIgnoreCase)
+                    ? ReadInt32(category.RootElement, "total_items_in_this_category")
+                    : null,
                 DateTime.UtcNow,
                 resolved.OrderBy(x => x.Position).ToArray());
 
@@ -262,7 +295,9 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
         if (!response.IsSuccessStatusCode)
         {
             throw new HttpRequestException(
-                $"Mercado Libre respondió HTTP {(int)response.StatusCode} al consultar el ranking.");
+                $"Mercado Libre respondió HTTP {(int)response.StatusCode} al consultar el ranking.",
+                null,
+                response.StatusCode);
         }
 
         return JsonDocument.Parse(content);

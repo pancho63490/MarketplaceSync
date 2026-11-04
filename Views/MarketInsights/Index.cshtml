@@ -109,6 +109,13 @@
         <div class="alert alert-danger border-0 shadow-sm">@actionError</div>
     }
 
+    @if (Model.Ranking is not null && !string.Equals(Model.Ranking.CategoryId, Model.CategoryId, StringComparison.OrdinalIgnoreCase))
+    {
+        <div class="alert alert-info">
+            Mercado Libre no publica ranking para esa subcategoría, así que te mostramos el de la categoría superior: <strong>@Model.Ranking.CategoryName</strong>.
+        </div>
+    }
+
     @if (Model.Ranking is not null)
     {
         var analysis = Model.OpportunityAnalysis;
