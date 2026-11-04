@@ -57,7 +57,7 @@
             <a asp-controller="Products"
                asp-action="PublishToMercadoLibre"
                asp-route-id="@Model.Id"
-               class="btn btn-success">
+               class="btn btn-outline-secondary">
                 Publicar en Mercado Libre
             </a>
         </div>
@@ -87,24 +87,24 @@
                     }
 
                     <div class="mb-2">
-                        <span class="text-muted small">Marketplace origen</span>
+                        <span class="text-muted small">Tienda de origen</span>
                         <div class="fw-semibold">
                             @(string.IsNullOrWhiteSpace(Model.SourceMarketplace) ? "N/A" : Model.SourceMarketplace)
                         </div>
                     </div>
 
                     <div class="mb-2">
-                        <span class="text-muted small">Source ID</span>
+                        <span class="text-muted small">ID en la tienda</span>
                         <div class="fw-semibold">
                             @(string.IsNullOrWhiteSpace(Model.SourceProductId) ? "N/A" : Model.SourceProductId)
                         </div>
                     </div>
 
                     <div class="mb-2">
-                        <span class="text-muted small">Estado interno</span>
+                        <span class="text-muted small">Estado</span>
                         <div>
                             <span class="badge bg-secondary">
-                                @(string.IsNullOrWhiteSpace(Model.Status) ? "N/A" : Model.Status)
+                                @(Model.Status switch { "ReadyToPublish" => "Listo para publicar", "NeedsReview" => "Por revisar", "OutOfStock" => "Sin stock en la fuente", "Archived" => "Archivado", _ => "Borrador" })
                             </span>
                         </div>
                     </div>
@@ -168,7 +168,7 @@
                     <a asp-controller="Products"
                        asp-action="PublishToMercadoLibre"
                        asp-route-id="@Model.Id"
-                       class="btn btn-success w-100">
+                       class="btn btn-outline-secondary w-100">
                         Publicar en Mercado Libre
                     </a>
                 </div>
@@ -263,11 +263,8 @@
                             <span asp-validation-for="SourceAvailabilityText" class="text-danger small"></span>
                         </div>
 
-                        <div class="mt-3">
-                            <label asp-for="SourceStatus" class="form-label fw-semibold">Status origen</label>
-                            <input asp-for="SourceStatus" class="form-control" />
-                            <span asp-validation-for="SourceStatus" class="text-danger small"></span>
-                        </div>
+                        @* Dato interno del extractor: se conserva sin mostrarlo. *@
+                        <input type="hidden" asp-for="SourceStatus" />
 
                     </div>
                 </div>
@@ -316,7 +313,7 @@
 
    asp-route-id="@Model.Id"
 
-   class="btn btn-success">
+   class="btn btn-outline-secondary">
 
     Publicar en Mercado Libre
 

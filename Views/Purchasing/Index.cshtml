@@ -34,44 +34,44 @@
 }
 
 @{
-    ViewData["Title"] = "Radar de compra";
+    ViewData["Title"] = "Qué comprar";
     var tab = Model.Tab;
     int? publishProductId = TempData["PublishProductId"] as int?;
     int? publishAccountId = TempData["PublishAccountId"] as int?;
 }
 
 <style>
-    .radar-eyebrow { font-size: .75rem; font-weight: 700; letter-spacing: .06em; color: #4f46e5; }
+    .radar-eyebrow { font-size: .75rem; font-weight: 700; letter-spacing: 0; color: var(--denim); }
     .radar-kpi { background: #fff; border-radius: 14px; padding: 1rem 1.25rem; box-shadow: 0 1px 3px rgba(15,23,42,.08); height: 100%; }
-    .radar-kpi-label { font-size: .78rem; color: #64748b; font-weight: 600; }
-    .radar-kpi-value { font-size: 1.45rem; font-weight: 800; color: #0f172a; }
-    .radar-kpi-hint { font-size: .75rem; color: #94a3b8; }
-    .radar-tabs .nav-link { font-weight: 600; color: #475569; border-radius: 10px; }
-    .radar-tabs .nav-link.active { background: #4f46e5; color: #fff; }
+    .radar-kpi-label { font-size: .78rem; color: var(--muted); font-weight: 600; }
+    .radar-kpi-value { font-size: 1.45rem; font-weight: 800; color: var(--ink); }
+    .radar-kpi-hint { font-size: .75rem; color: var(--muted-2); }
+    .radar-tabs .nav-link { font-weight: 600; color: var(--ink-2); border-radius: 10px; }
+    .radar-tabs .nav-link.active { background: var(--ink); color: #fff; }
     .radar-tabs .badge { font-size: .7rem; }
     .radar-card { background: #fff; border-radius: 16px; box-shadow: 0 1px 3px rgba(15,23,42,.08); padding: 1.1rem; height: 100%; display: flex; flex-direction: column; gap: .75rem; }
-    .radar-img { width: 72px; height: 72px; object-fit: contain; border-radius: 10px; background: #f8fafc; flex-shrink: 0; }
-    .radar-title { font-weight: 700; font-size: .95rem; line-height: 1.25; color: #0f172a; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-    .radar-meta { font-size: .78rem; color: #64748b; }
+    .radar-img { width: 72px; height: 72px; object-fit: contain; border-radius: 10px; background: var(--paper-2); flex-shrink: 0; }
+    .radar-title { font-weight: 700; font-size: .95rem; line-height: 1.25; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .radar-meta { font-size: .78rem; color: var(--muted); }
     .radar-score { align-self: flex-start; min-width: 54px; text-align: center; border-radius: 12px; padding: .35rem .5rem; font-weight: 800; font-size: 1.1rem; line-height: 1; }
     .radar-score small { display: block; font-size: .62rem; font-weight: 600; margin-top: .2rem; }
-    .radar-score-high { background: #dcfce7; color: #166534; }
-    .radar-score-mid { background: #fef9c3; color: #854d0e; }
-    .radar-score-low { background: #f1f5f9; color: #475569; }
-    .radar-pill { display: inline-block; font-size: .72rem; font-weight: 600; padding: .15rem .55rem; border-radius: 999px; background: #f1f5f9; color: #334155; }
-    .radar-trend-up { background: #dcfce7; color: #166534; }
-    .radar-trend-down { background: #fee2e2; color: #991b1b; }
-    .radar-trend-new { background: #e0e7ff; color: #3730a3; }
-    .radar-trend-flat { background: #f1f5f9; color: #475569; }
-    .radar-box { background: #f8fafc; border-radius: 12px; padding: .65rem .8rem; font-size: .82rem; }
-    .radar-box-title { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #64748b; margin-bottom: .25rem; }
+    .radar-score-high { background: var(--ok-soft); color: var(--ok); }
+    .radar-score-mid { background: var(--warn-soft); color: var(--warn); }
+    .radar-score-low { background: var(--paper-2); color: var(--ink-2); }
+    .radar-pill { display: inline-block; font-size: .72rem; font-weight: 600; padding: .15rem .55rem; border-radius: 999px; background: var(--paper-2); color: var(--ink-2); }
+    .radar-trend-up { background: var(--ok-soft); color: var(--ok); }
+    .radar-trend-down { background: var(--bad-soft); color: var(--bad); }
+    .radar-trend-new { background: var(--denim-soft); color: var(--denim); }
+    .radar-trend-flat { background: var(--paper-2); color: var(--ink-2); }
+    .radar-box { background: var(--paper-2); border-radius: 12px; padding: .65rem .8rem; font-size: .82rem; }
+    .radar-box-title { font-size: .7rem; font-weight: 700; text-transform: none; letter-spacing: 0; color: var(--muted); margin-bottom: .25rem; }
     .radar-money { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; text-align: center; }
-    .radar-money div span { display: block; font-size: .68rem; color: #64748b; font-weight: 600; }
+    .radar-money div span { display: block; font-size: .68rem; color: var(--muted); font-weight: 600; }
     .radar-money div strong { font-size: .95rem; }
-    .radar-profit { color: #15803d; }
-    .radar-loss { color: #b91c1c; }
+    .radar-profit { color: var(--ok); }
+    .radar-loss { color: var(--bad); }
     .radar-actions { margin-top: auto; }
-    .radar-empty { text-align: center; padding: 3rem 1rem; color: #64748b; }
+    .radar-empty { text-align: center; padding: 3rem 1rem; color: var(--muted); }
     .radar-empty-icon { font-size: 2rem; }
     .radar-table td, .radar-table th { vertical-align: middle; font-size: .86rem; }
 </style>
@@ -80,14 +80,14 @@
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
         <div>
             <div class="radar-eyebrow">COMPRAR EN EE.UU.</div>
-            <h1 class="h3 fw-bold mb-1">Radar de compra</h1>
-            <div class="text-muted small">
-                Qué traer del Paso: productos que se mantienen en el Top de Mercado Libre, con oferta en eBay EE.UU. y ganancia mínima de @Mxn(Model.MinProfitAmountMxn) por pieza.
-                @if (Model.LastEvaluatedAt.HasValue)
-                {
-                    <span>· Última actualización: @Model.LastEvaluatedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
-                }
-            </div>
+            <h1 class="page-title">Qué comprar</h1>
+            <p class="text-muted mb-0">
+                Productos con demanda en Mercado Libre, oferta en EE.UU. y una ganancia de al menos @Mxn(Model.MinProfitAmountMxn) por pieza.
+            </p>
+            @if (Model.LastEvaluatedAt.HasValue)
+            {
+                <div class="small text-muted mt-1">Actualizado el @Model.LastEvaluatedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div>
+            }
         </div>
         <div class="d-flex flex-wrap gap-2">
             <a asp-action="ExportShoppingList" class="btn btn-outline-secondary">⬇ Lista de compras (Excel)</a>
@@ -122,9 +122,8 @@
     @if (!Model.HasRankingHistory)
     {
         <div class="alert alert-info border-0 shadow-sm">
-            El radar se alimenta del historial de <a asp-controller="MarketInsights" asp-action="Index" class="alert-link">Más vendidos MX</a>.
-            Consulta las categorías que te interesan (autopartes, accesorios, etc.); cada consulta guarda la captura del día y el sistema
-            captura las 12 categorías más usadas diariamente. Con 7 días de historial la señal de demanda es mucho más confiable.
+            Para empezar, busca en <a asp-controller="MarketInsights" asp-action="Index" class="alert-link">Más vendidos MX</a> los productos que te interesan.
+            Cada búsqueda guarda el ranking del día; con una semana de historial la lista es mucho más precisa.
         </div>
     }
 
@@ -335,7 +334,7 @@
                                             <label class="form-label small mb-1" for="ship-@c.Id">Envío US$</label>
                                             <input id="ship-@c.Id" type="text" inputmode="decimal" name="shippingUsd" class="form-control form-control-sm" placeholder="0.00" />
                                         </div>
-                                        <button type="submit" class="btn btn-sm btn-primary text-nowrap">Calcular margen</button>
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary text-nowrap">Calcular margen</button>
                                     </div>
                                     <div class="form-text">En eBay el precio se lee solo. En RockAuto y otras tiendas escríbelo tú.</div>
                                 </form>
@@ -506,6 +505,6 @@
     <div class="small text-muted mt-4">
         La demanda se calcula con el ranking por categoría de Mercado Libre (posición y constancia), no con unidades vendidas exactas, que Mercado Libre no publica.
         Verifica siempre que la oferta de eBay sea el mismo producto (número de parte, compatibilidad y condición) antes de comprar.
-        Los costos de cruce usan tus reglas de <a asp-controller="CrossBorder" asp-action="Index">Costeo El Paso ➔ Juárez</a>.
+        Los costos usan tus reglas de <a asp-controller="CrossBorder" asp-action="Index">costos de cruce</a>.
     </div>
 </div>

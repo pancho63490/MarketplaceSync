@@ -67,6 +67,17 @@ namespace MarketplaceSync.Web.Controllers
                 x.Status == MarketplaceSync.Web.Models.Purchasing.PurchaseCandidateStatus.Suggested && x.DemandScore > 0);
             ViewBag.RadarInTransit = await candidates.CountAsync(x =>
                 x.Status == MarketplaceSync.Web.Models.Purchasing.PurchaseCandidateStatus.Purchased);
+            ViewBag.OrganizationName = await _context.Organizations
+                .Where(x => x.Id == organizationId)
+                .Select(x => x.Name)
+                .FirstOrDefaultAsync();
+            var since30 = DateTime.UtcNow.AddDays(-30);
+            ViewBag.Sales30Days = await organizationOrders
+                .Where(x => x.DateCreated >= since30 && x.Status != "cancelled" && x.Status != "invalid")
+                .SumAsync(x => (decimal?)x.PaidAmount) ?? 0m;
+            ViewBag.Orders30Days = await organizationOrders
+                .CountAsync(x => x.DateCreated >= since30 && x.Status != "cancelled" && x.Status != "invalid");
+            ViewBag.UnitsInStock = await organizationVariants.SumAsync(x => (int?)(x.Stock > 0 ? x.Stock : 0)) ?? 0;
             ViewBag.ReadyProducts = await organizationProducts.CountAsync(x =>
                 x.Status == "ReadyToPublish" &&
                 !x.MarketplacePublications.Any(p => p.Marketplace == "MercadoLibre" && p.IsPublished));

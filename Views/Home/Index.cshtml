@@ -1,167 +1,190 @@
 @model IEnumerable<MarketplaceSync.Web.Models.Product>
+@using System.Globalization
 
 @{
-    ViewData["Title"] = "Resumen operativo";
-    ViewData["Subtitle"] = "Lo que necesita tu atención hoy.";
-    var radarToBuy = (int)(ViewBag.RadarToBuy ?? 0);
-    var radarInTransit = (int)(ViewBag.RadarInTransit ?? 0);
-    var readyProducts = (int)(ViewBag.ReadyProducts ?? 0);
+    ViewData["Title"] = "Hoy";
+
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    var organizationName = ViewBag.OrganizationName as string;
     var totalProducts = (int)(ViewBag.TotalProducts ?? 0);
-    var mercadoLibreProducts = (int)(ViewBag.MercadoLibreProducts ?? 0);
+    var publishedProducts = (int)(ViewBag.MercadoLibreProducts ?? 0);
     var draftProducts = (int)(ViewBag.DraftProducts ?? 0);
-    var needsReviewProducts = (int)(ViewBag.NeedsReviewProducts ?? 0);
-    var mlConnectedAccounts = (int)(ViewBag.MLConnectedAccounts ?? 0);
+    var reviewProducts = (int)(ViewBag.NeedsReviewProducts ?? 0);
+    var readyProducts = (int)(ViewBag.ReadyProducts ?? 0);
+    var connectedAccounts = (int)(ViewBag.MLConnectedAccounts ?? 0);
     var totalOrders = (int)(ViewBag.TotalOrders ?? 0);
     var ordersToday = (int)(ViewBag.OrdersToday ?? 0);
     var pendingOrders = (int)(ViewBag.PendingOrders ?? 0);
-    var totalSales = (decimal)(ViewBag.TotalSales ?? 0m);
-    var lowStockVariants = (int)(ViewBag.LowStockVariants ?? 0);
-    var outOfStockVariants = (int)(ViewBag.OutOfStockVariants ?? 0);
-    var completedSetupSteps = (mlConnectedAccounts > 0 ? 1 : 0) + (totalProducts > 0 ? 1 : 0) + (mercadoLibreProducts > 0 ? 1 : 0) + (totalOrders > 0 ? 1 : 0);
-    var setupPercent = completedSetupSteps * 25;
+    var lowStock = (int)(ViewBag.LowStockVariants ?? 0);
+    var outOfStock = (int)(ViewBag.OutOfStockVariants ?? 0);
+    var radarToBuy = (int)(ViewBag.RadarToBuy ?? 0);
+    var radarInTransit = (int)(ViewBag.RadarInTransit ?? 0);
+    var sales30 = (decimal)(ViewBag.Sales30Days ?? 0m);
+    var orders30 = (int)(ViewBag.Orders30Days ?? 0);
+    var unitsInStock = (int)(ViewBag.UnitsInStock ?? 0);
+
+    // Lo que hay que hacer, en el orden en que conviene hacerlo.
+    var tasks = new List<(int Count, string Title, string Detail, string Action, string Controller, string ActionName, object? Route, string Tone)>();
+    if (pendingOrders > 0)
+        tasks.Add((pendingOrders, pendingOrders == 1 ? "pedido pendiente de pago" : "pedidos pendientes de pago", "Revísalos antes de preparar envíos.", "Ver pedidos", "Orders", "Index", null, "tone-urgent"));
+    if (outOfStock > 0)
+        tasks.Add((outOfStock, outOfStock == 1 ? "SKU agotado o sobrevendido" : "SKU agotados o sobrevendidos", "Pausa la publicación o resurte para no cancelar ventas.", "Ver inventario", "Inventory", "Index", new { lowStockOnly = true }, "tone-urgent"));
+    if (radarInTransit > 0)
+        tasks.Add((radarInTransit, radarInTransit == 1 ? "compra en camino" : "compras en camino", "Márcalas como recibidas al llegar a Juárez para sumar el stock.", "Recibir", "Purchasing", "Index", new { tab = "transit" }, "tone-normal"));
+    if (readyProducts > 0)
+        tasks.Add((readyProducts, readyProducts == 1 ? "producto listo para publicar" : "productos listos para publicar", "Ya tienen sus datos; solo falta publicarlos.", "Publicar", "Products", "Index", new { stage = "Ready" }, "tone-normal"));
+    if (draftProducts + reviewProducts > 0)
+        tasks.Add((draftProducts + reviewProducts, draftProducts + reviewProducts == 1 ? "producto por preparar" : "productos por preparar", "Completa título, descripción y atributos con IA.", "Preparar", "Products", "Index", new { stage = draftProducts > 0 ? "Draft" : "NeedsReview" }, "tone-normal"));
+    if (lowStock > 0)
+        tasks.Add((lowStock, lowStock == 1 ? "SKU con stock bajo" : "SKU con stock bajo", "Agrégalos a tu próxima compra en El Paso.", "Ver qué resurtir", "Purchasing", "Index", new { tab = "restock" }, "tone-normal"));
+    if (radarToBuy > 0)
+        tasks.Add((radarToBuy, radarToBuy == 1 ? "producto que conviene comprar" : "productos que conviene comprar", "Tienen demanda en Mercado Libre y te dejan margen.", "Ver lista", "Purchasing", "Index", null, "tone-normal"));
+
+    var setupSteps = new[]
+    {
+        (Done: connectedAccounts > 0, Title: "Conecta tu cuenta de Mercado Libre", Controller: "MercadoLibre", Action: "Status"),
+        (Done: totalProducts > 0, Title: "Importa tu primer producto", Controller: "Products", Action: "CreateFromUrl"),
+        (Done: publishedProducts > 0, Title: "Publica en Mercado Libre", Controller: "Products", Action: "Index"),
+        (Done: totalOrders > 0, Title: "Recibe tu primera venta", Controller: "Orders", Action: "Index")
+    };
+    var setupDone = setupSteps.Count(x => x.Done);
+    // Hora de Ciudad Juárez (UTC-7) para el saludo.
+    var hour = DateTime.UtcNow.AddHours(-7).Hour;
+    var greeting = 12 > hour ? "Buenos días" : 19 > hour ? "Buenas tardes" : "Buenas noches";
 }
 
-<div class="dashboard-page">
-    <section class="dashboard-welcome mb-4">
-        <div>
-            <div class="dashboard-kicker">PANEL DE CONTROL</div>
-            <h2 class="dashboard-heading">Tu operación, en un solo lugar</h2>
-            <p>Revisa ventas, pedidos, catálogo e inventario sin cambiar de plataforma.</p>
-        </div>
-        <div class="dashboard-welcome-actions">
-            <a asp-controller="Orders" asp-action="Index" class="btn btn-app-light">Ver pedidos</a>
-            <a asp-controller="Purchasing" asp-action="Index" class="btn btn-app-light">◎ Qué comprar</a>
-        </div>
-    </section>
+<div class="today">
+    <header class="today-head">
+        <h1 class="page-title">@greeting@(string.IsNullOrWhiteSpace(organizationName) ? "" : ", " + organizationName)</h1>
+        <p class="today-summary">
+            @if (tasks.Count == 0)
+            {
+                <span>Todo al día. Buen momento para revisar qué comprar en tu próxima visita al Paso.</span>
+            }
+            else
+            {
+                <span>Tienes @tasks.Count @(tasks.Count == 1 ? "pendiente" : "pendientes") hoy.</span>
+            }
+        </p>
+    </header>
 
-    <section class="row g-3 mb-4">
-        <div class="col-sm-6 col-xl-3">
-            <a asp-controller="Orders" asp-action="Index" class="dashboard-metric metric-blue">
-                <div class="dashboard-metric-top"><span>Pedidos de hoy</span><span class="dashboard-metric-icon">≡</span></div>
-                <strong>@ordersToday.ToString("N0")</strong>
-                <small>@totalOrders.ToString("N0") pedidos sincronizados</small>
-            </a>
-        </div>
-        <div class="col-sm-6 col-xl-3">
-            <div class="dashboard-metric metric-green">
-                <div class="dashboard-metric-top"><span>Ventas cobradas</span><span class="dashboard-metric-icon">$</span></div>
-                <strong>$@totalSales.ToString("N2")</strong>
-                <small>Acumulado de Mercado Libre</small>
-            </div>
-        </div>
-        <div class="col-sm-6 col-xl-3">
-            <a asp-controller="Products" asp-action="Index" class="dashboard-metric metric-violet">
-                <div class="dashboard-metric-top"><span>Productos</span><span class="dashboard-metric-icon">□</span></div>
-                <strong>@totalProducts.ToString("N0")</strong>
-                <small>@mercadoLibreProducts.ToString("N0") publicados en Mercado Libre</small>
-            </a>
-        </div>
-        <div class="col-sm-6 col-xl-3">
-            <a asp-controller="Inventory" asp-action="Index" asp-route-lowStockOnly="true" class="dashboard-metric metric-amber">
-                <div class="dashboard-metric-top"><span>Alertas de inventario</span><span class="dashboard-metric-icon">!</span></div>
-                <strong>@((lowStockVariants + outOfStockVariants).ToString("N0"))</strong>
-                <small>@outOfStockVariants agotados o con sobreventa</small>
-            </a>
-        </div>
-    </section>
+    <div class="today-grid">
+        <section class="today-tasks" aria-labelledby="pendientes">
+            <h2 id="pendientes" class="today-section-title">Pendientes</h2>
 
-    <div class="row g-4 mb-4">
-        <div class="col-xl-8">
-            <section class="dashboard-panel h-100">
-                <div class="dashboard-panel-header">
-                    <div><h3>Tareas de operación</h3><p>Elementos que requieren atención</p></div>
-                    <span class="dashboard-live"><i></i> En tiempo real</span>
+            @if (tasks.Count == 0)
+            {
+                <div class="today-clear">
+                    <div class="today-clear-mark" aria-hidden="true">✓</div>
+                    <div>
+                        <div class="fw-bold">Sin pendientes</div>
+                        <div class="text-muted small">Cuando entre un pedido o algo necesite tu atención, aparecerá aquí.</div>
+                    </div>
+                    <a asp-controller="Purchasing" asp-action="Index" class="btn btn-outline-secondary btn-sm ms-auto">Qué comprar</a>
                 </div>
-                <div class="dashboard-tasks">
-                    <a asp-controller="Orders" asp-action="Index" class="dashboard-task">
-                        <span class="dashboard-task-icon task-blue">≡</span>
-                        <span><strong>Pedidos pendientes</strong><small>Revisar estado de pago</small></span>
-                        <b>@pendingOrders</b><em>›</em>
-                    </a>
-                    <a asp-controller="Inventory" asp-action="Index" asp-route-lowStockOnly="true" class="dashboard-task">
-                        <span class="dashboard-task-icon task-amber">!</span>
-                        <span><strong>Stock bajo</strong><small>Variantes bajo el mínimo</small></span>
-                        <b>@lowStockVariants</b><em>›</em>
-                    </a>
-                    <a asp-controller="Products" asp-action="Index" asp-route-stage="Draft" class="dashboard-task">
-                        <span class="dashboard-task-icon task-violet">□</span>
-                        <span><strong>Borradores</strong><small>Completa sus datos con IA</small></span>
-                        <b>@draftProducts</b><em>›</em>
-                    </a>
-                    <a asp-controller="Products" asp-action="Index" asp-route-stage="NeedsReview" class="dashboard-task">
-                        <span class="dashboard-task-icon task-red">◇</span>
-                        <span><strong>Por revisar</strong><small>Título, fotos y atributos</small></span>
-                        <b>@needsReviewProducts</b><em>›</em>
-                    </a>
-                    <a asp-controller="Products" asp-action="Index" asp-route-stage="Ready" class="dashboard-task">
-                        <span class="dashboard-task-icon task-blue">↑</span>
-                        <span><strong>Listos para publicar</strong><small>Solo falta publicarlos</small></span>
-                        <b>@readyProducts</b><em>›</em>
-                    </a>
-                    <a asp-controller="Purchasing" asp-action="Index" class="dashboard-task">
-                        <span class="dashboard-task-icon task-amber">◎</span>
-                        <span><strong>Qué comprar en EE.UU.</strong><small>Con demanda y margen validados</small></span>
-                        <b>@radarToBuy</b><em>›</em>
-                    </a>
-@if (radarInTransit > 0)
+            }
+            else
+            {
+                <ol class="task-list">
+                    @foreach (var task in tasks)
                     {
-                    <a asp-controller="Purchasing" asp-action="Index" asp-route-tab="transit" class="dashboard-task">
-                        <span class="dashboard-task-icon task-violet">⇄</span>
-                        <span><strong>Compras en camino</strong><small>Márcalas al recibirlas en Juárez</small></span>
-                        <b>@radarInTransit</b><em>›</em>
-                    </a>
+                        <li class="task-row @task.Tone">
+                            <span class="task-count">@task.Count</span>
+                            <span class="task-text">
+                                <span class="task-title">@task.Title</span>
+                                <span class="task-detail">@task.Detail</span>
+                            </span>
+                            <a class="btn btn-sm @(task == tasks[0] ? "btn-primary" : "btn-outline-secondary") task-action"
+                               asp-controller="@task.Controller"
+                               asp-action="@task.ActionName"
+                               asp-all-route-data="@(task.Route?.GetType().GetProperties().ToDictionary(p => p.Name, p => p.GetValue(task.Route)?.ToString() ?? "") ?? new Dictionary<string, string>())">@task.Action</a>
+                        </li>
                     }
-                </div>
-            </section>
-        </div>
+                </ol>
+            }
 
-        <div class="col-xl-4">
-            <section class="dashboard-panel h-100">
-                <div class="dashboard-panel-header">
-                    <div><h3>Configuración inicial</h3><p>@completedSetupSteps de 4 pasos completados</p></div>
-                    <span class="setup-score">@setupPercent%</span>
+            @if (setupDone < setupSteps.Length)
+            {
+                <h2 class="today-section-title mt-4">Para empezar</h2>
+                <ol class="setup-steps">
+                    @foreach (var step in setupSteps)
+                    {
+                        <li class="@(step.Done ? "is-done" : "")">
+                            <span class="setup-check" aria-hidden="true">@(step.Done ? "✓" : "")</span>
+                            @if (step.Done)
+                            {
+                                <span class="setup-title">@step.Title</span>
+                            }
+                            else
+                            {
+                                <a asp-controller="@step.Controller" asp-action="@step.Action" class="setup-title">@step.Title</a>
+                            }
+                        </li>
+                    }
+                </ol>
+            }
+        </section>
+
+        <aside class="today-numbers" aria-labelledby="numeros">
+            <h2 id="numeros" class="today-section-title">Últimos 30 días</h2>
+            <dl class="numbers">
+                <div>
+                    <dt>Ventas</dt>
+                    <dd>@sales30.ToString("C0", mx)</dd>
                 </div>
-                <div class="progress setup-progress" role="progressbar" aria-label="Progreso de configuración" aria-valuenow="@setupPercent" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width: @setupPercent%"></div></div>
-                <div class="setup-list">
-                    <a asp-controller="MercadoLibre" asp-action="Status" class="setup-item @(mlConnectedAccounts > 0 ? "done" : "")"><span>@(mlConnectedAccounts > 0 ? "✓" : "1")</span><div><strong>Conectar una tienda</strong><small>Autoriza Mercado Libre</small></div></a>
-                    <a asp-controller="Products" asp-action="CreateFromUrl" class="setup-item @(totalProducts > 0 ? "done" : "")"><span>@(totalProducts > 0 ? "✓" : "2")</span><div><strong>Agregar un producto</strong><small>Crea tu catálogo inicial</small></div></a>
-                    <a asp-controller="Products" asp-action="Index" class="setup-item @(mercadoLibreProducts > 0 ? "done" : "")"><span>@(mercadoLibreProducts > 0 ? "✓" : "3")</span><div><strong>Publicar en Mercado Libre</strong><small>Activa tu primera publicación</small></div></a>
-                    <a asp-controller="Orders" asp-action="Index" class="setup-item @(totalOrders > 0 ? "done" : "")"><span>@(totalOrders > 0 ? "✓" : "4")</span><div><strong>Sincronizar pedidos</strong><small>Importa tu primera venta</small></div></a>
+                <div>
+                    <dt>Pedidos</dt>
+                    <dd>@orders30.ToString("N0", mx) <small>@ordersToday hoy</small></dd>
                 </div>
-            </section>
-        </div>
+                <div>
+                    <dt>Publicados en Mercado Libre</dt>
+                    <dd>@publishedProducts <small>de @totalProducts</small></dd>
+                </div>
+                <div>
+                    <dt>Piezas en inventario</dt>
+                    <dd>@unitsInStock.ToString("N0", mx)</dd>
+                </div>
+            </dl>
+        </aside>
     </div>
 
-    <section class="dashboard-panel">
-        <div class="dashboard-panel-header">
-            <div><h3>Productos recientes</h3><p>Últimos artículos agregados al catálogo</p></div>
-            <a asp-controller="Products" asp-action="Index" class="dashboard-panel-link">Ver catálogo completo →</a>
+    <section class="today-recent" aria-labelledby="recientes">
+        <div class="d-flex justify-content-between align-items-baseline mb-2">
+            <h2 id="recientes" class="today-section-title mb-0">Productos recientes</h2>
+            <a asp-controller="Products" asp-action="Index" class="small">Ver todos</a>
         </div>
+
         @if (!Model.Any())
         {
-            <div class="dashboard-empty"><span>□</span><h4>Tu catálogo está vacío</h4><p>Agrega un producto para comenzar a publicar y controlar inventario.</p><a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-app-primary">＋ Importar producto</a></div>
+            <div class="today-clear">
+                <div>
+                    <div class="fw-bold">Tu catálogo está vacío</div>
+                    <div class="text-muted small">Pega el link de un producto de eBay, Amazon o AliExpress para importarlo.</div>
+                </div>
+                <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-primary btn-sm ms-auto">＋ Importar producto</a>
+            </div>
         }
         else
         {
-            <div class="table-responsive">
-                <table class="table dashboard-table align-middle mb-0">
-                    <thead><tr><th>Producto</th><th>Origen</th><th>Precio</th><th>Stock fuente</th><th>Publicación</th><th></th></tr></thead>
-                    <tbody>
-                    @foreach (var item in Model)
-                    {
-                        var published = item.MarketplacePublications.Any(p => p.Marketplace == "MercadoLibre" && p.IsPublished);
-                        <tr>
-                            <td><div class="dashboard-product"><div class="dashboard-product-image">@if (!string.IsNullOrWhiteSpace(item.ImageUrl)) { <img src="@item.ImageUrl" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'□'}))" /> } else { <span>□</span> }</div><div><strong>@(string.IsNullOrWhiteSpace(item.Title) ? "Sin título" : item.Title)</strong><small>@(item.Brand ?? $"Producto #{item.Id}")</small></div></div></td>
-                            <td><span class="channel-badge">@(item.SourceMarketplace ?? "Manual")</span></td>
-                            <td class="fw-semibold">@(item.SourcePrice?.ToString("N2") ?? "—") <small class="text-muted">@item.SourceCurrency</small></td>
-                            <td><span class="stock-pill @(item.SourceStock.GetValueOrDefault() > 0 ? "in-stock" : "no-stock")">@(item.SourceStock?.ToString() ?? "N/A")</span></td>
-                            <td><span class="publication-status @(published ? "published" : "draft")"><i></i> @(published ? "Publicado" : "Sin publicar")</span></td>
-                            <td class="text-end"><a asp-controller="Products" asp-action="Details" asp-route-id="@item.Id" class="dashboard-row-action">Ver</a></td>
-                        </tr>
-                    }
-                    </tbody>
-                </table>
-            </div>
+            <ul class="recent-list">
+                @foreach (var item in Model.Take(6))
+                {
+                    var published = item.MarketplacePublications.Any(p => p.Marketplace == "MercadoLibre" && p.IsPublished);
+                    <li>
+                        <a asp-controller="Products" asp-action="Details" asp-route-id="@item.Id" class="recent-item">
+                            <span class="recent-thumb">
+                                @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+                                {
+                                    <img src="@item.ImageUrl" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" />
+                                }
+                            </span>
+                            <span class="recent-name">@(string.IsNullOrWhiteSpace(item.Title) ? "Producto sin título" : item.Title)</span>
+                            <span class="recent-meta">@(item.SourceMarketplace ?? "Manual")</span>
+                            <span class="recent-state @(published ? "is-live" : "")">@(published ? "Publicado" : "Sin publicar")</span>
+                        </a>
+                    </li>
+                }
+            </ul>
         }
     </section>
 </div>

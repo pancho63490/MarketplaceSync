@@ -25,7 +25,7 @@
 }
 
 @{
-    ViewData["Title"] = "Centro de pedidos";
+    ViewData["Title"] = "Pedidos";
     var firstVisible = Model.FilteredOrders == 0 ? 0 : ((Model.Page - 1) * Model.PageSize) + 1;
     var lastVisible = Math.Min(Model.Page * Model.PageSize, Model.FilteredOrders);
 }
@@ -34,7 +34,7 @@
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
         <div>
             <div class="eyebrow">OPERACIÓN OMNICANAL</div>
-            <h2 class="orders-title mb-1">Centro de pedidos</h2>
+            <h2 class="orders-title mb-1">Pedidos</h2>
             <div class="text-muted">
                 Gestiona las ventas importadas desde Mercado Libre.
                 @if (Model.LastSyncAt.HasValue)
@@ -70,13 +70,13 @@
         <div class="col-sm-6 col-xl"><div class="order-kpi-card"><div class="order-kpi-icon kpi-green">✓</div><div><div class="order-kpi-label">Pagados</div><div class="order-kpi-value">@Model.PaidOrders.ToString("N0")</div></div></div></div>
         <div class="col-sm-6 col-xl"><div class="order-kpi-card"><div class="order-kpi-icon kpi-amber">◷</div><div><div class="order-kpi-label">Pendientes</div><div class="order-kpi-value">@Model.PendingOrders.ToString("N0")</div></div></div></div>
         <div class="col-sm-6 col-xl"><div class="order-kpi-card"><div class="order-kpi-icon kpi-red">×</div><div><div class="order-kpi-label">Cancelados</div><div class="order-kpi-value">@Model.CancelledOrders.ToString("N0")</div></div></div></div>
-        <div class="col-sm-6 col-xl"><div class="order-kpi-card"><div class="order-kpi-icon kpi-purple">$</div><div><div class="order-kpi-label">Ventas cobradas</div><div class="order-kpi-value order-kpi-money">$@Model.TotalSales.ToString("N2")</div></div></div></div>
+        <div class="col-sm-6 col-xl"><div class="order-kpi-card"><div class="order-kpi-icon kpi-purple">$</div><div><div class="order-kpi-label">Ventas cobradas</div><div class="order-kpi-value order-kpi-money">@Model.TotalSales.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("es-MX"))</div></div></div></div>
     </div>
 
     <div class="card orders-filter-card border-0 shadow-sm mb-4">
         <div class="card-body p-3 p-lg-4">
             <form method="get" class="row g-3 align-items-end">
-                <div class="col-12 col-xl-4">
+                <div class="col-12 col-xl-2">
                     <label for="search" class="form-label orders-label">Buscar pedido</label>
                     <div class="orders-search"><span aria-hidden="true">⌕</span><input id="search" name="search" value="@Model.Search" class="form-control" placeholder="Pedido, comprador, producto o SKU" /></div>
                 </div>
@@ -100,9 +100,9 @@
                         }
                     </select>
                 </div>
-                <div class="col-sm-6 col-lg-3 col-xl-1"><label for="dateFrom" class="form-label orders-label">Desde</label><input id="dateFrom" name="dateFrom" type="date" class="form-control" value="@(Model.DateFrom?.ToString("yyyy-MM-dd"))" /></div>
-                <div class="col-sm-6 col-lg-3 col-xl-1"><label for="dateTo" class="form-label orders-label">Hasta</label><input id="dateTo" name="dateTo" type="date" class="form-control" value="@(Model.DateTo?.ToString("yyyy-MM-dd"))" /></div>
-                <div class="col-12 col-xl-2 d-flex gap-2"><button class="btn btn-primary flex-grow-1" type="submit">Aplicar</button><a asp-action="Index" class="btn btn-outline-secondary">Limpiar</a></div>
+                <div class="col-sm-6 col-lg-3 col-xl-2"><label for="dateFrom" class="form-label orders-label">Desde</label><input id="dateFrom" name="dateFrom" type="date" class="form-control" value="@(Model.DateFrom?.ToString("yyyy-MM-dd"))" /></div>
+                <div class="col-sm-6 col-lg-3 col-xl-2"><label for="dateTo" class="form-label orders-label">Hasta</label><input id="dateTo" name="dateTo" type="date" class="form-control" value="@(Model.DateTo?.ToString("yyyy-MM-dd"))" /></div>
+                <div class="col-12 col-xl-2 d-flex gap-2 align-items-end"><button class="btn btn-outline-secondary flex-grow-1" type="submit">Buscar</button><a asp-action="Index" class="btn btn-link px-1">Limpiar</a></div>
             </form>
         </div>
     </div>
@@ -163,22 +163,22 @@
 </div>
 
 <style>
-    .eyebrow { color: #2563eb; font-size: .72rem; font-weight: 800; letter-spacing: .12em; margin-bottom: .35rem; }
+    .eyebrow { color: var(--denim); font-size: .72rem; font-weight: 800; letter-spacing: 0; margin-bottom: .35rem; }
     .orders-title { font-size: 1.65rem; font-weight: 850; letter-spacing: -.025em; }
     .orders-sync-button { padding: .65rem 1.1rem; }
-    .order-kpi-card { align-items: center; background: #fff; border: 1px solid #e8edf5; border-radius: 16px; display: flex; gap: 13px; height: 100%; min-height: 96px; padding: 16px; box-shadow: 0 8px 28px rgba(15, 23, 42, .045); }
+    .order-kpi-card { align-items: center; background: #fff; border: 1px solid var(--paper-2); border-radius: 16px; display: flex; gap: 13px; height: 100%; min-height: 96px; padding: 16px; box-shadow: 0 8px 28px rgba(15, 23, 42, .045); }
     .order-kpi-icon { align-items: center; border-radius: 13px; display: flex; flex: 0 0 42px; font-size: 1.15rem; font-weight: 900; height: 42px; justify-content: center; }
-    .kpi-blue { background: #dbeafe; color: #2563eb; } .kpi-green { background: #dcfce7; color: #16a34a; } .kpi-amber { background: #fef3c7; color: #d97706; } .kpi-red { background: #fee2e2; color: #dc2626; } .kpi-purple { background: #ede9fe; color: #7c3aed; }
-    .order-kpi-label { color: #64748b; font-size: .75rem; font-weight: 700; white-space: nowrap; } .order-kpi-value { color: #0f172a; font-size: 1.35rem; font-weight: 850; line-height: 1.25; } .order-kpi-money { font-size: 1.05rem; }
-    .orders-filter-card, .orders-table-card { border-radius: 18px; overflow: hidden; } .orders-label { color: #475569; font-size: .75rem; font-weight: 750; margin-bottom: .4rem; }
-    .orders-search { position: relative; } .orders-search span { color: #94a3b8; font-size: 1.2rem; left: 13px; position: absolute; top: 7px; z-index: 2; } .orders-search .form-control { padding-left: 39px; }
+    .kpi-blue { background: var(--denim-soft); color: var(--denim); } .kpi-green { background: var(--ok-soft); color: var(--ok); } .kpi-amber { background: var(--warn-soft); color: var(--warn); } .kpi-red { background: var(--bad-soft); color: var(--bad); } .kpi-purple { background: #ede9fe; color: #7c3aed; }
+    .order-kpi-label { color: var(--muted); font-size: .75rem; font-weight: 700; white-space: nowrap; } .order-kpi-value { color: var(--ink); font-size: 1.35rem; font-weight: 850; line-height: 1.25; } .order-kpi-money { font-size: 1.05rem; }
+    .orders-filter-card, .orders-table-card { border-radius: 18px; overflow: hidden; } .orders-label { color: var(--ink-2); font-size: .75rem; font-weight: 750; margin-bottom: .4rem; }
+    .orders-search { position: relative; } .orders-search span { color: var(--muted-2); font-size: 1.2rem; left: 13px; position: absolute; top: 7px; z-index: 2; } .orders-search .form-control { padding-left: 39px; }
     .orders-filter-card .form-control, .orders-filter-card .form-select { border-color: #dbe2ea; border-radius: 10px; min-height: 40px; }
     .orders-channel-chip { background: #fff8d8; border: 1px solid #f4e79c; border-radius: 999px; color: #725d00; font-size: .75rem; font-weight: 800; padding: .38rem .7rem; } .orders-channel-chip span { background: #ffe600; border-radius: 50%; display: inline-block; height: 8px; margin-right: 5px; width: 8px; }
-    .orders-table thead th { background: #f8fafc; border-color: #edf1f5; color: #64748b; font-size: .69rem; font-weight: 800; letter-spacing: .055em; padding: .8rem 1rem; text-transform: uppercase; white-space: nowrap; }
-    .orders-table tbody td { border-color: #eef2f7; color: #334155; font-size: .82rem; padding: .95rem 1rem; vertical-align: middle; } .orders-table tbody tr:hover { background: #fbfdff; }
-    .order-number { color: #1d4ed8; font-weight: 800; text-decoration: none; } .order-number:hover { text-decoration: underline; } .order-account, .order-pack { color: #94a3b8; font-size: .7rem; margin-top: 2px; }
-    .products-cell { min-width: 230px; max-width: 340px; } .order-product-line { display: flex; gap: 6px; line-height: 1.35; } .order-quantity { color: #2563eb; flex: 0 0 auto; font-weight: 800; }
-    .order-status { border-radius: 999px; display: inline-flex; font-size: .7rem; font-weight: 800; padding: .36rem .62rem; white-space: nowrap; } .order-status-success { background: #dcfce7; color: #15803d; } .order-status-info { background: #dbeafe; color: #1d4ed8; } .order-status-warning { background: #fef3c7; color: #a16207; } .order-status-danger { background: #fee2e2; color: #b91c1c; }
-    .orders-empty-icon { align-items: center; background: #eff6ff; border-radius: 50%; color: #2563eb; display: inline-flex; font-size: 1.5rem; height: 58px; justify-content: center; width: 58px; }
+    .orders-table thead th { background: var(--paper-2); border-color: var(--paper-2); color: var(--muted); font-size: .69rem; font-weight: 800; letter-spacing: 0; padding: .8rem 1rem; text-transform: none; white-space: nowrap; }
+    .orders-table tbody td { border-color: var(--paper-2); color: var(--ink-2); font-size: .82rem; padding: .95rem 1rem; vertical-align: middle; } .orders-table tbody tr:hover { background: #fbfdff; }
+    .order-number { color: var(--denim); font-weight: 800; text-decoration: none; } .order-number:hover { text-decoration: underline; } .order-account, .order-pack { color: var(--muted-2); font-size: .7rem; margin-top: 2px; }
+    .products-cell { min-width: 230px; max-width: 340px; } .order-product-line { display: flex; gap: 6px; line-height: 1.35; } .order-quantity { color: var(--denim); flex: 0 0 auto; font-weight: 800; }
+    .order-status { border-radius: 999px; display: inline-flex; font-size: .7rem; font-weight: 800; padding: .36rem .62rem; white-space: nowrap; } .order-status-success { background: var(--ok-soft); color: var(--ok); } .order-status-info { background: var(--denim-soft); color: var(--denim); } .order-status-warning { background: var(--warn-soft); color: #a16207; } .order-status-danger { background: var(--bad-soft); color: var(--bad); }
+    .orders-empty-icon { align-items: center; background: var(--denim-soft); border-radius: 50%; color: var(--denim); display: inline-flex; font-size: 1.5rem; height: 58px; justify-content: center; width: 58px; }
     @@media (max-width: 767px) { .order-kpi-card { min-height: 82px; } .orders-title { font-size: 1.4rem; } }
 </style>

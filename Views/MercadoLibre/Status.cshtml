@@ -2,7 +2,7 @@
 @{ Context.Items["FlashRendered"] = true; }
 
 @{
-    ViewData["Title"] = "Mercado Libre - Cuentas";
+    ViewData["Title"] = "Cuentas de Mercado Libre";
     var accounts = Model ?? Array.Empty<MarketplaceSync.Web.Models.Marketplace.MarketplaceAccountStatusViewModel>();
     var connectedCount = accounts.Count(x =>
         x.Status.Equals("Connected", StringComparison.OrdinalIgnoreCase) && x.HasActiveToken);

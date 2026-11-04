@@ -4,49 +4,47 @@
     ViewData["Title"] = "Crear cuenta";
 }
 
-<div class="auth-wrap">
-    <div class="auth-panel">
-        <section class="auth-form-side">
-            <div class="auth-form-content auth-form-register">
-                <div class="auth-mini-brand"><span>MS</span> MarketplaceSync</div>
-                <div class="auth-kicker">EMPIEZA TU OPERACIÓN</div>
-                <h2>Crea tu espacio de trabajo</h2>
-                <p class="auth-intro">Configura tu negocio y conecta tu primera tienda en minutos.</p>
+<div class="auth">
+    <section class="auth-main">
+        <a class="brand" asp-controller="Home" asp-action="Index">
+            <span class="brand-mark" aria-hidden="true">MS</span>
+            <span class="brand-name">MarketplaceSync</span>
+        </a>
 
-                <form asp-action="Register" method="post" class="auth-form">
-                    @Html.AntiForgeryToken()
-                    <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small"></div>
-                    <div class="mb-3">
-                        <label asp-for="OrganizationName" class="form-label"></label>
-                        <input asp-for="OrganizationName" class="form-control" placeholder="Nombre de tu tienda o empresa" autocomplete="organization" />
-                        <span asp-validation-for="OrganizationName" class="text-danger small"></span>
-                    </div>
-                    <div class="mb-3">
-                        <label asp-for="Email" class="form-label">Correo electrónico</label>
-                        <input asp-for="Email" class="form-control" placeholder="nombre@empresa.com" autocomplete="email" />
-                        <span asp-validation-for="Email" class="text-danger small"></span>
-                    </div>
-                    <div class="row g-3">
-                        <div class="col-md-6"><label asp-for="Password" class="form-label">Contraseña</label><input asp-for="Password" class="form-control" placeholder="Mínimo 6 caracteres" autocomplete="new-password" /><span asp-validation-for="Password" class="text-danger small"></span></div>
-                        <div class="col-md-6"><label asp-for="ConfirmPassword" class="form-label">Confirmar</label><input asp-for="ConfirmPassword" class="form-control" placeholder="Repite la contraseña" autocomplete="new-password" /><span asp-validation-for="ConfirmPassword" class="text-danger small"></span></div>
-                    </div>
-                    <button type="submit" class="btn btn-primary w-100 auth-submit mt-4">Crear mi cuenta</button>
-                </form>
-                <div class="auth-switch">¿Ya tienes una cuenta? <a asp-controller="Account" asp-action="Login">Iniciar sesión</a></div>
-            </div>
-        </section>
+        <h1 class="page-title auth-title">Crea tu cuenta</h1>
+        <p class="auth-intro">Tu negocio, tus productos y tus cuentas de Mercado Libre quedan en un espacio propio.</p>
 
-        <aside class="auth-info-side auth-info-register">
-            <div class="auth-info-content">
-                <span class="auth-info-badge">CONFIGURACIÓN GUIADA</span>
-                <h3>De cero a tu primera venta sincronizada</h3>
-                <p>El panel te acompaña durante la configuración inicial.</p>
-                <ol class="auth-steps">
-                    <li><span>1</span><div><strong>Conecta Mercado Libre</strong><small>Autoriza tu cuenta de vendedor.</small></div></li>
-                    <li><span>2</span><div><strong>Agrega tu catálogo</strong><small>Importa o crea productos con SKU.</small></div></li>
-                    <li><span>3</span><div><strong>Sincroniza pedidos</strong><small>Controla ventas e inventario automáticamente.</small></div></li>
-                </ol>
+        <form asp-action="Register" method="post" class="auth-form" novalidate>
+            @Html.AntiForgeryToken()
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
+            <div class="mb-3">
+                <label asp-for="OrganizationName" class="form-label">Nombre de tu negocio</label>
+                <input asp-for="OrganizationName" class="form-control form-control-lg" placeholder="Ej. Refacciones Juárez" autocomplete="organization" autofocus />
+                <span asp-validation-for="OrganizationName" class="text-danger small"></span>
             </div>
-        </aside>
-    </div>
+            <div class="mb-3">
+                <label asp-for="Email" class="form-label">Correo electrónico</label>
+                <input asp-for="Email" class="form-control form-control-lg" placeholder="tu@correo.com" autocomplete="email" />
+                <span asp-validation-for="Email" class="text-danger small"></span>
+            </div>
+            <div class="row g-3 mb-4">
+                <div class="col-sm-6">
+                    <label asp-for="Password" class="form-label">Contraseña</label>
+                    <input asp-for="Password" class="form-control form-control-lg" autocomplete="new-password" aria-describedby="password-help" />
+                    <div id="password-help" class="form-text">Mínimo 6 caracteres.</div>
+                    <span asp-validation-for="Password" class="text-danger small"></span>
+                </div>
+                <div class="col-sm-6">
+                    <label asp-for="ConfirmPassword" class="form-label">Repite la contraseña</label>
+                    <input asp-for="ConfirmPassword" class="form-control form-control-lg" autocomplete="new-password" />
+                    <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-lg w-100">Crear cuenta</button>
+        </form>
+
+        <p class="auth-switch">¿Ya tienes cuenta? <a asp-controller="Account" asp-action="Login">Inicia sesión</a></p>
+    </section>
+
+    <partial name="_AuthAside" />
 </div>

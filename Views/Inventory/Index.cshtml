@@ -20,7 +20,7 @@
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
         <div>
             <div class="inventory-eyebrow">CONTROL DE EXISTENCIAS</div>
-            <h2 class="inventory-title mb-1">Inventario centralizado</h2>
+            <h2 class="inventory-title mb-1">Inventario</h2>
             <div class="text-muted">Controla el stock por SKU y revisa cada movimiento generado por tus ventas.</div>
         </div>
         <a asp-controller="Products" asp-action="Index" class="btn btn-app-light">Administrar productos</a>
@@ -56,7 +56,7 @@
                     </div>
                 </div>
                 <div class="col-lg-4 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary">Aplicar filtros</button>
+                    <button type="submit" class="btn btn-outline-secondary">Buscar</button>
                     <a asp-action="Index" class="btn btn-outline-secondary">Limpiar</a>
                 </div>
             </form>
@@ -101,7 +101,7 @@
                                     <div class="d-flex gap-2">
                                         <input type="number" name="newStock" value="@Math.Max(0, variant.Stock)" min="0" max="1000000" class="form-control form-control-sm" aria-label="Nuevo stock para @variant.Sku" />
                                         <input type="text" name="notes" maxlength="500" class="form-control form-control-sm inventory-note" placeholder="Motivo del ajuste" />
-                                        <button class="btn btn-sm btn-primary" type="submit">Ajustar</button>
+                                        <button class="btn btn-sm btn-outline-secondary" type="submit">Ajustar</button>
                                     </div>
                                 </form>
                             </td>
@@ -144,17 +144,17 @@
 </div>
 
 <style>
-    .inventory-eyebrow { color: #4f46e5; font-size: .72rem; font-weight: 800; letter-spacing: .12em; margin-bottom: .35rem; } .inventory-title { font-size: 1.65rem; font-weight: 850; letter-spacing: -.025em; }
-    .inventory-kpi { align-items: center; background: #fff; border: 1px solid #e8edf5; border-radius: 16px; display: flex; gap: 14px; min-height: 96px; padding: 17px; box-shadow: 0 8px 28px rgba(15,23,42,.045); }
-    .inventory-kpi-icon { align-items: center; border-radius: 13px; display: flex; flex: 0 0 44px; font-size: 1.15rem; font-weight: 900; height: 44px; justify-content: center; } .kpi-indigo { background: #e0e7ff; color: #4f46e5; } .kpi-green { background: #dcfce7; color: #16a34a; } .kpi-amber { background: #fef3c7; color: #d97706; } .kpi-red { background: #fee2e2; color: #dc2626; }
-    .inventory-kpi-label { color: #64748b; font-size: .76rem; font-weight: 700; } .inventory-kpi-value { color: #0f172a; font-size: 1.45rem; font-weight: 850; }
-    .inventory-card { border-radius: 18px; overflow: hidden; } .inventory-label { color: #475569; font-size: .76rem; font-weight: 750; } .inventory-switch { padding-bottom: .45rem; }
-    .inventory-table thead th { background: #f8fafc; border-color: #edf1f5; color: #64748b; font-size: .69rem; font-weight: 800; letter-spacing: .055em; padding: .8rem 1rem; text-transform: uppercase; white-space: nowrap; }
-    .inventory-table tbody td { border-color: #eef2f7; color: #334155; font-size: .82rem; padding: .9rem 1rem; } .inventory-product-title { max-width: 300px; }
-    .inventory-sku { background: #eef2ff; border-radius: 6px; color: #4338ca; font-family: ui-monospace, monospace; font-size: .72rem; font-weight: 800; padding: .18rem .4rem; }
-    .inventory-stock { border-radius: 10px; display: inline-flex; font-size: 1rem; font-weight: 850; justify-content: center; min-width: 42px; padding: .35rem .55rem; } .stock-success { background: #dcfce7; color: #15803d; } .stock-warning { background: #fef3c7; color: #a16207; } .stock-danger { background: #fee2e2; color: #b91c1c; }
+    .inventory-eyebrow { color: var(--denim); font-size: .72rem; font-weight: 800; letter-spacing: 0; margin-bottom: .35rem; } .inventory-title { font-size: 1.65rem; font-weight: 850; letter-spacing: -.025em; }
+    .inventory-kpi { align-items: center; background: #fff; border: 1px solid var(--paper-2); border-radius: 16px; display: flex; gap: 14px; min-height: 96px; padding: 17px; box-shadow: 0 8px 28px rgba(15,23,42,.045); }
+    .inventory-kpi-icon { align-items: center; border-radius: 13px; display: flex; flex: 0 0 44px; font-size: 1.15rem; font-weight: 900; height: 44px; justify-content: center; } .kpi-indigo { background: var(--denim-soft); color: var(--denim); } .kpi-green { background: var(--ok-soft); color: var(--ok); } .kpi-amber { background: var(--warn-soft); color: var(--warn); } .kpi-red { background: var(--bad-soft); color: var(--bad); }
+    .inventory-kpi-label { color: var(--muted); font-size: .76rem; font-weight: 700; } .inventory-kpi-value { color: var(--ink); font-size: 1.45rem; font-weight: 850; }
+    .inventory-card { border-radius: 18px; overflow: hidden; } .inventory-label { color: var(--ink-2); font-size: .76rem; font-weight: 750; } .inventory-switch { padding-bottom: .45rem; }
+    .inventory-table thead th { background: var(--paper-2); border-color: var(--paper-2); color: var(--muted); font-size: .69rem; font-weight: 800; letter-spacing: 0; padding: .8rem 1rem; text-transform: none; white-space: nowrap; }
+    .inventory-table tbody td { border-color: var(--paper-2); color: var(--ink-2); font-size: .82rem; padding: .9rem 1rem; } .inventory-product-title { max-width: 300px; }
+    .inventory-sku { background: var(--denim-soft); border-radius: 6px; color: #4338ca; font-family: ui-monospace, monospace; font-size: .72rem; font-weight: 800; padding: .18rem .4rem; }
+    .inventory-stock { border-radius: 10px; display: inline-flex; font-size: 1rem; font-weight: 850; justify-content: center; min-width: 42px; padding: .35rem .55rem; } .stock-success { background: var(--ok-soft); color: var(--ok); } .stock-warning { background: var(--warn-soft); color: #a16207; } .stock-danger { background: var(--bad-soft); color: var(--bad); }
     .threshold-form input { max-width: 78px; } .adjust-form { min-width: 330px; } .adjust-form input[type="number"] { max-width: 88px; } .inventory-note { min-width: 145px; }
-    .movement-type { background: #f1f5f9; border-radius: 999px; color: #475569; font-size: .7rem; font-weight: 800; padding: .35rem .6rem; } .inventory-movement-product { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .inventory-empty { align-items: center; background: #eef2ff; border-radius: 50%; color: #4f46e5; display: inline-flex; font-size: 1.5rem; height: 58px; justify-content: center; width: 58px; }
+    .movement-type { background: var(--paper-2); border-radius: 999px; color: var(--ink-2); font-size: .7rem; font-weight: 800; padding: .35rem .6rem; } .inventory-movement-product { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .inventory-empty { align-items: center; background: var(--denim-soft); border-radius: 50%; color: var(--denim); display: inline-flex; font-size: 1.5rem; height: 58px; justify-content: center; width: 58px; }
     @@media (max-width: 767px) { .inventory-title { font-size: 1.4rem; } .inventory-kpi { min-height: 82px; } }
 </style>
