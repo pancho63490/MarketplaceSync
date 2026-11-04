@@ -132,6 +132,8 @@ builder.Services.AddHttpClient(ClaudeClient.HttpClientName, client =>
 });
 builder.Services.AddScoped<ClaudeClient>();
 builder.Services.AddScoped<IProductAiEnricherService, ClaudeProductAiEnricherService>();
+builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient>();
+builder.Services.AddScoped<IListingAutopilotService, ListingAutopilotService>();
 
 builder.Services.AddScoped<ISourcePriceMonitorService, SourcePriceMonitorService>();
 builder.Services.AddScoped<SourceSearchQueryBuilder>();

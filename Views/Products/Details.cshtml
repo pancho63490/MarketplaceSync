@@ -1,5 +1,4 @@
 @model MarketplaceSync.Web.Models.Product
-@{ Context.Items["FlashRendered"] = true; }
 
 @{
     ViewData["Title"] = "Detalle del producto";
@@ -58,19 +57,7 @@
         </div>
     </div>
 
-    @if (TempData["Success"] != null)
-    {
-        <div class="alert alert-success shadow-sm">
-            @TempData["Success"]
-        </div>
-    }
 
-    @if (TempData["Error"] != null)
-    {
-        <div class="alert alert-danger shadow-sm">
-            @TempData["Error"]
-        </div>
-    }
 
     <div class="row g-4">
 

@@ -67,6 +67,16 @@ namespace MarketplaceSync.Web.Models.Marketplace
 
         public bool IsPublished { get; set; }
 
+        /// <summary>
+        /// Atributos elegidos para Mercado Libre (por la IA o por el usuario), como JSON:
+        /// [{"Id":"BRAND","ValueId":null,"ValueName":"ACDelco"}].
+        /// </summary>
+        public string? AttributesJson { get; set; }
+
+        /// <summary>Resumen del último paso del piloto automático (qué falta para publicar).</summary>
+        [MaxLength(1000)]
+        public string? AutopilotNotes { get; set; }
+
         // =====================================
         // DATES
         // =====================================

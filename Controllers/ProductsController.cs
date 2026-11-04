@@ -97,6 +97,8 @@ private readonly ProductExtractorService _extractor;
     private readonly IMercadoLibreFeeService _mercadoLibreFeeService;
     private readonly ICrossBorderPricingService _crossBorderPricingService;
     private readonly IProductAiEnricherService _aiEnricher;
+    private readonly MarketplaceSync.Services.Ai.IListingAutopilotService _autopilot;
+    private readonly MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient _listingClient;
 
 public ProductsController(
     AppDbContext context,
@@ -109,6 +111,8 @@ public ProductsController(
     IMercadoLibreFeeService mercadoLibreFeeService,
     ICrossBorderPricingService crossBorderPricingService,
     IProductAiEnricherService aiEnricher,
+    MarketplaceSync.Services.Ai.IListingAutopilotService autopilot,
+    MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient listingClient,
     ILogger<ProductsController> logger
 )
 {
@@ -122,6 +126,8 @@ public ProductsController(
     _mercadoLibreFeeService = mercadoLibreFeeService;
     _crossBorderPricingService = crossBorderPricingService;
     _aiEnricher = aiEnricher;
+    _autopilot = autopilot;
+    _listingClient = listingClient;
     _logger = logger;
 }
         
@@ -129,8 +135,6 @@ public ProductsController(
             string categoryId,
             int? marketplaceAccountId)
 {
-    var result = new List<MercadoLibreAttributeInput>();
-
     var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
     var token = await _context.MercadoLibreTokens
         .Where(x => x.OrganizationId == organizationId &&
@@ -139,80 +143,25 @@ public ProductsController(
         .OrderByDescending(x => x.CreatedAt)
         .FirstOrDefaultAsync();
 
-    var client = _httpClientFactory.CreateClient();
+    return await _listingClient.GetRequiredAttributesAsync(categoryId, token?.AccessToken);
+}
 
-    var url = $"https://api.mercadolibre.com/categories/{Uri.EscapeDataString(categoryId)}/attributes";
-
-    var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
-    if (!string.IsNullOrWhiteSpace(token?.AccessToken))
+private static void ApplySavedAttributes(PublishToMercadoLibreRequest request, string? attributesJson)
+{
+    var saved = MarketplaceSync.Services.Ai.ListingAutopilotService.ReadSavedAttributes(attributesJson);
+    foreach (var attribute in request.Attributes)
     {
-        httpRequest.Headers.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token.AccessToken);
-    }
-
-    var response = await client.SendAsync(httpRequest);
-    var content = await response.Content.ReadAsStringAsync();
-
-    if (!response.IsSuccessStatusCode)
-    {
-        throw new HttpRequestException(
-            $"Mercado Libre rechazó la categoría {categoryId} con HTTP {(int)response.StatusCode}.");
-    }
-
-    var json = JsonNode.Parse(content)?.AsArray();
-
-    if (json == null)
-        return result;
-
-    foreach (var node in json)
-    {
-        if (node == null)
+        var value = saved.FirstOrDefault(x => x.Id.Equals(attribute.Id, StringComparison.OrdinalIgnoreCase));
+        if (value is null)
             continue;
 
-        var id = node["id"]?.GetValue<string>() ?? string.Empty;
-        var name = node["name"]?.GetValue<string>() ?? id;
-        var valueType = node["value_type"]?.GetValue<string>();
-
-        var required = node["tags"]?["required"]?.GetValue<bool>() == true;
-
-        if (!required)
-            continue;
-
-        var input = new MercadoLibreAttributeInput
-        {
-            Id = id,
-            Name = name,
-            Required = true,
-            ValueType = valueType
-        };
-
-        var values = node["values"]?.AsArray();
-
-        if (values != null)
-        {
-            foreach (var valueNode in values)
-            {
-                if (valueNode == null)
-                    continue;
-
-                var valueId = valueNode["id"]?.GetValue<string>();
-                var valueName = valueNode["name"]?.GetValue<string>();
-
-                if (!string.IsNullOrWhiteSpace(valueName))
-                {
-                    input.Values.Add(new MercadoLibreAttributeValueOption
-                    {
-                        Id = valueId,
-                        Name = valueName
-                    });
-                }
-            }
-        }
-
-        result.Add(input);
+        attribute.ValueName = value.ValueName ?? attribute.ValueName;
+        attribute.ValueId = !string.IsNullOrWhiteSpace(value.ValueId)
+            ? value.ValueId
+            : attribute.Values.Any(o => string.Equals(o.Name, value.ValueName, StringComparison.OrdinalIgnoreCase))
+                ? $"name:{value.ValueName}"
+                : attribute.ValueId;
     }
-
-    return result;
 }
 
 private static void PrefillKnownAttributes(PublishToMercadoLibreRequest request)
@@ -702,6 +651,7 @@ var product = await _context.Products
                 model.MarketplaceAccountId);
             model.AttributesLoaded = true;
             PrefillKnownAttributes(model);
+            ApplySavedAttributes(model, publication?.AttributesJson);
         }
         catch (Exception exception)
         {
@@ -905,8 +855,10 @@ var token = await _context.MercadoLibreTokens
 
     if (!response.IsSuccessStatusCode)
     {
-        input.ErrorMessage = content;
+        input.ErrorMessage = "Mercado Libre rechazó la publicación: " +
+            MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DescribeError(content);
         await PopulateMarketplaceAccountsAsync(input, organizationId);
+        await RepopulateMercadoLibreAttributeOptionsAsync(input);
         return View(input);
     }
 
@@ -935,8 +887,24 @@ var token = await _context.MercadoLibreTokens
     publication.PublishedAt = DateTime.UtcNow;
     publication.IsPublished = true;
     publication.UpdatedAt = DateTime.UtcNow;
+    publication.AttributesJson = JsonSerializer.Serialize(input.Attributes
+        .Where(x => !string.IsNullOrWhiteSpace(x.ValueId) || !string.IsNullOrWhiteSpace(x.ValueName))
+        .Select(x => new MarketplaceSync.Services.MercadoLibre.SavedAttributeValue(
+            x.Id,
+            x.ValueId?.StartsWith("name:", StringComparison.Ordinal) == true ? null : x.ValueId,
+            x.ValueId?.StartsWith("name:", StringComparison.Ordinal) == true ? x.ValueId[5..] : x.ValueName)));
+    product.Status = "ReadyToPublish";
 
     await _context.SaveChangesAsync();
+
+    // La descripción se guarda en un recurso aparte de Mercado Libre.
+    if (!string.IsNullOrWhiteSpace(input.Description) && !string.IsNullOrWhiteSpace(publication.ExternalItemId))
+    {
+        await _listingClient.UpsertDescriptionAsync(
+            token.AccessToken, publication.ExternalItemId, input.Description, updatingExistingItem);
+    }
+    if (!string.IsNullOrWhiteSpace(input.Description))
+        product.Description = input.Description;
 
     if (variants.Count > 0 && root.TryGetProperty("variations", out var returnedVariations) &&
         returnedVariations.ValueKind == JsonValueKind.Array)
@@ -979,6 +947,10 @@ var token = await _context.MercadoLibreTokens
         await _context.SaveChangesAsync();
     }
 
+    await _context.SaveChangesAsync();
+    TempData["Success"] = updatingExistingItem
+        ? "Publicación actualizada en Mercado Libre."
+        : "Publicado en Mercado Libre.";
     return RedirectToAction(nameof(Details), new { id = product.Id });
 }
 private static object[] BuildMercadoLibreAttributes(PublishToMercadoLibreRequest model)
@@ -1088,8 +1060,12 @@ private void ValidateRequiredMercadoLibreAttributes(PublishToMercadoLibreRequest
         }
     }
 }
-public IActionResult CreateFromUrl()
+public async Task<IActionResult> CreateFromUrl()
 {
+    // El interruptor "publicar en automático" arranca como lo configuraste en Costos de cruce.
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+    var settings = await _crossBorderPricingService.GetOrCreateSettingsAsync(organizationId);
+    ViewBag.AutoPublishDefault = settings.AutoPublishEnabled;
     return View(new CreateProductFromUrlViewModel());
 }
 // GET: /Products
@@ -1563,64 +1539,71 @@ public async Task<IActionResult> CreateFromUrl(CreateProductFromUrlViewModel mod
     _context.Products.Add(product);
     await _context.SaveChangesAsync();
 
-    var actionValue = Request.Form["action"].ToString();
-    if (actionValue == "enrich")
-        return RedirectToAction(nameof(EnrichWithAi), new { id = product.Id });
+    if (extracted.SourceStatus is "Blocked" or "ScrapeFailed")
+    {
+        TempData["Warning"] = $"{product.SourceMarketplace} no dejó leer la página desde el servidor, así que faltan datos " +
+            "(foto, precio o título). Complétalos en Editar, o importa el mismo producto con su link de eBay.";
+    }
+    else if (string.IsNullOrWhiteSpace(product.ImageUrl))
+    {
+        TempData["Warning"] = "No encontramos la foto del producto. Agrégala en Editar → Imagen URL antes de publicar.";
+    }
 
+    var actionValue = Request.Form["action"].ToString();
+    if (actionValue is "enrich" or "ai")
+    {
+        var autoPublish = string.Equals(Request.Form["autoPublish"], "true", StringComparison.OrdinalIgnoreCase);
+        return await RunAutopilotAndRedirectAsync(organizationId, product.Id, autoPublish);
+    }
+
+    TempData["Success"] = "Producto importado como borrador.";
     return RedirectToAction(nameof(Index));
 }
 
-[HttpGet]
-public async Task<IActionResult> EnrichWithAi(int id, CancellationToken ct)
+/// <summary>Completa el producto con IA y, si se pide y todo está listo, lo publica.</summary>
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> CompleteWithAi(int id, bool publish = false)
 {
     var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
+    return await RunAutopilotAndRedirectAsync(organizationId, id, publish);
+}
 
-    var product = await _context.Products
-        .FirstOrDefaultAsync(x => x.Id == id && x.OrganizationId == organizationId, ct);
-
-    if (product == null)
-        return NotFound();
-
-    // Suggest category from MeLi
-    string? categoryId = null;
-    string? categoryName = null;
+private async Task<IActionResult> RunAutopilotAndRedirectAsync(Guid organizationId, int productId, bool publish)
+{
+    MarketplaceSync.Services.Ai.AutopilotResult result;
     try
     {
-        var suggestions = await _mercadoLibreCategoryService.SuggestCategoriesAsync(product.Title ?? "");
-        var top = suggestions.FirstOrDefault();
-        categoryId = top?.Category_Id;
-        categoryName = top?.Category_Name;
+        result = await _autopilot.RunAsync(organizationId, productId, publish, HttpContext.RequestAborted);
     }
-    catch (Exception ex)
+    catch (KeyNotFoundException)
     {
-        _logger.LogWarning(ex, "Could not get MeLi category suggestion for product {Id}", id);
+        return NotFound();
+    }
+    catch (Exception exception) when (!HttpContext.RequestAborted.IsCancellationRequested)
+    {
+        _logger.LogWarning(exception, "Autopilot failed for product {Id}.", productId);
+        TempData["Error"] = "No fue posible completar el producto con IA. Intenta de nuevo en un momento.";
+        return RedirectToAction(nameof(PublishToMercadoLibre), new { id = productId });
     }
 
-    var request = new ProductAiEnrichmentRequest(
-        RawTitle: product.Title ?? "",
-        RawDescription: product.Description,
-        RawBrand: product.Brand,
-        RawModel: product.Model,
-        SourcePriceUsd: product.SourcePrice,
-        SourceUrl: product.SourceUrl,
-        SourceMarketplace: product.SourceMarketplace,
-        CategoryId: categoryId ?? "",
-        CategoryName: categoryName,
-        RequiredAttributes: new List<CategoryAttributeSchema>()
-    );
+    if (result.Published)
+    {
+        TempData["Success"] = "Publicado en Mercado Libre con IA. " + string.Join(" · ", result.Done);
+        return RedirectToAction(nameof(Details), new { id = productId });
+    }
 
-    var result = await _aiEnricher.EnrichProductAsync(request, ct);
+    TempData["Success"] = (result.Ready
+        ? "Listo para publicar. Revisa y presiona Publicar. "
+        : "La IA preparó tu producto. ") + string.Join(" · ", result.Done);
+    if (result.Missing.Count > 0)
+        TempData["Warning"] = "Falta: " + string.Join(" · ", result.Missing);
+    if (!result.AiConfigured)
+        TempData["Error"] = "La IA no está configurada: agrega la variable Anthropic__ApiKey en Render para que escriba títulos, descripciones y atributos.";
 
-    product.Title = result.OptimizedTitle;
-    product.Description = result.CleanDescription;
-    product.Brand = result.Brand ?? product.Brand;
-    product.Model = result.Model ?? product.Model;
-    product.Status = "ReadyToPublish";
-
-    await _context.SaveChangesAsync(ct);
-
-    TempData["Success"] = "Producto completado con IA. Revisa el título y descripción antes de publicar.";
-    return RedirectToAction(nameof(PublishToMercadoLibre), new { id = product.Id });
+    return RedirectToAction(nameof(PublishToMercadoLibre), new { id = productId });
 }
+
+
     }
 }

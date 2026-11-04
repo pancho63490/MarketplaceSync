@@ -1,0 +1,161 @@
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@inject MarketplaceSync.Services.Ai.ClaudeClient Claude
+@{
+    var tokens = Antiforgery.GetAndStoreTokens(Context);
+}
+
+<button type="button" class="assistant-fab" data-bs-toggle="offcanvas" data-bs-target="#assistantPanel" aria-controls="assistantPanel">
+    <span aria-hidden="true">✦</span> Asistente
+</button>
+
+<div class="offcanvas offcanvas-end assistant-panel" tabindex="-1" id="assistantPanel" aria-labelledby="assistantTitle">
+    <div class="offcanvas-header">
+        <div>
+            <h2 class="assistant-title" id="assistantTitle">Asistente</h2>
+            <div class="small text-muted">Conoce tu catálogo, tus compras, tu inventario y tus pedidos.</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar asistente"></button>
+    </div>
+
+    <div class="offcanvas-body assistant-body">
+        <div class="assistant-log" id="assistantLog" aria-live="polite">
+            @if (!Claude.IsConfigured)
+            {
+                <div class="assistant-msg is-bot">
+                    Para usar el asistente agrega la variable <code>Anthropic__ApiKey</code> en Render (Environment) y vuelve a desplegar.
+                </div>
+            }
+            else
+            {
+                <div class="assistant-msg is-bot">
+                    Hola. Pregúntame qué conviene comprar, qué te falta para publicar o cómo van tus ventas.
+                </div>
+            }
+        </div>
+
+        <div class="assistant-suggestions" id="assistantSuggestions">
+            <button type="button" class="assistant-chip">¿Qué compro en mi próxima visita al Paso?</button>
+            <button type="button" class="assistant-chip">¿Qué me falta para publicar?</button>
+            <button type="button" class="assistant-chip">¿Qué productos se me están acabando?</button>
+            <button type="button" class="assistant-chip">¿Cómo calculo el precio de una pieza de US$40?</button>
+        </div>
+
+        <form class="assistant-form" id="assistantForm" autocomplete="off">
+            <label for="assistantInput" class="visually-hidden">Tu pregunta</label>
+            <textarea id="assistantInput" class="form-control" rows="2" maxlength="2000" placeholder="Escribe tu pregunta…" @(Claude.IsConfigured ? "" : "disabled")></textarea>
+            <div class="d-flex justify-content-between align-items-center mt-2">
+                <button type="button" class="btn btn-link btn-sm px-0" id="assistantClear">Nueva conversación</button>
+                <button type="submit" class="btn btn-primary btn-sm" id="assistantSend" @(Claude.IsConfigured ? "" : "disabled")>Enviar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    (function () {
+        var token = '@tokens.RequestToken';
+        var log = document.getElementById('assistantLog');
+        var form = document.getElementById('assistantForm');
+        var input = document.getElementById('assistantInput');
+        var send = document.getElementById('assistantSend');
+        var suggestions = document.getElementById('assistantSuggestions');
+        var storageKey = 'ms-assistant-history';
+        var history = [];
+
+        try { history = JSON.parse(sessionStorage.getItem(storageKey) || '[]'); } catch (e) { history = []; }
+
+        function save() {
+            try { sessionStorage.setItem(storageKey, JSON.stringify(history.slice(-12))); } catch (e) { }
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/[&<>"']/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+
+        // Markdown mínimo y seguro: negritas, código, listas y enlaces internos (/ruta).
+        function render(text) {
+            var html = escapeHtml(text)
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                .replace(/\[([^\]]+)\]\((\/[^)\s]*)\)/g, '<a href="$2">$1</a>');
+            var lines = html.split('\n');
+            var out = [], inList = false;
+            lines.forEach(function (line) {
+                var item = line.match(/^\s*(?:[-•*]|\d+[.)])\s+(.*)$/);
+                if (item) {
+                    if (!inList) { out.push('<ul>'); inList = true; }
+                    out.push('<li>' + item[1] + '</li>');
+                } else {
+                    if (inList) { out.push('</ul>'); inList = false; }
+                    if (line.trim()) out.push('<p>' + line + '</p>');
+                }
+            });
+            if (inList) out.push('</ul>');
+            return out.join('');
+        }
+
+        function add(role, text) {
+            var div = document.createElement('div');
+            div.className = 'assistant-msg ' + (role === 'user' ? 'is-user' : 'is-bot');
+            if (role === 'user') div.textContent = text; else div.innerHTML = render(text);
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+            return div;
+        }
+
+        history.forEach(function (turn) { add(turn.role, turn.content); });
+        if (history.length) suggestions.hidden = true;
+
+        async function ask(question) {
+            question = (question || '').trim();
+            if (!question) return;
+            suggestions.hidden = true;
+            add('user', question);
+            history.push({ role: 'user', content: question });
+            save();
+            input.value = '';
+            send.disabled = true;
+            var thinking = add('assistant', 'Pensando…');
+            thinking.classList.add('is-thinking');
+
+            try {
+                var response = await fetch('/Assistant/Ask', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                    body: JSON.stringify({ messages: history.slice(-12) })
+                });
+                var data = await response.json();
+                var reply = (data && data.reply) || 'No pude responder en este momento.';
+                thinking.classList.remove('is-thinking');
+                thinking.innerHTML = render(reply);
+                history.push({ role: 'assistant', content: reply });
+                save();
+            } catch (e) {
+                thinking.classList.remove('is-thinking');
+                thinking.textContent = 'No hay conexión con el asistente. Revisa tu internet e intenta de nuevo.';
+                history.pop();
+                save();
+            } finally {
+                send.disabled = false;
+                input.focus();
+                log.scrollTop = log.scrollHeight;
+            }
+        }
+
+        form.addEventListener('submit', function (e) { e.preventDefault(); ask(input.value); });
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value); }
+        });
+        suggestions.addEventListener('click', function (e) {
+            if (e.target.classList.contains('assistant-chip')) ask(e.target.textContent);
+        });
+        document.getElementById('assistantClear').addEventListener('click', function () {
+            history = []; save();
+            log.querySelectorAll('.assistant-msg').forEach(function (m, i) { if (i > 0) m.remove(); });
+            suggestions.hidden = false;
+        });
+        document.getElementById('assistantPanel').addEventListener('shown.bs.offcanvas', function () { input.focus(); });
+    })();
+</script>

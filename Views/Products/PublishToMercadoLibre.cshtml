@@ -1,5 +1,4 @@
 @model MarketplaceSync.Web.ViewModels.PublishToMercadoLibreRequest
-@{ Context.Items["FlashRendered"] = true; }
 @{
     Model.Attributes ??= new();
 }
@@ -54,21 +53,7 @@
     </div>
 }
 
-@if (TempData["Success"] != null)
-{
-    <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
-        @TempData["Success"]
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-}
 
-@if (TempData["Error"] != null)
-{
-    <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
-        @TempData["Error"]
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-}
 
 <form asp-controller="Products"
       asp-action="PublishToMercadoLibre"

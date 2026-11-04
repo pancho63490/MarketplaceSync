@@ -58,41 +58,60 @@ public sealed class ClaudeClient
     }
 
     /// <summary>Envía un mensaje y devuelve el texto de la respuesta, o null si falla.</summary>
-    public async Task<string?> CompleteAsync(
+    public Task<string?> CompleteAsync(
         string system,
         string userMessage,
         int maxTokens,
         double temperature = 0.2,
+        CancellationToken cancellationToken = default) =>
+        ChatAsync(system, new[] { new ChatTurn("user", userMessage) }, maxTokens, temperature, null, cancellationToken);
+
+    /// <summary>
+    /// Conversación de varios turnos (user/assistant alternados, empezando por user).
+    /// Devuelve el texto de la respuesta o null si falla.
+    /// </summary>
+    public async Task<string?> ChatAsync(
+        string system,
+        IReadOnlyList<ChatTurn> turns,
+        int maxTokens,
+        double temperature = 0.3,
+        string? modelOverride = null,
         CancellationToken cancellationToken = default)
     {
         var apiKey = ApiKey;
-        if (string.IsNullOrWhiteSpace(apiKey))
+        if (string.IsNullOrWhiteSpace(apiKey) || turns.Count == 0)
             return null;
 
         var version = _configuration["Anthropic:Version"];
         if (string.IsNullOrWhiteSpace(version))
             version = DefaultApiVersion;
 
+        var messages = new JsonArray();
+        foreach (var turn in turns)
+        {
+            messages.Add(new JsonObject
+            {
+                ["role"] = turn.Role == "assistant" ? "assistant" : "user",
+                ["content"] = turn.Content
+            });
+        }
+
         var payload = new JsonObject
         {
-            ["model"] = Model,
+            ["model"] = string.IsNullOrWhiteSpace(modelOverride) ? Model : modelOverride,
             ["max_tokens"] = maxTokens,
             ["temperature"] = temperature,
             ["system"] = system,
-            ["messages"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["role"] = "user",
-                    ["content"] = userMessage
-                }
-            }
+            ["messages"] = messages
         };
 
         try
         {
             var client = _httpClientFactory.CreateClient(HttpClientName);
-            using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint);
+            // Anthropic:BaseUrl solo se usa para pruebas locales; en producción queda vacío.
+            var baseUrl = _configuration["Anthropic:BaseUrl"];
+            var endpoint = string.IsNullOrWhiteSpace(baseUrl) ? Endpoint : baseUrl.TrimEnd('/') + "/v1/messages";
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
             request.Headers.Add("x-api-key", apiKey);
             request.Headers.Add("anthropic-version", version);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -188,3 +207,5 @@ public sealed class ClaudeClient
         return start >= 0 && end > start ? text[start..(end + 1)] : null;
     }
 }
+
+public sealed record ChatTurn(string Role, string Content);

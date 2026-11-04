@@ -1,59 +1,58 @@
 @model MarketplaceSync.Web.ViewModels.CreateProductFromUrlViewModel
+@inject MarketplaceSync.Services.Ai.ClaudeClient Claude
 
 @{
     ViewData["Title"] = "Importar producto";
 }
 
-<div class="mb-4">
+<div class="import-page">
     <h1 class="page-title">Importar producto</h1>
-    <p class="text-muted mb-0">Pega el link de un producto en eBay, Amazon o AliExpress para importarlo y publicarlo en Mercado Libre.</p>
-</div>
+    <p class="text-muted mb-4">Pega el link de eBay, Amazon, AliExpress u otra tienda. La IA arma la publicación por ti.</p>
 
-<div class="card border-0 shadow-sm mb-3" style="max-width:720px;">
-    <div class="card-body p-4">
-        <form asp-action="CreateFromUrl" method="post">
-            @Html.AntiForgeryToken()
-            <input type="hidden" name="action" id="actionField" value="draft" />
+    @if (!Claude.IsConfigured)
+    {
+        <div class="alert alert-warning">
+            La IA no está configurada todavía. Agrega la variable <code>Anthropic__ApiKey</code> en Render
+            (Environment) para que escriba títulos, descripciones y atributos. Mientras tanto se usan reglas básicas.
+        </div>
+    }
 
-            <div class="mb-3">
-                <label asp-for="SourceUrl" class="form-label fw-semibold"></label>
-                <div class="input-group input-group-lg">
-                    <input asp-for="SourceUrl"
-                           id="urlInput"
-                           class="form-control form-control-lg"
-                           placeholder="https://www.ebay.com/itm/..." />
-                    <span class="input-group-text bg-white" id="marketplaceBadge">
-                        <span class="badge bg-secondary">❓ Desconocido</span>
-                    </span>
-                </div>
-                <span asp-validation-for="SourceUrl" class="text-danger small"></span>
-            </div>
+    <form asp-action="CreateFromUrl" method="post" class="import-card" id="importForm">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="action" id="actionField" value="ai" />
 
-            <div class="d-flex gap-2 mt-4">
-                <button type="submit"
-                        class="btn btn-outline-secondary"
-                        onclick="document.getElementById('actionField').value='draft'">
-                    Guardar borrador
-                </button>
-                <button type="submit"
-                        class="btn btn-success"
-                        onclick="document.getElementById('actionField').value='enrich'">
-                    ⚡ Enriquecer con IA y Publicar
-                </button>
-                <a asp-controller="Products" asp-action="Index" class="btn btn-link ms-auto text-muted">
-                    Cancelar
-                </a>
-            </div>
-        </form>
-    </div>
-</div>
+        <label asp-for="SourceUrl" class="form-label">Link del producto</label>
+        <div class="import-url">
+            <input asp-for="SourceUrl" id="urlInput" class="form-control form-control-lg" placeholder="https://www.ebay.com/itm/…" autocomplete="off" autofocus />
+            <span class="import-store" id="storeBadge" aria-live="polite"></span>
+        </div>
+        <span asp-validation-for="SourceUrl" class="text-danger small"></span>
 
-<div class="text-muted small" style="max-width:720px;">
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-info-circle me-1" viewBox="0 0 16 16">
-        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
-        <path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0"/>
-    </svg>
-    Soporta eBay, Amazon y AliExpress. El precio se convierte automáticamente usando tu configuración de costeo El Paso → Juárez.
+        <ol class="import-steps" aria-label="Qué hace la IA">
+            <li>Lee la foto, el precio y los datos de la tienda.</li>
+            <li>Elige la categoría de Mercado Libre y llena sus atributos obligatorios.</li>
+            <li>Escribe el título (máx. 60 caracteres) y la descripción en español.</li>
+            <li>Calcula el precio con tus costos de cruce.</li>
+        </ol>
+
+        <div class="form-check form-switch import-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="autoPublish" name="autoPublish" value="true" checked="@(ViewBag.AutoPublishDefault == true)" />
+            <label class="form-check-label" for="autoPublish">
+                <strong>Publicar en automático si todo queda completo</strong>
+                <span class="d-block text-muted small">Si falta algo (foto, stock o un atributo), queda como borrador para que lo revises.</span>
+            </label>
+        </div>
+
+        <div class="import-actions">
+            <button type="submit" class="btn btn-primary btn-lg" id="aiButton">✨ Importar con IA</button>
+            <button type="submit" class="btn btn-link" id="draftButton">Solo guardar como borrador</button>
+        </div>
+    </form>
+
+    <p class="small text-muted mt-3 import-note">
+        eBay se lee por su API oficial. Amazon y AliExpress a veces bloquean la lectura desde servidores;
+        si pasa, te avisamos qué falta completar.
+    </p>
 </div>
 
 @section Scripts {
@@ -61,25 +60,34 @@
     <script>
         (function () {
             var input = document.getElementById('urlInput');
-            var badgeContainer = document.getElementById('marketplaceBadge');
+            var badge = document.getElementById('storeBadge');
+            var form = document.getElementById('importForm');
+            var action = document.getElementById('actionField');
 
-            function detectMarketplace(url) {
-                if (!url) return { label: '❓ Desconocido', cls: 'bg-secondary' };
-                var u = url.toLowerCase();
-                if (u.includes('ebay.')) return { label: '🛍️ eBay', cls: 'bg-primary' };
-                if (u.includes('amazon.')) return { label: '📦 Amazon', cls: 'bg-warning text-dark' };
-                if (u.includes('aliexpress.')) return { label: '🛒 AliExpress', cls: 'bg-danger' };
-                if (u.includes('mercadolibre.') || u.includes('mercadolivre.')) return { label: '🟡 Mercado Libre', cls: 'bg-warning text-dark' };
-                return { label: '❓ Desconocido', cls: 'bg-secondary' };
+            function store(url) {
+                var u = (url || '').toLowerCase();
+                if (u.includes('ebay.')) return 'eBay';
+                if (u.includes('amazon.')) return 'Amazon';
+                if (u.includes('aliexpress.')) return 'AliExpress';
+                if (u.includes('rockauto.')) return 'RockAuto';
+                if (u.includes('walmart.')) return 'Walmart';
+                return u.startsWith('http') ? 'Otra tienda' : '';
             }
 
-            function update() {
-                var d = detectMarketplace(input.value);
-                badgeContainer.innerHTML = '<span class="badge ' + d.cls + '">' + d.label + '</span>';
-            }
-
+            function update() { badge.textContent = store(input.value); }
             input.addEventListener('input', update);
             update();
+
+            document.getElementById('draftButton').addEventListener('click', function () { action.value = 'draft'; });
+            document.getElementById('aiButton').addEventListener('click', function () { action.value = 'ai'; });
+
+            form.addEventListener('submit', function () {
+                if (window.jQuery && !$(form).valid()) return;
+                var ai = action.value === 'ai';
+                var button = document.getElementById(ai ? 'aiButton' : 'draftButton');
+                button.disabled = true;
+                button.textContent = ai ? 'Preparando con IA… (unos segundos)' : 'Guardando…';
+            });
         })();
     </script>
 }

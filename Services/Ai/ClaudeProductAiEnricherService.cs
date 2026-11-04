@@ -83,7 +83,9 @@ public sealed class ClaudeProductAiEnricherService : IProductAiEnricherService
                ELIMINA cualquier mención de Amazon, Prime, eBay, AliExpress, envíos de EE.UU. o garantías extranjeras.
             3. 'brand': Nombre de la marca de la autoparte o 'Genérica'.
             4. 'model': Modelo o número de parte principal.
-            5. 'attributes': Diccionario con los atributos requeridos asignados con el valor idóneo.
+            5. 'attributes': Diccionario cuya clave es el Id de cada atributo requerido (ej. "BRAND", "PART_NUMBER").
+               Si el atributo tiene AllowedValues, el valor debe ser EXACTAMENTE uno de esos nombres.
+               Si no puedes saber el valor con los datos dados, OMITE ese atributo (no inventes, no pongas "No aplica").
             6. 'highRiskIntellectualProperty': true si parece una réplica no autorizada o violación de marca; false si es refacción aftermarket legítima.
             7. 'confidenceScore': 0 a 100 de acuerdo a la completitud de los datos.
 
@@ -155,30 +157,28 @@ public sealed class ClaudeProductAiEnricherService : IProductAiEnricherService
             : "Genérica";
         var model = !string.IsNullOrWhiteSpace(request.RawModel)
             ? request.RawModel.Trim()
-            : "Estándar";
+            : null;
 
         var attributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["BRAND"] = brand,
-            ["MODEL"] = model,
             ["CONDITION"] = "Nuevo"
         };
 
+        if (!string.IsNullOrWhiteSpace(model))
+            attributes["MODEL"] = model;
+
+        // Sin IA no se adivinan atributos: elegir la primera opción de una lista publicaría datos falsos.
+        // Solo se completan los que se conocen con certeza; el resto queda pendiente para revisión.
         foreach (var req in request.RequiredAttributes)
         {
             if (attributes.ContainsKey(req.Id))
                 continue;
 
-            if (req.AllowedValues.Count > 0)
-            {
-                attributes[req.Id] = req.AllowedValues[0].Name;
-            }
-            else
-            {
-                attributes[req.Id] = req.Id.Equals("PART_NUMBER", StringComparison.OrdinalIgnoreCase)
-                    ? model
-                    : "No aplica";
-            }
+            if ((req.Id.Equals("PART_NUMBER", StringComparison.OrdinalIgnoreCase) ||
+                 req.Id.Equals("MPN", StringComparison.OrdinalIgnoreCase)) &&
+                !string.IsNullOrWhiteSpace(request.RawModel))
+                attributes[req.Id] = request.RawModel.Trim();
         }
 
         var description = BuildFallbackDescription(request, brand, model);
@@ -222,7 +222,7 @@ public sealed class ClaudeProductAiEnricherService : IProductAiEnricherService
     private static string BuildFallbackDescription(
         ProductAiEnrichmentRequest request,
         string brand,
-        string model)
+        string? model)
     {
         return $"""
             DESCRIPCIÓN GENERAL:
@@ -230,7 +230,7 @@ public sealed class ClaudeProductAiEnricherService : IProductAiEnricherService
 
             ESPECIFICACIONES:
             - Marca: {brand}
-            - Modelo / Parte: {model}
+            - Modelo / Parte: {model ?? "Consulta el número de parte en la foto"}
             - Condición: Nuevo
             - Origen: Importado para venta en México
 

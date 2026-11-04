@@ -84,6 +84,14 @@ namespace MarketplaceSync.Web.Services
                 if (string.IsNullOrWhiteSpace(html))
                     return partial;
 
+                // Amazon suele responder con un CAPTCHA a los servidores: no hay datos reales que leer.
+                if (html.Contains("validateCaptcha", StringComparison.OrdinalIgnoreCase) ||
+                    html.Contains("Robot Check", StringComparison.OrdinalIgnoreCase))
+                {
+                    partial.SourceStatus = "Blocked";
+                    return partial;
+                }
+
                 // Title: <span id="productTitle"> or og:title
                 var title = ExtractByIdSpan(html, "productTitle")
                             ?? ExtractMetaContent(html, "property", "og:title");
@@ -104,8 +112,7 @@ namespace MarketplaceSync.Web.Services
                 price ??= ExtractMetaContent(html, "property", "og:price:amount");
 
                 // Image: og:image or img id="landingImage"
-                var image = ExtractMetaContent(html, "property", "og:image")
-                            ?? ExtractImgSrcById(html, "landingImage");
+                var image = ExtractBestImage(html, url);
 
                 // Description: meta description or feature-bullets li items
                 var description = ExtractMetaContent(html, "name", "description");
@@ -181,8 +188,8 @@ namespace MarketplaceSync.Web.Services
                 // Currency: og:price:currency or default USD
                 var currency = ExtractMetaContent(html, "property", "og:price:currency") ?? "USD";
 
-                // Image: og:image
-                var image = ExtractMetaContent(html, "property", "og:image");
+                // Imagen: formatos propios de AliExpress, luego metadatos
+                var image = ExtractBestImage(html, url);
 
                 // Description: meta description
                 var description = ExtractMetaContent(html, "name", "description");
@@ -242,7 +249,7 @@ namespace MarketplaceSync.Web.Services
                             ?? ExtractTitleTag(html);
                 var description = ExtractMetaContent(html, "property", "og:description")
                                   ?? ExtractMetaContent(html, "name", "description");
-                var image = ExtractMetaContent(html, "property", "og:image");
+                var image = ExtractBestImage(html, url);
                 var price = ExtractMetaContent(html, "property", "og:price:amount");
                 var currency = ExtractMetaContent(html, "property", "og:price:currency") ?? "USD";
 
@@ -282,14 +289,120 @@ namespace MarketplaceSync.Web.Services
 
         // ─── HTML extraction helpers (Regex-based, no HtmlAgilityPack) ───────────
 
+        private static readonly Regex MetaTagPattern = new(@"<meta\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex AttributePattern = new(@"([\w:-]+)\s*=\s*(?:""([^""]*)""|'([^']*)')", RegexOptions.Compiled);
+
         private static string? ExtractMetaContent(string html, string attrName, string attrValue)
         {
-            // <meta property="og:title" content="..."> or attributes in any order
-            var pattern = $@"<meta\b[^>]*{Regex.Escape(attrName)}=""{Regex.Escape(attrValue)}""[^>]*content=""([^""]*)""|<meta\b[^>]*content=""([^""]*)""][^>]*{Regex.Escape(attrName)}=""{Regex.Escape(attrValue)}""";
-            var m = Regex.Match(html, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
-            if (!m.Success) return null;
-            var val = m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value;
-            return HtmlDecode(val);
+            // <meta property="og:image" content="..."> con atributos en cualquier orden y cualquier tipo de comillas.
+            foreach (Match tag in MetaTagPattern.Matches(html))
+            {
+                string? key = null, content = null;
+                foreach (Match attr in AttributePattern.Matches(tag.Value))
+                {
+                    var name = attr.Groups[1].Value;
+                    var value = attr.Groups[2].Success ? attr.Groups[2].Value : attr.Groups[3].Value;
+                    if (name.Equals(attrName, StringComparison.OrdinalIgnoreCase))
+                        key = value;
+                    else if (name.Equals("content", StringComparison.OrdinalIgnoreCase))
+                        content = value;
+                }
+
+                if (key != null && key.Equals(attrValue, StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(content))
+                    return HtmlDecode(content);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Busca la mejor imagen del producto: metadatos sociales, JSON-LD y los formatos propios
+        /// de Amazon y AliExpress. Devuelve una URL absoluta https o null.
+        /// </summary>
+        private static string? ExtractBestImage(string html, string pageUrl)
+        {
+            var candidates = new List<string?>
+            {
+                // Amazon: imagen grande del producto
+                Regex.Match(html, @"data-old-hires=""([^""]+)""", RegexOptions.IgnoreCase).Groups[1].Value,
+                Regex.Match(html, @"""hiRes""\s*:\s*""([^""]+)""").Groups[1].Value,
+                Regex.Match(html, @"data-a-dynamic-image=""\{&quot;([^&]+)&quot;", RegexOptions.IgnoreCase).Groups[1].Value,
+                // AliExpress
+                Regex.Match(html, @"""imagePathList""\s*:\s*\[\s*""([^""]+)""").Groups[1].Value,
+                Regex.Match(html, @"""imageBigViewURL""\s*:\s*\[\s*""([^""]+)""").Groups[1].Value,
+                // Metadatos estándar
+                ExtractMetaContent(html, "property", "og:image:secure_url"),
+                ExtractMetaContent(html, "property", "og:image"),
+                ExtractMetaContent(html, "name", "og:image"),
+                ExtractMetaContent(html, "name", "twitter:image"),
+                ExtractMetaContent(html, "property", "twitter:image"),
+                ExtractMetaContent(html, "itemprop", "image"),
+                Regex.Match(html, @"<link\b[^>]*rel=[""']image_src[""'][^>]*href=[""']([^""']+)", RegexOptions.IgnoreCase).Groups[1].Value,
+                ExtractJsonLdImage(html),
+                Regex.Match(html, @"<img\b[^>]*\bid=""landingImage""[^>]*\bsrc=""([^""]+)""", RegexOptions.IgnoreCase).Groups[1].Value
+            };
+
+            foreach (var candidate in candidates)
+            {
+                var normalized = NormalizeImageUrl(candidate, pageUrl);
+                if (normalized != null)
+                    return normalized;
+            }
+
+            return null;
+        }
+
+        private static string? ExtractJsonLdImage(string html)
+        {
+            var scripts = Regex.Matches(html, @"<script\b[^>]*type=[""']application/ld\+json[""'][^>]*>(.*?)</script>",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            foreach (Match script in scripts)
+            {
+                var m = Regex.Match(script.Groups[1].Value, @"""image""\s*:\s*(?:\[\s*)?(?:\{[^}]*""url""\s*:\s*)?""([^""]+)""",
+                    RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                if (m.Success)
+                    return m.Groups[1].Value;
+            }
+            return null;
+        }
+
+        /// <summary>Convierte a URL absoluta https y descarta datos inválidos (data:, svg de relleno, píxeles).</summary>
+        public static string? NormalizeImageUrl(string? raw, string? pageUrl)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return null;
+
+            var value = HtmlDecode(raw.Trim())
+                .Replace("\\u002F", "/", StringComparison.OrdinalIgnoreCase)
+                .Replace("\\/", "/");
+
+            if (value.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ||
+                value.Contains("sprite", StringComparison.OrdinalIgnoreCase) ||
+                value.Contains("transparent-pixel", StringComparison.OrdinalIgnoreCase) ||
+                value.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            if (value.StartsWith("//", StringComparison.Ordinal))
+                value = "https:" + value;
+
+            // En Linux "/img/a.jpg" se interpreta como file:///img/a.jpg: solo http(s) cuenta como absoluta.
+            if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                if (string.IsNullOrWhiteSpace(pageUrl) ||
+                    !Uri.TryCreate(pageUrl, UriKind.Absolute, out var baseUri) ||
+                    !Uri.TryCreate(baseUri, value, out uri))
+                    return null;
+            }
+
+            if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+                return null;
+
+            // Mercado Libre y el navegador necesitan https.
+            var builder = new UriBuilder(uri) { Scheme = Uri.UriSchemeHttps, Port = -1 };
+            var result = builder.Uri.ToString();
+            return result.Length <= 1000 ? result : null;
         }
 
         private static string? ExtractByIdSpan(string html, string id)

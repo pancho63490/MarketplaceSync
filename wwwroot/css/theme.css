@@ -516,7 +516,7 @@ code {
   flex: 1;
   width: 100%;
   max-width: 1320px;
-  padding: 2rem 2.25rem 3rem;
+  padding: 2rem 2.25rem 5.5rem; /* espacio para el botón del asistente */
 }
 
 .app-footer {
@@ -813,3 +813,104 @@ th { font-size: var(--fs-xs); }
 
 /* Si una imagen remota falla, no mostrar su texto alternativo encima del diseño. */
 img { color: transparent; }
+
+/* ── Importar producto ──────────────────────────────── */
+
+.import-page { max-width: 760px; }
+.import-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  padding: 1.5rem;
+}
+.import-url { position: relative; }
+.import-url .form-control { padding-right: 8rem; }
+.import-store {
+  position: absolute; right: .75rem; top: 50%; transform: translateY(-50%);
+  font-size: var(--fs-sm); font-weight: 600; color: var(--muted);
+}
+.import-steps {
+  margin: 1.25rem 0;
+  padding-left: 1.25rem;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  display: grid;
+  gap: .3rem;
+}
+.import-steps li::marker { color: var(--signal-hover); font-weight: 800; }
+.import-switch {
+  padding: .9rem 1rem .9rem 3.25rem;
+  background: var(--paper);
+  border-radius: var(--r-control);
+  margin-bottom: 1.25rem;
+}
+.import-switch .form-check-input { margin-left: -2.25rem; margin-top: .2rem; }
+.import-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.import-note { max-width: 70ch; }
+
+/* ── Asistente ──────────────────────────────────────── */
+
+.assistant-fab {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 1040;
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .7rem 1.1rem;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 8px 24px rgba(27, 42, 65, .25);
+}
+.assistant-fab span { color: var(--signal); }
+.assistant-fab:hover { background: #24364f; }
+
+.assistant-panel { --bs-offcanvas-width: 420px; background: var(--paper); }
+.assistant-panel .offcanvas-header { background: var(--surface); border-bottom: 1px solid var(--line); align-items: flex-start; }
+.assistant-title {
+  font-stretch: 115%;
+  font-variation-settings: "wdth" 115;
+  font-weight: 800;
+  font-size: 1.25rem;
+  margin: 0 0 .15rem;
+}
+.assistant-body { display: flex; flex-direction: column; gap: .75rem; padding: 1rem; }
+.assistant-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: .6rem; padding-right: .25rem; }
+.assistant-msg {
+  max-width: 92%;
+  padding: .65rem .85rem;
+  border-radius: 12px;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+.assistant-msg p { margin: 0 0 .4rem; }
+.assistant-msg p:last-child { margin-bottom: 0; }
+.assistant-msg ul { margin: .2rem 0 .4rem; padding-left: 1.1rem; }
+.assistant-msg a { font-weight: 600; }
+.assistant-msg.is-user { align-self: flex-end; background: var(--ink); border-color: var(--ink); color: #fff; }
+.assistant-msg.is-thinking { color: var(--muted); font-style: italic; }
+.assistant-suggestions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.assistant-chip {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  border-radius: var(--r-pill);
+  padding: .35rem .75rem;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-2);
+  text-align: left;
+}
+.assistant-chip:hover { border-color: var(--ink-2); color: var(--ink); }
+.assistant-form textarea { resize: none; font-size: var(--fs-sm); }
+
+@media (max-width: 991.98px) {
+  .assistant-fab { right: .9rem; bottom: .9rem; padding: .6rem .95rem; }
+  .assistant-panel { --bs-offcanvas-width: 100%; }
+}

@@ -304,6 +304,13 @@ namespace MarketplaceSync.Web.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AttributesJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("AutopilotNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<string>("CategoryId")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");

@@ -245,7 +245,10 @@
                             <a asp-action="Details" asp-route-id="@p.Id" class="btn btn-sm btn-outline-secondary">Revisar</a>
                             break;
                         default:
-                            <a asp-action="EnrichWithAi" asp-route-id="@p.Id" class="btn btn-sm btn-outline-secondary" title="Título, descripción y atributos con IA">✨ Completar con IA</a>
+                            <form asp-action="CompleteWithAi" asp-route-id="@p.Id" method="post" class="d-inline ai-form">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Categoría, título, descripción, atributos y precio con IA">✨ Completar con IA</button>
+                            </form>
                             break;
                     }
 
@@ -257,7 +260,21 @@
                             <li><a class="dropdown-item" asp-action="Variants" asp-route-id="@p.Id">SKU y variantes</a></li>
                             @if (row.Stage is not (ProductStage.Draft or ProductStage.NeedsReview))
                             {
-                                <li><a class="dropdown-item" asp-action="EnrichWithAi" asp-route-id="@p.Id">✨ Completar con IA</a></li>
+                                <li>
+                                    <form asp-action="CompleteWithAi" asp-route-id="@p.Id" method="post" class="ai-form">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="dropdown-item">✨ Completar con IA</button>
+                                    </form>
+                                </li>
+                            }
+                            @if (row.Stage is not (ProductStage.Published or ProductStage.Paused))
+                            {
+                                <li>
+                                    <form asp-action="CompleteWithAi" asp-route-id="@p.Id" asp-route-publish="true" method="post" class="ai-form">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="dropdown-item">⚡ Completar y publicar con IA</button>
+                                    </form>
+                                </li>
                             }
                             @if (row.Stage is not (ProductStage.Published or ProductStage.Paused or ProductStage.Ready))
                             {
@@ -287,3 +304,15 @@
         }
     }
 </div>
+
+@section Scripts {
+    <script>
+        // La IA tarda unos segundos: avisa y evita doble envío.
+        document.querySelectorAll('.ai-form').forEach(function (form) {
+            form.addEventListener('submit', function () {
+                var button = form.querySelector('button');
+                if (button) { button.disabled = true; button.textContent = 'Preparando con IA…'; }
+            });
+        });
+    </script>
+}
