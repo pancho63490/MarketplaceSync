@@ -5,6 +5,7 @@ using MarketplaceSync.Web.Models.Marketplace;
 using MarketplaceSync.Web.Models.Orders;
 using MarketplaceSync.Web.Models.Inventory;
 using MarketplaceSync.Web.Models.MarketInsights;
+using MarketplaceSync.Web.Models.CrossBorder;
 namespace MarketplaceSync.Web.Data
 {
     public class AppDbContext : IdentityDbContext
@@ -28,6 +29,7 @@ namespace MarketplaceSync.Web.Data
         public DbSet<InventoryMovement> InventoryMovements { get; set; }
         public DbSet<MarketRankingSnapshot> MarketRankingSnapshots { get; set; }
         public DbSet<MarketRankingSnapshotItem> MarketRankingSnapshotItems { get; set; }
+        public DbSet<CrossBorderSettings> CrossBorderSettings { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -225,6 +227,15 @@ namespace MarketplaceSync.Web.Data
                 entity.Property(x => x.Price).HasColumnType("numeric(18,2)");
                 entity.Property(x => x.CurrencyId).HasMaxLength(20);
                 entity.Property(x => x.Permalink).HasMaxLength(1000);
+            });
+
+            builder.Entity<CrossBorderSettings>(entity =>
+            {
+                entity.HasOne(x => x.Organization)
+                    .WithMany()
+                    .HasForeignKey(x => x.OrganizationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(x => x.OrganizationId).IsUnique();
             });
 
             builder.Entity<SalesOrder>(entity =>

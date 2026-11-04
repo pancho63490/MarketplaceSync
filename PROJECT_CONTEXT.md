@@ -57,6 +57,8 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 - Hangfire ejecuta `capture-mercadolibre-ranking-history` diariamente a las 12:15 UTC para las 12 categorías más usadas de cada organización con una cuenta conectada. Una consulta manual también guarda la captura del día para iniciar el historial inmediatamente.
 - La pantalla de tendencias permite periodos de 7, 30 y 90 días, grafica la evolución del Top 5 y compara la última captura con la anterior para mostrar ascensos, descensos, entradas, salidas y cambios de precio.
 - La migración `20261101155154_AddMarketRankingHistory` crea `MarketRankingSnapshots`, `MarketRankingSnapshotItems`, sus relaciones, el índice diario único y los índices de consulta.
+- Los resultados `USER_PRODUCT` del ranking pueden pertenecer a otros vendedores; Mercado Libre entrega su ID y posición, pero puede negar la ficha en `/user-products/{id}`. El servicio intenta entonces relacionar el ID mediante `products/search`; si tampoco existe coincidencia, marca la ficha como privada, reduce su puntuación y bloquea la creación de un borrador genérico.
+- La captura del día se actualiza al volver a consultar en lugar de duplicarse. Esto permite reemplazar fichas genéricas del historial por datos enriquecidos después de mejorar la resolución o cuando Mercado Libre vuelve a exponerlos.
 - `.gitignore` excluye `.DS_Store`, archivos locales de configuración y variantes de `.env` (excepto un posible `.env.example`). Los `.DS_Store` que ya estaban rastreados no se eliminaron porque contienen cambios previos ajenos a esta tarea.
 - La lista completa de variables de despliegue y el procedimiento de rotación está en `docs/deployment.md`; nunca se deben copiar valores reales a ese documento ni a `PROJECT_CONTEXT.md`.
 
@@ -78,15 +80,45 @@ Convertir MarketplaceSync en un ERP omnicanal para vendedores, tomando UpSeller 
 - La carga automática de atributos y el indicador de preparación compilaron con 0 errores y 0 advertencias. No requieren migración.
 - La calculadora compiló con 0 errores y 0 advertencias; el parser de la respuesta oficial se verificó con comisión porcentual, cargo fijo y comisión total, y Docker inició correctamente. La consulta real exige el token de una cuenta conectada y no requiere migración.
 - La migración del historial se generó con `dotnet-ef` 8.0.11, se aplicó sobre PostgreSQL local y se verificaron ambas tablas, el índice diario único, el arranque y el registro del trabajo recurrente. La vista se probó con dos capturas temporales y mostró correctamente subida, bajada, producto nuevo, salida y gráfica; todos los datos temporales fueron eliminados.
+- La recuperación de `USER_PRODUCT` se verificó con una respuesta controlada: ante un 403 en la ficha privada, el buscador oficial devolvió nombre y marca del catálogo y el resultado quedó habilitado. El proyecto compiló con 0 errores y 0 advertencias.
+- Se corrigió la actualización de capturas diarias en `MarketRankingHistoryService.CaptureAsync` para sincronizar los ítems en el lugar (*in-place*) en vez de `RemoveRange` + `BuildItems`, evitando la violación de restricción única (`IX_MarketRankingSnapshotItems_MarketRankingSnapshotId_ExternalId`) en PostgreSQL.
+- Se corrigió la gestión de memoria en `MercadoLibreBestSellerService.GetTopAsync` liberando de forma segura `categoryTask` si `highlights` falla antes de completarse.
+- Se implementó el modelo `CrossBorderSettings` y la migración `20261104163500_AddCrossBorderSettings` para guardar por organización el tipo de cambio USD/MXN, porcentaje de cruce/impuestos, cuotas fijas, margen neto objetivo, ganancia mínima, costo de Mercado Envíos, comisión MeLi y retenciones de plataforma.
+- Se implementó `CrossBorderPricingService` y su interfaz `ICrossBorderPricingService`, integrados con `ProductsController.PublishToMercadoLibre` para prellenar automáticamente el precio y costo puesto en Juárez (`LandedCost`) cuando se importan productos en USD de eBay, Amazon o AliExpress.
+- Se creó `CrossBorderController` y la vista interactiva `Views/CrossBorder/Index.cshtml` con un simulador en tiempo real que desglosa precio base, cruce aduanal, envío, comisiones y ganancia neta.
+- Se implementó `GeminiProductAiEnricherService` y su interfaz `IProductAiEnricherService` para procesar productos crudos con Google Gemini 1.5 Flash (o motor de respaldo por reglas si no hay API key configurada), generando títulos optimizados ≤ 60 caracteres, descripciones limpias en texto plano, extracción de marca/modelo, mapeo de atributos requeridos de MeLi y evaluación de riesgo de propiedad intelectual.
+- La compilación `dotnet build --no-restore` pasó con 0 errores y 0 advertencias.
 - Mantener la validación de migraciones nuevas sobre PostgreSQL local antes de aplicarlas en producción. Cuando el runtime local no coincida con .NET 8, usar `dotnet-ef` 8.0.11 dentro de la imagen oficial del SDK como se hizo con inventario.
 - Completar pruebas manuales de registro, aislamiento entre organizaciones, importación y OAuth.
 - Mover secretos de `appsettings.json` a variables de entorno y cifrar tokens en reposo antes de operar con vendedores reales.
 - Rotar la contraseña local compartida, `Importer__Key` y `Ebay__MarketplaceDeletionVerificationToken` si los valores que antes estaban versionados llegaron a utilizarse. Configurar en Render solamente las integraciones que se habiliten.
 - Configurar el despliegue para ejecutar `dotnet MarketplaceSync.Web.dll --migrate` como tarea previa y abortar la publicación si el comando falla. No volver a crear un endpoint HTTP para migraciones.
 
+## Modelo de Negocio: Dropshipping y Arbitraje Transfronterizo (El Paso ➔ Cd. Juárez ➔ Mercado Libre)
+
+- **Fuentes de abastecimiento:** Caza de ofertas y extracción de productos en eBay, Amazon (EE.UU.) y AliExpress.
+- **Ruta logística y aduanal:** Recepción/compra en El Paso, TX y cruce e importación a Ciudad Juárez, Chih., para despacho y venta nacional a través de Mercado Libre México.
+- **Estructura de costos e impuestos de importación para autopartes / refacciones:**
+  - **IGI (Arancel):** 0% si cuenta con certificado de origen T-MEC (EE.UU./Canadá). Si proviene de terceros países (China/Asia como en AliExpress o genéricos de eBay), la tasa general oscila entre 5% y 15% según fracción arancelaria (capítulos 84, 85 y 87 TIGIE).
+  - **DTA (Derecho de Trámite Aduanero):** 8 al millar (0.8%) sobre valor en aduana (o cuota fija/exento con T-MEC).
+  - **IVA Fronterizo:** Tasa preferencial del 8% bajo el Decreto de Estímulos Fiscales de la Región Fronteriza Norte (o 16% general/comercializadora).
+  - **Honorarios de cruce / comercializadora:** Tarifa flat de cruce fronterizo (habitualmente 12% a 18% del valor de factura o tarifa fija por peso/volumen).
+  - **Retenciones de plataforma digital (Mercado Libre):** Con RFC persona física: 1% ISR + 8% IVA. Sin RFC: hasta 36% (20% ISR + 16% IVA).
+  - **Fórmula de Landed Cost (Costo puesto en Juárez):**
+    `Costo_Base_MXN = (Precio_Compra_USD * Tipo_Cambio) + Costo_Envio_USA_USD + Impuestos_Cruce (Arancel + DTA + IVA + Honorarios)`
+  - **Fórmula de Precio Venta Sugerido (Maximizador de ganancia):**
+    `Precio_Venta = (Costo_Base_MXN + Costo_Envio_MeLi + Utilidad_Deseada_MXN) / (1 - (Tasa_Comision_MeLi + Tasa_Retencion_Impuestos))`
+
+## UpSeller con IA — Automatización de Publicaciones
+
+- **Objetivo:** Publicación desatendida/piloto automático estilo UpSeller, eliminando la carga manual de atributos de Mercado Libre.
+- **Flujo:** Extracción de producto ➔ Detección de categoría MLM ➔ Descarga de esquema de atributos ➔ Enriquecimiento con IA (mapeo a `value_id` oficial, título SEO ≤ 60 chars, descripción limpia, filtro de marca/BPP) ➔ Cálculo automático de precio con margen neto ➔ Publicación automática con Hangfire.
+
 ## Siguiente módulo
 
-Publicar el stock central de cada variante hacia Mercado Libre con cola, reintentos e historial por publicación. Después agregar reservas y preparación de envíos sin mezclar el estado comercial del pedido con el estado logístico.
+1. Extractor y cazador de ofertas para Amazon y AliExpress (junto con el de eBay existente) para importar fichas crudas completas (imágenes, bullet points, especificaciones).
+2. Acción/botón "Enriquecer y Publicar con IA" que conecte `ProductExtractorService` ➔ `MercadoLibreCategoryService` ➔ `GeminiProductAiEnricherService` ➔ `CrossBorderPricingService` ➔ `MercadoLibreService` en piloto automático con Hangfire.
+3. Publicar el stock central de cada variante hacia Mercado Libre con cola, reintentos e historial por publicación.
 
 ## Decisiones del modelo
 

@@ -94,6 +94,7 @@ private readonly ProductExtractorService _extractor;
     private readonly ILogger<ProductsController> _logger;
     private readonly IMercadoLibreAuthService _mercadoLibreAuthService;
     private readonly IMercadoLibreFeeService _mercadoLibreFeeService;
+    private readonly ICrossBorderPricingService _crossBorderPricingService;
 
 public ProductsController(
     AppDbContext context,
@@ -104,6 +105,7 @@ public ProductsController(
     IOrganizationContext organizationContext,
     IMercadoLibreAuthService mercadoLibreAuthService,
     IMercadoLibreFeeService mercadoLibreFeeService,
+    ICrossBorderPricingService crossBorderPricingService,
     ILogger<ProductsController> logger
 )
 {
@@ -115,6 +117,7 @@ public ProductsController(
     _organizationContext = organizationContext;
     _mercadoLibreAuthService = mercadoLibreAuthService;
     _mercadoLibreFeeService = mercadoLibreFeeService;
+    _crossBorderPricingService = crossBorderPricingService;
     _logger = logger;
 }
         
@@ -626,6 +629,24 @@ var product = await _context.Products
     if (product == null)
         return NotFound();
 
+    var isUsdSource = string.Equals(product.SourceCurrency, "USD", StringComparison.OrdinalIgnoreCase) ||
+                      string.Equals(product.SourceMarketplace, "eBay", StringComparison.OrdinalIgnoreCase) ||
+                      string.Equals(product.SourceMarketplace, "Amazon", StringComparison.OrdinalIgnoreCase) ||
+                      string.Equals(product.SourceMarketplace, "AliExpress", StringComparison.OrdinalIgnoreCase);
+
+    decimal initialPrice = product.SourcePrice ?? 0m;
+    decimal? initialUnitCost = string.Equals(product.SourceMarketplace, "MercadoLibreInsights", StringComparison.OrdinalIgnoreCase)
+        ? null
+        : product.SourcePrice;
+
+    if (product.SourcePrice.HasValue && product.SourcePrice.Value > 0 && isUsdSource)
+    {
+        var crossBorderSettings = await _crossBorderPricingService.GetOrCreateSettingsAsync(organizationId);
+        var pricing = _crossBorderPricingService.CalculatePricing(product.SourcePrice.Value, crossBorderSettings);
+        initialPrice = pricing.SuggestedListingPriceMxn;
+        initialUnitCost = pricing.LandedCostJuarezMxn;
+    }
+
     var model = new PublishToMercadoLibreRequest
     {
         ProductId = product.Id,
@@ -634,7 +655,7 @@ var product = await _context.Products
             : "Producto sin título",
 
         Description = product.Description,
-        Price = product.SourcePrice ?? 0,
+        Price = initialPrice,
         Stock = product.SourceStock ?? 1,
         CurrencyId = "MXN",
         CategoryId = "",
@@ -644,12 +665,7 @@ var product = await _context.Products
         Brand = product.Brand,
         Model = product.Model,
         MarketplaceAccountId = marketplaceAccountId,
-        UnitCost = string.Equals(
-            product.SourceMarketplace,
-            "MercadoLibreInsights",
-            StringComparison.OrdinalIgnoreCase)
-                ? null
-                : product.SourcePrice
+        UnitCost = initialUnitCost
     };
 
     await PopulateMarketplaceAccountsAsync(model, organizationId);

@@ -81,6 +81,7 @@
     {
         var analysis = Model.OpportunityAnalysis;
         var bestOpportunity = analysis?.Opportunities.FirstOrDefault();
+        var unavailableDetails = Model.Ranking.Items.Count(x => !x.DetailsAvailable);
 
         @if (analysis is not null)
         {
@@ -105,6 +106,13 @@
                     <strong>@analysis.CategoryCompetitionLevel</strong>
                     <p>Según publicaciones activas de la categoría</p>
                 </div>
+            </div>
+        }
+
+        @if (unavailableDetails > 0)
+        {
+            <div class="alert alert-warning border-0 shadow-sm small">
+                Mercado Libre no expuso la ficha pública de <strong>@unavailableDetails</strong> User Product(s) de otros vendedores. Intentamos relacionarlos con el catálogo oficial; los que sigan como “Ficha no disponible” no se pueden preparar para publicar de forma segura.
             </div>
         }
 
@@ -166,15 +174,22 @@
                                     <span>Competencia <strong>@opportunity.CompetitionScore</strong></span>
                                 </div>
                                 <p class="opportunity-recommendation">@opportunity.Recommendation</p>
-                                <form asp-action="PrepareForPublishing" method="post" class="mb-2">
-                                    @Html.AntiForgeryToken()
-                                    <input type="hidden" name="categoryId" value="@Model.Ranking.CategoryId" />
-                                    <input type="hidden" name="marketplaceAccountId" value="@Model.MarketplaceAccountId" />
-                                    <input type="hidden" name="itemId" value="@item.Id" />
-                                    <button type="submit" class="btn btn-sm btn-primary w-100 opportunity-publish-button">
-                                        Preparar para publicar
-                                    </button>
-                                </form>
+                                @if (item.DetailsAvailable)
+                                {
+                                    <form asp-action="PrepareForPublishing" method="post" class="mb-2">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="categoryId" value="@Model.Ranking.CategoryId" />
+                                        <input type="hidden" name="marketplaceAccountId" value="@Model.MarketplaceAccountId" />
+                                        <input type="hidden" name="itemId" value="@item.Id" />
+                                        <button type="submit" class="btn btn-sm btn-primary w-100 opportunity-publish-button">
+                                            Preparar para publicar
+                                        </button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <div class="unavailable-product-note mb-2">Ficha privada de otro vendedor</div>
+                                }
                                 <div class="d-flex justify-content-between align-items-end gap-2 mt-auto">
                                     <div class="best-seller-price">
                                         @if (item.Price.HasValue)
@@ -422,12 +437,14 @@
     .catalog-badge { background: #e8f8f0; border-radius: 999px; color: #168759; display: inline-block; font-family: inherit; font-weight: 750; margin-left: 5px; padding: 2px 6px; }
     .opportunity-level { border-radius: 999px; font-size: .56rem; font-weight: 850; padding: 3px 7px; text-transform: uppercase; }
     .opportunity-level.level-alta { background: #e5f8ef; color: #128457; } .opportunity-level.level-buena { background: #eaf2ff; color: #1857d8; } .opportunity-level.level-media { background: #fff5d9; color: #9a6b00; } .opportunity-level.level-baja { background: #f3f4f6; color: #6b7280; }
+    .opportunity-level.level-limitada { background: #f3f4f6; color: #7b8493; }
     .opportunity-score-row { align-items: center; display: grid; gap: 8px; grid-template-columns: 44px 1fr; margin-top: 9px; }
     .opportunity-score-row > strong { color: #172033; font-size: .86rem; font-weight: 900; } .opportunity-score-row small { color: #9aa4b3; font-size: .52rem; }
     .opportunity-score-track { background: #edf0f4; border-radius: 999px; height: 6px; overflow: hidden; } .opportunity-score-track span { background: linear-gradient(90deg, #246bfd, #27b27b); border-radius: inherit; display: block; height: 100%; }
     .opportunity-components { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; } .opportunity-components span { background: #f5f7fa; border-radius: 6px; color: #8490a2; font-size: .55rem; padding: 3px 5px; } .opportunity-components strong { color: #526075; }
     .opportunity-recommendation { color: #68758a; font-size: .61rem; line-height: 1.35; margin: 7px 0; }
     .opportunity-publish-button { border-radius: 8px; font-size: .66rem; font-weight: 800; padding: .42rem .65rem; }
+    .unavailable-product-note { background: #f3f4f6; border-radius: 8px; color: #7b8493; font-size: .62rem; font-weight: 750; padding: .48rem .65rem; text-align: center; }
     .best-seller-price strong, .best-seller-price small { display: block; } .best-seller-price strong { color: #172033; font-size: .86rem; } .best-seller-price small, .best-seller-price span { color: #9aa4b3; font-size: .6rem; }
     .best-seller-link { color: #246bfd; font-size: .67rem; font-weight: 750; text-decoration: none; }
     .insights-note { color: #7b8798; font-size: .68rem; line-height: 1.5; text-align: center; }

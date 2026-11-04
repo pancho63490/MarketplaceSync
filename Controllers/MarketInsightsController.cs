@@ -253,6 +253,11 @@ public sealed class MarketInsightsController : Controller
                 TempData["Error"] = "El producto ya no forma parte del Top 10. Actualiza el ranking e inténtalo nuevamente.";
                 return RedirectToAction(nameof(Index), new { categoryId, marketplaceAccountId });
             }
+            if (!rankedItem.DetailsAvailable)
+            {
+                TempData["Error"] = "Mercado Libre solo compartió el ID y la posición de este User Product, no su ficha. Elige un resultado que muestre nombre e imagen reales.";
+                return RedirectToAction(nameof(Index), new { categoryId, marketplaceAccountId });
+            }
 
             var product = await _dbContext.Products
                 .Include(x => x.MarketplacePublications)

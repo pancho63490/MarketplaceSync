@@ -53,7 +53,9 @@ public sealed class MarketOpportunityAnalyzer : IMarketOpportunityAnalyzer
         var competitionScore = (int)Math.Round((categoryCompetitionScore * .6) + (brandScore * .4));
         var score = (int)Math.Round((demandScore * .50) + (priceScore * .25) + (competitionScore * .25));
         score = Math.Clamp(score, 0, 100);
-        var level = score switch
+        if (!item.DetailsAvailable)
+            score = Math.Min(score, 39);
+        var level = !item.DetailsAvailable ? "Limitada" : score switch
         {
             >= 80 => "Alta",
             >= 65 => "Buena",
@@ -68,7 +70,9 @@ public sealed class MarketOpportunityAnalyzer : IMarketOpportunityAnalyzer
             priceScore,
             competitionScore,
             level,
-            BuildRecommendation(score, item.Price, medianPrice),
+            item.DetailsAvailable
+                ? BuildRecommendation(score, item.Price, medianPrice)
+                : "Mercado Libre no comparte la ficha de este producto de otro vendedor.",
             existingItemIds.Contains(item.Id));
     }
 

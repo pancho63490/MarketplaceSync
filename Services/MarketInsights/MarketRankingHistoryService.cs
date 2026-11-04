@@ -35,19 +35,66 @@ public sealed class MarketRankingHistoryService : IMarketRankingHistoryService
         CancellationToken cancellationToken = default)
     {
         var snapshotDate = DateOnly.FromDateTime(DateTime.UtcNow);
-        var alreadyCaptured = await _dbContext.MarketRankingSnapshots
-            .AsNoTracking()
-            .AnyAsync(x => x.OrganizationId == organizationId &&
-                           x.CategoryId == ranking.CategoryId &&
-                           x.SnapshotDate == snapshotDate,
+        var scores = analysis.Opportunities
+            .DistinctBy(x => x.Item.Id)
+            .ToDictionary(
+                x => x.Item.Id,
+                x => x.Score,
+                StringComparer.OrdinalIgnoreCase);
+        var existingSnapshot = await _dbContext.MarketRankingSnapshots
+            .Include(x => x.Items)
+            .FirstOrDefaultAsync(x => x.OrganizationId == organizationId &&
+                                      x.CategoryId == ranking.CategoryId &&
+                                      x.SnapshotDate == snapshotDate,
                 cancellationToken);
-        if (alreadyCaptured)
-            return false;
+        if (existingSnapshot is not null)
+        {
+            existingSnapshot.MarketplaceAccountId = marketplaceAccountId;
+            existingSnapshot.CategoryName = Truncate(ranking.CategoryName, 300);
+            existingSnapshot.TotalActiveListings = ranking.TotalActiveListings;
+            existingSnapshot.CapturedAt = DateTime.UtcNow;
 
-        var scores = analysis.Opportunities.ToDictionary(
-            x => x.Item.Id,
-            x => x.Score,
-            StringComparer.OrdinalIgnoreCase);
+            var currentItemsByExternalId = existingSnapshot.Items
+                .ToDictionary(x => x.ExternalId, StringComparer.OrdinalIgnoreCase);
+            var incomingItems = BuildItems(ranking, scores);
+            var incomingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var incoming in incomingItems)
+            {
+                incomingIds.Add(incoming.ExternalId);
+                if (currentItemsByExternalId.TryGetValue(incoming.ExternalId, out var existingItem))
+                {
+                    existingItem.Position = incoming.Position;
+                    existingItem.Type = incoming.Type;
+                    existingItem.Name = incoming.Name;
+                    existingItem.Brand = incoming.Brand;
+                    existingItem.Model = incoming.Model;
+                    existingItem.ImageUrl = incoming.ImageUrl;
+                    existingItem.Price = incoming.Price;
+                    existingItem.CurrencyId = incoming.CurrencyId;
+                    existingItem.Permalink = incoming.Permalink;
+                    existingItem.OpportunityScore = incoming.OpportunityScore;
+                }
+                else
+                {
+                    existingSnapshot.Items.Add(incoming);
+                }
+            }
+
+            var itemsToRemove = existingSnapshot.Items
+                .Where(x => !incomingIds.Contains(x.ExternalId))
+                .ToList();
+
+            foreach (var toRemove in itemsToRemove)
+            {
+                existingSnapshot.Items.Remove(toRemove);
+                _dbContext.MarketRankingSnapshotItems.Remove(toRemove);
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return false;
+        }
+
         var snapshot = new MarketRankingSnapshot
         {
             OrganizationId = organizationId,
@@ -57,20 +104,7 @@ public sealed class MarketRankingHistoryService : IMarketRankingHistoryService
             TotalActiveListings = ranking.TotalActiveListings,
             SnapshotDate = snapshotDate,
             CapturedAt = DateTime.UtcNow,
-            Items = ranking.Items.Select(item => new MarketRankingSnapshotItem
-            {
-                Position = item.Position,
-                ExternalId = Truncate(item.Id, 200),
-                Type = Truncate(item.Type, 30),
-                Name = Truncate(item.Name, 500),
-                Brand = TruncateNullable(item.Brand, 200),
-                Model = TruncateNullable(item.Model, 200),
-                ImageUrl = TruncateNullable(item.ImageUrl, 1000),
-                Price = item.Price,
-                CurrencyId = TruncateNullable(item.CurrencyId, 20),
-                Permalink = TruncateNullable(item.Permalink, 1000),
-                OpportunityScore = scores.GetValueOrDefault(item.Id)
-            }).ToList()
+            Items = BuildItems(ranking, scores)
         };
 
         _dbContext.MarketRankingSnapshots.Add(snapshot);
@@ -290,6 +324,24 @@ public sealed class MarketRankingHistoryService : IMarketRankingHistoryService
             currentItem is not null && previousItem is null,
             currentItem is null && previousItem is not null);
     }
+
+    private static List<MarketRankingSnapshotItem> BuildItems(
+        MercadoLibreBestSellerResult ranking,
+        IReadOnlyDictionary<string, int> scores) => ranking.Items.Select(item =>
+        new MarketRankingSnapshotItem
+        {
+            Position = item.Position,
+            ExternalId = Truncate(item.Id, 200),
+            Type = Truncate(item.Type, 30),
+            Name = Truncate(item.Name, 500),
+            Brand = TruncateNullable(item.Brand, 200),
+            Model = TruncateNullable(item.Model, 200),
+            ImageUrl = TruncateNullable(item.ImageUrl, 1000),
+            Price = item.Price,
+            CurrencyId = TruncateNullable(item.CurrencyId, 20),
+            Permalink = TruncateNullable(item.Permalink, 1000),
+            OpportunityScore = scores.GetValueOrDefault(item.Id)
+        }).ToList();
 
     private static string Truncate(string value, int maxLength) =>
         value.Length <= maxLength ? value : value[..maxLength];

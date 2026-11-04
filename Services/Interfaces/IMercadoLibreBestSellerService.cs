@@ -26,4 +26,5 @@ public sealed record MercadoLibreBestSellerItem(
     string? ImageUrl,
     decimal? Price,
     string? CurrencyId,
-    string? Permalink);
+    string? Permalink,
+    bool DetailsAvailable);

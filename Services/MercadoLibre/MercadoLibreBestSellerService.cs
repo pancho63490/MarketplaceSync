@@ -40,41 +40,64 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
             $"https://api.mercadolibre.com/categories/{Uri.EscapeDataString(categoryId)}",
             accessToken,
             cancellationToken);
-        using var highlights = await GetJsonAsync(
-            client,
-            $"https://api.mercadolibre.com/highlights/MLM/category/{Uri.EscapeDataString(categoryId)}",
-            accessToken,
-            cancellationToken);
 
-        if (!highlights.RootElement.TryGetProperty("content", out var content) ||
-            content.ValueKind != JsonValueKind.Array)
+        JsonDocument highlights;
+        try
         {
-            throw new InvalidOperationException("Mercado Libre no devolvió un ranking para esta categoría.");
+            highlights = await GetJsonAsync(
+                client,
+                $"https://api.mercadolibre.com/highlights/MLM/category/{Uri.EscapeDataString(categoryId)}",
+                accessToken,
+                cancellationToken);
+        }
+        catch
+        {
+            _ = categoryTask.ContinueWith(t =>
+            {
+                if (t.IsCompletedSuccessfully)
+                    t.Result.Dispose();
+            }, TaskScheduler.Default);
+            throw;
         }
 
-        var rankedEntries = content.EnumerateArray()
-            .Take(limit)
-            .Select((entry, index) => new
+        using (highlights)
+        {
+            if (!highlights.RootElement.TryGetProperty("content", out var content) ||
+                content.ValueKind != JsonValueKind.Array)
             {
-                Id = ReadString(entry, "id") ?? string.Empty,
-                Type = ReadString(entry, "type") ?? "UNKNOWN",
-                Position = ReadInt32(entry, "position") ?? index + 1
-            })
-            .Where(x => !string.IsNullOrWhiteSpace(x.Id))
-            .ToArray();
-        var resolved = await Task.WhenAll(rankedEntries.Select(entry =>
-            ResolveEntryAsync(client, entry.Id, entry.Type, entry.Position, accessToken, cancellationToken)));
-        using var category = await categoryTask;
-        var categoryName = ReadString(category.RootElement, "name") ?? categoryId;
-        var result = new MercadoLibreBestSellerResult(
-            categoryId,
-            categoryName,
-            ReadInt32(category.RootElement, "total_items_in_this_category"),
-            DateTime.UtcNow,
-            resolved.OrderBy(x => x.Position).ToArray());
+                _ = categoryTask.ContinueWith(t =>
+                {
+                    if (t.IsCompletedSuccessfully)
+                        t.Result.Dispose();
+                }, TaskScheduler.Default);
+                throw new InvalidOperationException("Mercado Libre no devolvió un ranking para esta categoría.");
+            }
 
-        _cache.Set(cacheKey, result, CacheDuration);
-        return result;
+            var rankedEntries = content.EnumerateArray()
+                .Take(limit)
+                .Select((entry, index) => new
+                {
+                    Id = ReadString(entry, "id") ?? string.Empty,
+                    Type = ReadString(entry, "type") ?? "UNKNOWN",
+                    Position = ReadInt32(entry, "position") ?? index + 1
+                })
+                .Where(x => !string.IsNullOrWhiteSpace(x.Id))
+                .DistinctBy(x => x.Id)
+                .ToArray();
+            var resolved = await Task.WhenAll(rankedEntries.Select(entry =>
+                ResolveEntryAsync(client, entry.Id, entry.Type, entry.Position, accessToken, cancellationToken)));
+            using var category = await categoryTask;
+            var categoryName = ReadString(category.RootElement, "name") ?? categoryId;
+            var result = new MercadoLibreBestSellerResult(
+                categoryId,
+                categoryName,
+                ReadInt32(category.RootElement, "total_items_in_this_category"),
+                DateTime.UtcNow,
+                resolved.OrderBy(x => x.Position).ToArray());
+
+            _cache.Set(cacheKey, result, CacheDuration);
+            return result;
+        }
     }
 
     private async Task<MercadoLibreBestSellerItem> ResolveEntryAsync(
@@ -132,17 +155,99 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
                 imageUrl,
                 price,
                 currencyId,
-                ReadString(root, "permalink"));
+                ReadString(root, "permalink"),
+                true);
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
-            _logger.LogDebug(exception, "Could not resolve Mercado Libre best seller {Type} {Id}.", type, id);
+            if (type.Equals("USER_PRODUCT", StringComparison.OrdinalIgnoreCase))
+            {
+                var catalogMatch = await TryResolveUserProductFromCatalogAsync(
+                    client,
+                    id,
+                    position,
+                    accessToken,
+                    cancellationToken);
+                if (catalogMatch is not null)
+                    return catalogMatch;
+            }
+
+            _logger.LogInformation(
+                exception,
+                "Mercado Libre did not expose details for best seller {Type} {Id}.",
+                type,
+                id);
             return Fallback(position, id, type);
         }
     }
 
     private static MercadoLibreBestSellerItem Fallback(int position, string id, string type) =>
-        new(position, id, type, $"Producto {id}", null, null, null, null, null, null);
+        new(position, id, type, $"Ficha no disponible ({id})", null, null, null, null, null, null, false);
+
+    private async Task<MercadoLibreBestSellerItem?> TryResolveUserProductFromCatalogAsync(
+        HttpClient client,
+        string userProductId,
+        int position,
+        string accessToken,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var url = "https://api.mercadolibre.com/products/search" +
+                      $"?status=active&site_id=MLM&limit=1&q={Uri.EscapeDataString(userProductId)}";
+            using var document = await GetJsonAsync(client, url, accessToken, cancellationToken);
+            if (!document.RootElement.TryGetProperty("results", out var results) ||
+                results.ValueKind != JsonValueKind.Array ||
+                results.GetArrayLength() == 0)
+                return null;
+
+            var root = results[0];
+            var catalogProductId = ReadString(root, "id");
+            var name = ReadString(root, "name") ?? ReadString(root, "title");
+            if (string.IsNullOrWhiteSpace(catalogProductId) || string.IsNullOrWhiteSpace(name))
+                return null;
+
+            var buyBox = root.TryGetProperty("buy_box_winner", out var buyBoxElement) &&
+                         buyBoxElement.ValueKind == JsonValueKind.Object
+                ? buyBoxElement
+                : default;
+            var imageUrl = ReadString(root, "secure_thumbnail") ??
+                           ReadString(root, "thumbnail") ??
+                           ReadFirstPicture(root) ??
+                           (buyBox.ValueKind == JsonValueKind.Object
+                               ? (ReadString(buyBox, "secure_thumbnail") ??
+                                  ReadString(buyBox, "thumbnail") ??
+                                  ReadFirstPicture(buyBox))
+                               : null);
+            var price = ReadDecimal(root, "price") ??
+                        (buyBox.ValueKind == JsonValueKind.Object ? ReadDecimal(buyBox, "price") : null);
+            var currencyId = ReadString(root, "currency_id") ??
+                             (buyBox.ValueKind == JsonValueKind.Object ? ReadString(buyBox, "currency_id") : null);
+            var permalink = ReadString(root, "permalink") ??
+                            $"https://www.mercadolibre.com.mx/p/{Uri.EscapeDataString(catalogProductId)}";
+
+            return new MercadoLibreBestSellerItem(
+                position,
+                userProductId,
+                "USER_PRODUCT",
+                name,
+                ReadAttributeValue(root, "BRAND"),
+                ReadAttributeValue(root, "MODEL"),
+                imageUrl,
+                price,
+                currencyId,
+                permalink,
+                true);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogDebug(
+                exception,
+                "Could not find a catalog match for user product {UserProductId}.",
+                userProductId);
+            return null;
+        }
+    }
 
     private static async Task<JsonDocument> GetJsonAsync(
         HttpClient client,

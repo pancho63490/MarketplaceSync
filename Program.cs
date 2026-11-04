@@ -6,6 +6,8 @@ using MarketplaceSync.Services.Auth;
 using MarketplaceSync.Services.Jobs;
 using MarketplaceSync.Services.Inventory;
 using MarketplaceSync.Services.MarketInsights;
+using MarketplaceSync.Services.CrossBorder;
+using MarketplaceSync.Services.Ai;
 using MarketplaceSync.Web.Services.Tenancy;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Identity;
@@ -113,6 +115,8 @@ builder.Services.AddScoped<IMercadoLibreBestSellerService, MercadoLibreBestSelle
 builder.Services.AddScoped<IMercadoLibreFeeService, MercadoLibreFeeService>();
 builder.Services.AddSingleton<IMarketOpportunityAnalyzer, MarketOpportunityAnalyzer>();
 builder.Services.AddScoped<IMarketRankingHistoryService, MarketRankingHistoryService>();
+builder.Services.AddScoped<ICrossBorderPricingService, CrossBorderPricingService>();
+builder.Services.AddScoped<IProductAiEnricherService, GeminiProductAiEnricherService>();
 
 builder.Services.AddScoped<MarketplaceDetectorService>();
 
