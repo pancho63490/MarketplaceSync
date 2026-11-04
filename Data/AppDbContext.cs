@@ -7,6 +7,7 @@ using MarketplaceSync.Web.Models.Inventory;
 using MarketplaceSync.Web.Models.MarketInsights;
 using MarketplaceSync.Web.Models.CrossBorder;
 using MarketplaceSync.Web.Models.Purchasing;
+using MarketplaceSync.Web.Models.Questions;
 namespace MarketplaceSync.Web.Data
 {
     public class AppDbContext : IdentityDbContext
@@ -32,6 +33,7 @@ namespace MarketplaceSync.Web.Data
         public DbSet<MarketRankingSnapshotItem> MarketRankingSnapshotItems { get; set; }
         public DbSet<CrossBorderSettings> CrossBorderSettings { get; set; }
         public DbSet<PurchaseCandidate> PurchaseCandidates { get; set; }
+        public DbSet<BuyerQuestion> BuyerQuestions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -290,6 +292,22 @@ namespace MarketplaceSync.Web.Data
                 entity.Property(x => x.Status).HasMaxLength(30);
                 entity.Property(x => x.PurchasedUnitCostUsd).HasColumnType("numeric(18,2)");
                 entity.Property(x => x.Notes).HasMaxLength(500);
+            });
+
+            builder.Entity<BuyerQuestion>(entity =>
+            {
+                entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(x => x.MarketplaceAccount).WithMany().HasForeignKey(x => x.MarketplaceAccountId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(x => new { x.MarketplaceAccountId, x.ExternalQuestionId }).IsUnique();
+                entity.HasIndex(x => new { x.OrganizationId, x.Status, x.DateCreated });
+                entity.Property(x => x.ExternalQuestionId).HasMaxLength(50);
+                entity.Property(x => x.ItemId).HasMaxLength(50);
+                entity.Property(x => x.Text).HasMaxLength(2000);
+                entity.Property(x => x.Status).HasMaxLength(30);
+                entity.Property(x => x.SuggestedAnswer).HasMaxLength(2000);
+                entity.Property(x => x.AnswerText).HasMaxLength(2000);
+                entity.Property(x => x.LastError).HasMaxLength(500);
             });
 
             builder.Entity<SalesOrder>(entity =>

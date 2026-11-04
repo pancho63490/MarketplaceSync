@@ -65,3 +65,9 @@ If a credential is exposed or committed:
 4. Review logs and provider activity for unexpected use.
 
 Changing a file later does not remove a secret from Git history. Previously committed credentials must be treated as exposed even after the current file is cleaned.
+
+## Mercado Libre notifications
+
+In the Mercado Libre developer panel (your application → Notifications), set the callback URL to
+`https://<your-render-domain>/MercadoLibre/Notifications` and enable the topics `orders_v2`, `items` and `questions`.
+Notifications whose `application_id` does not match `MercadoLibre__ClientId` are ignored. Scheduled jobs still run as a fallback.

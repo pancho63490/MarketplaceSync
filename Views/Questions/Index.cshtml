@@ -1,0 +1,136 @@
+@model MarketplaceSync.Web.Controllers.QuestionsIndexViewModel
+
+@{
+    ViewData["Title"] = "Preguntas";
+    string Ago(DateTime utc)
+    {
+        var span = DateTime.UtcNow - utc;
+        if (span.TotalMinutes < 1) return "hace un momento";
+        if (span.TotalMinutes < 60) return $"hace {(int)span.TotalMinutes} min";
+        if (span.TotalHours < 24) return $"hace {(int)span.TotalHours} h";
+        return $"hace {(int)span.TotalDays} d";
+    }
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+    <div>
+        <h1 class="page-title">Preguntas</h1>
+        <p class="text-muted mb-0">
+            Lo que te preguntan los compradores. Responder rápido sube tus ventas: la IA deja una respuesta lista para que la revises y la envíes.
+        </p>
+    </div>
+    <form asp-action="Sync" method="post">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn btn-primary" @(Model.HasAccounts ? "" : "disabled")>↻ Buscar preguntas nuevas</button>
+    </form>
+</div>
+
+@if (!Model.HasAccounts)
+{
+    <div class="alert alert-warning">
+        Conecta tu cuenta en <a asp-controller="MercadoLibre" asp-action="Status" class="alert-link">Cuentas de Mercado Libre</a> para recibir preguntas.
+    </div>
+}
+else if (!Model.AiConfigured)
+{
+    <div class="alert alert-info">
+        La IA no está configurada, así que no habrá respuestas sugeridas. Agrega <code>Anthropic__ApiKey</code> en Render para activarlas.
+    </div>
+}
+
+<div class="pl-chips mb-3">
+    <a class="pub-chip @(Model.Tab == "pending" ? "active" : "")" asp-action="Index">Sin responder <span>@Model.PendingCount</span></a>
+    <a class="pub-chip @(Model.Tab == "answered" ? "active" : "")" asp-action="Index" asp-route-tab="answered">Respondidas <span>@Model.AnsweredCount</span></a>
+</div>
+
+@if (Model.Rows.Count == 0)
+{
+    <div class="today-clear">
+        <div class="today-clear-mark" aria-hidden="true">✓</div>
+        <div>
+            <div class="fw-bold">@(Model.Tab == "pending" ? "Sin preguntas pendientes" : "Todavía no hay respuestas")</div>
+            <div class="text-muted small">Las preguntas nuevas llegan solas en cuanto Mercado Libre avisa, y se revisan cada 10 minutos.</div>
+        </div>
+    </div>
+}
+else
+{
+    <ol class="q-list">
+        @foreach (var row in Model.Rows)
+        {
+            var q = row.Question;
+            var draft = TempData[$"Draft:{q.Id}"] as string ?? q.SuggestedAnswer ?? "";
+            var waited = DateTime.UtcNow - q.DateCreated;
+            <li class="q-card @(Model.Tab == "pending" && waited.TotalHours >= 1 ? "is-late" : "")" id="q@(q.Id)">
+                <div class="q-product">
+                    <span class="recent-thumb">
+                        @if (!string.IsNullOrWhiteSpace(row.ImageUrl))
+                        {
+                            <img src="@row.ImageUrl" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" />
+                        }
+                    </span>
+                    <span class="q-product-name">
+                        @if (!string.IsNullOrWhiteSpace(row.Permalink))
+                        {
+                            <a href="@row.Permalink" target="_blank" rel="noopener">@(row.ProductTitle ?? q.ItemId)</a>
+                        }
+                        else
+                        {
+                            @(row.ProductTitle ?? q.ItemId)
+                        }
+                    </span>
+                    <span class="q-when">@Ago(q.DateCreated)</span>
+                </div>
+
+                <blockquote class="q-text">@q.Text</blockquote>
+
+                @if (Model.Tab == "pending")
+                {
+                    <form asp-action="Answer" method="post" class="q-answer">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@q.Id" />
+                        <label class="form-label small text-muted mb-1" for="a@(q.Id)">
+                            @(string.IsNullOrWhiteSpace(q.SuggestedAnswer) ? "Tu respuesta" : "Respuesta sugerida por IA — revísala antes de enviar")
+                        </label>
+                        <textarea class="form-control" id="a@(q.Id)" name="text" rows="3" maxlength="2000" required>@draft</textarea>
+                        @if (!string.IsNullOrWhiteSpace(q.LastError))
+                        {
+                            <div class="small text-danger mt-1">Último intento: @q.LastError</div>
+                        }
+                        <div class="d-flex flex-wrap gap-2 mt-2">
+                            <button type="submit" class="btn btn-primary btn-sm">Responder</button>
+                            @if (Model.AiConfigured)
+                            {
+                                <button type="submit" class="btn btn-outline-secondary btn-sm ai-suggest"
+                                        formaction="@Url.Action("Suggest")" formnovalidate>
+                                    ✨ @(string.IsNullOrWhiteSpace(q.SuggestedAnswer) ? "Sugerir respuesta" : "Volver a sugerir")
+                                </button>
+                            }
+                            <span class="small text-muted align-self-center ms-auto">Sin teléfonos, correos ni links: Mercado Libre los rechaza.</span>
+                        </div>
+                    </form>
+                }
+                else
+                {
+                    <div class="q-reply">
+                        <div class="small text-muted mb-1">Respondida @(q.AnsweredAt.HasValue ? Ago(q.AnsweredAt.Value) : "")</div>
+                        @q.AnswerText
+                    </div>
+                }
+            </li>
+        }
+    </ol>
+}
+
+@section Scripts {
+    <script>
+        document.querySelectorAll('.ai-suggest').forEach(function (button) {
+            button.addEventListener('click', function () {
+                setTimeout(function () {
+                    button.disabled = true;
+                    button.textContent = 'Pensando…';
+                }, 0);
+            });
+        });
+    </script>
+}

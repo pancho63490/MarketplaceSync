@@ -46,6 +46,12 @@ public sealed class HangfireRecurringJobsRegistrationService : BackgroundService
                     job => job.SyncMercadoLibreListings(),
                     "*/30 * * * *");
 
+                // Preguntas de compradores (respaldo de los avisos instantáneos)
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "sync-mercadolibre-questions",
+                    job => job.SyncMercadoLibreQuestions(),
+                    "*/10 * * * *");
+
                 // Radar de compra: después de la captura diaria del ranking (12:15 UTC)
                 _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
                     "refresh-purchase-radar",

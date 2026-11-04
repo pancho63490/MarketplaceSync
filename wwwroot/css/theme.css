@@ -976,3 +976,27 @@ img { color: transparent; }
   .pub-summary > div:nth-child(3) { border-left: 0; }
   .pub-summary > div:nth-child(n+3) { border-top: 1px solid var(--line); }
 }
+
+/* ── Preguntas ─────────────────────────────────────────────── */
+.q-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: .85rem; }
+.q-card { min-width: 0; }
+.q-card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel);
+    padding: 1rem 1.1rem; scroll-margin-top: 1rem;
+}
+.q-card.is-late { border-left: 4px solid var(--signal); }
+.q-card:target { box-shadow: 0 0 0 3px rgba(240, 162, 2, .35); }
+.q-product { display: flex; align-items: center; gap: .65rem; min-width: 0; }
+.q-product .recent-thumb { width: 40px; height: 40px; flex: 0 0 40px; }
+.q-product-name { font-weight: 600; font-size: var(--fs-sm); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.q-product-name a { color: inherit; }
+.q-when { margin-left: auto; font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; }
+.q-text {
+    margin: .75rem 0; padding: .65rem .85rem; background: var(--paper-2);
+    border-radius: 10px; font-size: 1.02rem; color: var(--ink);
+}
+.q-reply { padding: .65rem .85rem; border-left: 3px solid var(--ok); background: #f6faf6; border-radius: 0 10px 10px 0; }
+@media (max-width: 575.98px) {
+    .q-card { padding: .85rem; }
+    .q-answer .ms-auto { margin-left: 0 !important; width: 100%; }
+}

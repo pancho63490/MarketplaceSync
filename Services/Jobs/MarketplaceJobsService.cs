@@ -11,6 +11,7 @@ namespace MarketplaceSync.Services.Jobs
         private readonly ISourcePriceMonitorService _sourcePriceMonitor;
         private readonly IPurchaseRadarService _purchaseRadarService;
         private readonly MarketplaceSync.Services.MercadoLibre.IMercadoLibreListingSyncService _listingSync;
+        private readonly MarketplaceSync.Services.MercadoLibre.IMercadoLibreQuestionService _questions;
 
         public MarketplaceJobsService(
             IMercadoLibreAuthService authService,
@@ -18,7 +19,8 @@ namespace MarketplaceSync.Services.Jobs
             IMarketRankingHistoryService rankingHistoryService,
             ISourcePriceMonitorService sourcePriceMonitor,
             IPurchaseRadarService purchaseRadarService,
-            MarketplaceSync.Services.MercadoLibre.IMercadoLibreListingSyncService listingSync)
+            MarketplaceSync.Services.MercadoLibre.IMercadoLibreListingSyncService listingSync,
+            MarketplaceSync.Services.MercadoLibre.IMercadoLibreQuestionService questions)
         {
             _authService = authService;
             _orderSyncService = orderSyncService;
@@ -26,6 +28,7 @@ namespace MarketplaceSync.Services.Jobs
             _sourcePriceMonitor = sourcePriceMonitor;
             _purchaseRadarService = purchaseRadarService;
             _listingSync = listingSync;
+            _questions = questions;
         }
 
         public async Task RefreshMercadoLibreToken()
@@ -76,6 +79,36 @@ namespace MarketplaceSync.Services.Jobs
         public async Task PushStockForProduct(int productId)
         {
             await _listingSync.PushStockAsync(productId);
+        }
+
+        /// <summary>Trae preguntas sin responder y prepara respuestas con IA.</summary>
+        [DisableConcurrentExecution(timeoutInSeconds: 600)]
+        public async Task SyncMercadoLibreQuestions()
+        {
+            await _questions.SyncAllAsync();
+        }
+
+        /// <summary>Aviso de Mercado Libre: nueva pregunta.</summary>
+        [AutomaticRetry(Attempts = 3)]
+        public async Task ProcessQuestionNotification(int marketplaceAccountId, string questionId)
+        {
+            await _questions.ProcessQuestionAsync(marketplaceAccountId, questionId);
+        }
+
+        /// <summary>Aviso de Mercado Libre: pedido nuevo o cambiado.</summary>
+        [AutomaticRetry(Attempts = 3)]
+        [DisableConcurrentExecution(timeoutInSeconds: 300)]
+        public async Task SyncOrdersForOrganization(Guid organizationId)
+        {
+            await _orderSyncService.SyncAllAccountsAsync(organizationId);
+        }
+
+        /// <summary>Aviso de Mercado Libre: cambió una publicación.</summary>
+        [AutomaticRetry(Attempts = 2)]
+        [DisableConcurrentExecution(timeoutInSeconds: 900)]
+        public async Task SyncListingsForOrganization(Guid organizationId)
+        {
+            await _listingSync.SyncOrganizationAsync(organizationId);
         }
     }
 }

@@ -100,6 +100,7 @@ public sealed class AssistantController : Controller
             - Importar producto con IA: /Products/CreateFromUrl
             - Inventario: /Inventory
             - Pedidos: /Orders
+            - Preguntas de compradores (con respuesta sugerida por IA): /Questions  (?tab=answered)
             - Cuentas de Mercado Libre: /MercadoLibre/Status
 
             DATOS (actualizados al {DateTime.UtcNow.AddHours(-7):dd/MM/yyyy HH:mm}, hora de Juárez):
@@ -185,6 +186,16 @@ public sealed class AssistantController : Controller
                       $"{variants.Count(v => v.Stock <= 0)} agotados, {variants.Count(v => v.Stock > 0 && v.Stock <= v.LowStockThreshold)} con stock bajo.");
         foreach (var r in restock.Take(5))
             sb.AppendLine($"  - Resurtir {r.Sku} {Short(r.Title, 60)}: vendió {r.UnitsSold30Days} en 30 días, quedan {r.CurrentStock}, comprar {r.SuggestedQuantity}");
+
+        // Preguntas de compradores (solo el conteo y la más antigua; el texto puede traer datos personales)
+        var openQuestions = await _context.BuyerQuestions
+            .AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId && x.Status == MarketplaceSync.Web.Models.Questions.BuyerQuestionStatus.Unanswered)
+            .Select(x => x.DateCreated)
+            .ToListAsync(cancellationToken);
+        sb.AppendLine(openQuestions.Count == 0
+            ? "Preguntas sin responder: 0."
+            : $"Preguntas sin responder: {openQuestions.Count}; la más antigua tiene {(int)(DateTime.UtcNow - openQuestions.Min()).TotalHours} h.");
 
         // Pedidos (sin datos del comprador)
         var since = DateTime.UtcNow.AddDays(-30);

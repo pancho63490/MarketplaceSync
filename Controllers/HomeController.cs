@@ -78,6 +78,8 @@ namespace MarketplaceSync.Web.Controllers
             ViewBag.Orders30Days = await organizationOrders
                 .CountAsync(x => x.DateCreated >= since30 && x.Status != "cancelled" && x.Status != "invalid");
             ViewBag.UnitsInStock = await organizationVariants.SumAsync(x => (int?)(x.Stock > 0 ? x.Stock : 0)) ?? 0;
+            ViewBag.OpenQuestions = await _context.BuyerQuestions.CountAsync(x =>
+                x.OrganizationId == organizationId && x.Status == MarketplaceSync.Web.Models.Questions.BuyerQuestionStatus.Unanswered);
             ViewBag.ReadyProducts = await organizationProducts.CountAsync(x =>
                 x.Status == "ReadyToPublish" &&
                 !x.MarketplacePublications.Any(p => p.Marketplace == "MercadoLibre" && p.IsPublished));

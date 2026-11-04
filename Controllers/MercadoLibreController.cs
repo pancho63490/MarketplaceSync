@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using Hangfire;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -552,11 +553,90 @@ namespace MarketplaceSync.Web.Controllers
         // WEBHOOKS
         // =====================================================
 
+        // Mercado Libre manda varios avisos seguidos por el mismo cambio; se agrupan por cuenta y tema.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> RecentNotifications = new();
+
+        /// <summary>
+        /// Avisos instantáneos de Mercado Libre (orders_v2, items, questions).
+        /// Responde 200 de inmediato y deja el trabajo a Hangfire, como pide Mercado Libre (máx. 500 ms).
+        /// </summary>
         [HttpPost]
         [AllowAnonymous]
-        public IActionResult Notifications()
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> Notifications(
+            [FromBody] MercadoLibreNotification? notification,
+            [FromServices] Hangfire.IBackgroundJobClient jobs,
+            [FromServices] ILogger<MercadoLibreController> logger)
         {
+            if (notification is null || string.IsNullOrWhiteSpace(notification.Topic) || notification.UserId is null)
+                return Ok();
+
+            var clientId = _configuration["MercadoLibre:ClientId"];
+            if (!string.IsNullOrWhiteSpace(clientId) && notification.ApplicationId is not null &&
+                !string.Equals(clientId, notification.ApplicationId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal))
+            {
+                logger.LogWarning("Ignoring Mercado Libre notification for application {ApplicationId}.", notification.ApplicationId);
+                return Ok();
+            }
+
+            var userId = notification.UserId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var account = await _context.MarketplaceAccounts
+                .AsNoTracking()
+                .Where(x => x.Marketplace == "MercadoLibre" && x.ExternalAccountId == userId && x.Status == "Connected")
+                .Select(x => new { x.Id, x.OrganizationId })
+                .FirstOrDefaultAsync();
+            if (account is null)
+                return Ok();
+
+            var topic = notification.Topic.Trim().ToLowerInvariant();
+            var resource = notification.Resource ?? string.Empty;
+
+            switch (topic)
+            {
+                case "questions":
+                {
+                    var questionId = resource.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
+                    if (questionId is not null && questionId.All(char.IsDigit) &&
+                        ShouldEnqueue($"q:{account.Id}:{questionId}", TimeSpan.FromSeconds(30)))
+                    {
+                        jobs.Enqueue<MarketplaceSync.Services.Jobs.MarketplaceJobsService>(
+                            job => job.ProcessQuestionNotification(account.Id, questionId));
+                    }
+                    break;
+                }
+                case "orders_v2":
+                case "orders":
+                    if (ShouldEnqueue($"o:{account.OrganizationId}", TimeSpan.FromSeconds(45)))
+                    {
+                        jobs.Schedule<MarketplaceSync.Services.Jobs.MarketplaceJobsService>(
+                            job => job.SyncOrdersForOrganization(account.OrganizationId), TimeSpan.FromSeconds(15));
+                    }
+                    break;
+                case "items":
+                    if (ShouldEnqueue($"i:{account.OrganizationId}", TimeSpan.FromMinutes(3)))
+                    {
+                        jobs.Schedule<MarketplaceSync.Services.Jobs.MarketplaceJobsService>(
+                            job => job.SyncListingsForOrganization(account.OrganizationId), TimeSpan.FromSeconds(60));
+                    }
+                    break;
+            }
+
             return Ok();
+        }
+
+        private static bool ShouldEnqueue(string key, TimeSpan window)
+        {
+            var now = DateTime.UtcNow;
+            if (RecentNotifications.TryGetValue(key, out var last) && now - last < window)
+                return false;
+            RecentNotifications[key] = now;
+
+            if (RecentNotifications.Count > 5000)
+            {
+                foreach (var entry in RecentNotifications.Where(x => now - x.Value > TimeSpan.FromMinutes(10)).ToList())
+                    RecentNotifications.TryRemove(entry.Key, out _);
+            }
+            return true;
         }
 
         [HttpGet]
@@ -566,6 +646,15 @@ namespace MarketplaceSync.Web.Controllers
             return Ok(
                 "Notifications endpoint is available.");
         }
+    }
+
+    public class MercadoLibreNotification
+    {
+        [JsonPropertyName("resource")] public string? Resource { get; set; }
+        [JsonPropertyName("user_id")] public long? UserId { get; set; }
+        [JsonPropertyName("topic")] public string? Topic { get; set; }
+        [JsonPropertyName("application_id")] public long? ApplicationId { get; set; }
+        [JsonPropertyName("attempts")] public int? Attempts { get; set; }
     }
 
     // =====================================================

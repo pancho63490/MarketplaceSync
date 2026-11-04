@@ -136,6 +136,7 @@ builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.MercadoLibreLis
 builder.Services.AddScoped<IListingAutopilotService, ListingAutopilotService>();
 builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.IMercadoLibreListingSyncService, MarketplaceSync.Services.MercadoLibre.MercadoLibreListingSyncService>();
 builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler, MarketplaceSync.Services.MercadoLibre.StockSyncScheduler>();
+builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.IMercadoLibreQuestionService, MarketplaceSync.Services.MercadoLibre.MercadoLibreQuestionService>();
 
 builder.Services.AddScoped<ISourcePriceMonitorService, SourcePriceMonitorService>();
 builder.Services.AddScoped<SourceSearchQueryBuilder>();
