@@ -1,15 +1,14 @@
 using System.Globalization;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using MarketplaceSync.Services.Ai;
 
 namespace MarketplaceSync.Services.Purchasing;
 
 /// <summary>
 /// Convierte un título de Mercado Libre México (en español) en una búsqueda útil para eBay EE.UU.
 /// Prioriza marca y números de parte/modelo, que funcionan igual en ambos idiomas.
-/// Si hay una API key de Gemini configurada la usa para traducir; si falla o no existe,
+/// Si hay una API key de Claude (Anthropic) configurada la usa para traducir; si falla o no existe,
 /// recurre a un diccionario de términos comunes.
 /// </summary>
 public sealed class SourceSearchQueryBuilder
@@ -72,18 +71,16 @@ public sealed class SourceSearchQueryBuilder
         "100", "nueva", "nuevos", "nuevas", "color", "colores", "tipo", "marca", "modelo", "envios",
     };
 
-    private readonly IConfiguration _configuration;
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ILogger<SourceSearchQueryBuilder> _logger;
+    private const string TranslationSystemPrompt =
+        "You convert Mercado Libre Mexico product titles (Spanish) into concise English search queries for eBay US. " +
+        "Keep brand, model, part numbers and vehicle make/model/year exactly. Remove marketing words. " +
+        "Maximum 8 words. Reply with the query only: no quotes, no explanation.";
 
-    public SourceSearchQueryBuilder(
-        IConfiguration configuration,
-        IHttpClientFactory httpClientFactory,
-        ILogger<SourceSearchQueryBuilder> logger)
+    private readonly ClaudeClient _claude;
+
+    public SourceSearchQueryBuilder(ClaudeClient claude)
     {
-        _configuration = configuration;
-        _httpClientFactory = httpClientFactory;
-        _logger = logger;
+        _claude = claude;
     }
 
     public async Task<string> BuildAsync(
@@ -92,10 +89,9 @@ public sealed class SourceSearchQueryBuilder
         string? model,
         CancellationToken cancellationToken = default)
     {
-        var apiKey = _configuration["Gemini:ApiKey"];
-        if (!string.IsNullOrWhiteSpace(apiKey))
+        if (_claude.IsConfigured)
         {
-            var translated = await TryTranslateWithGeminiAsync(apiKey, title, brand, model, cancellationToken);
+            var translated = await TryTranslateWithClaudeAsync(title, brand, model, cancellationToken);
             if (!string.IsNullOrWhiteSpace(translated))
                 return translated;
         }
@@ -235,75 +231,23 @@ public sealed class SourceSearchQueryBuilder
         word.EndsWith("as", StringComparison.Ordinal) ||
         word.EndsWith("ido", StringComparison.Ordinal);
 
-    private async Task<string?> TryTranslateWithGeminiAsync(
-        string apiKey,
+    private async Task<string?> TryTranslateWithClaudeAsync(
         string title,
         string? brand,
         string? model,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var geminiModel = _configuration["Gemini:Model"];
-            if (string.IsNullOrWhiteSpace(geminiModel))
-                geminiModel = "gemini-2.5-flash";
+        var text = await _claude.CompleteAsync(
+            TranslationSystemPrompt,
+            $"Title: {title}\nBrand: {brand ?? "-"}\nModel: {model ?? "-"}",
+            60,
+            0.1,
+            cancellationToken);
 
-            var prompt =
-                "Convert this Mercado Libre Mexico product title into a concise English search query for eBay US " +
-                "(maximum 8 words). Keep brand, model and part numbers exactly. Remove marketing words. " +
-                "Reply with the query only, no quotes.\n" +
-                $"Title: {title}\nBrand: {brand ?? "-"}\nModel: {model ?? "-"}";
-
-            var payload = new JsonObject
-            {
-                ["contents"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["parts"] = new JsonArray { new JsonObject { ["text"] = prompt } }
-                    }
-                },
-                ["generationConfig"] = new JsonObject
-                {
-                    ["temperature"] = 0.1,
-                    ["maxOutputTokens"] = 64
-                }
-            };
-
-            var client = _httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(15);
-            var endpoint =
-                $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(geminiModel)}:generateContent";
-
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            request.Headers.Add("x-goog-api-key", apiKey);
-            request.Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
-
-            using var response = await client.SendAsync(request, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogInformation("Gemini query translation returned {Status}; using rules.", (int)response.StatusCode);
-                return null;
-            }
-
-            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-            var text = document.RootElement
-                .GetProperty("candidates")[0]
-                .GetProperty("content")
-                .GetProperty("parts")[0]
-                .GetProperty("text")
-                .GetString();
-
-            if (string.IsNullOrWhiteSpace(text))
-                return null;
-
-            var clean = Regex.Replace(text, @"[\r\n""`]+", " ").Trim();
-            return clean.Length is > 2 and <= 120 ? clean : null;
-        }
-        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            _logger.LogInformation(ex, "Gemini query translation failed; using rules.");
+        if (string.IsNullOrWhiteSpace(text))
             return null;
-        }
+
+        var clean = Regex.Replace(text, @"[\r\n""`]+", " ").Trim();
+        return clean.Length is > 2 and <= 120 ? clean : null;
     }
 }

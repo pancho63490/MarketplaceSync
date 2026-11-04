@@ -126,7 +126,12 @@ builder.Services.AddScoped<IMercadoLibreFeeService, MercadoLibreFeeService>();
 builder.Services.AddSingleton<IMarketOpportunityAnalyzer, MarketOpportunityAnalyzer>();
 builder.Services.AddScoped<IMarketRankingHistoryService, MarketRankingHistoryService>();
 builder.Services.AddScoped<ICrossBorderPricingService, CrossBorderPricingService>();
-builder.Services.AddScoped<IProductAiEnricherService, GeminiProductAiEnricherService>();
+builder.Services.AddHttpClient(ClaudeClient.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
+builder.Services.AddScoped<ClaudeClient>();
+builder.Services.AddScoped<IProductAiEnricherService, ClaudeProductAiEnricherService>();
 
 builder.Services.AddScoped<ISourcePriceMonitorService, SourcePriceMonitorService>();
 builder.Services.AddScoped<SourceSearchQueryBuilder>();

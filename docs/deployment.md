@@ -13,6 +13,8 @@ MarketplaceSync does not store production credentials in the repository. Configu
 
 | Variable | Purpose |
 |---|---|
+| `Anthropic__ApiKey` | Claude API key (console.anthropic.com). Enables AI listing enrichment and Spanish→English eBay search queries; without it, rule-based fallbacks are used. |
+| `Anthropic__Model` | Optional. Claude model ID; defaults to `claude-haiku-5-5`. |
 | `Ebay__ClientId` | eBay application client ID. |
 | `Ebay__ClientSecret` | eBay application client secret. |
 | `Ebay__MarketplaceDeletionVerificationToken` | Verification token for the eBay account-deletion endpoint; use at least 32 random characters. |

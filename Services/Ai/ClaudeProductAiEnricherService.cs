@@ -1,27 +1,28 @@
-using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using MarketplaceSync.Services.Interfaces;
 
 namespace MarketplaceSync.Services.Ai;
 
-public sealed class GeminiProductAiEnricherService : IProductAiEnricherService
+public sealed class ClaudeProductAiEnricherService : IProductAiEnricherService
 {
+    private const string SystemPrompt =
+        "Eres un experto en eCommerce y autopartes para Mercado Libre México. " +
+        "Redactas fichas de producto claras, en español de México, que cumplen las políticas de Mercado Libre. " +
+        "Nunca inventas especificaciones, compatibilidades ni números de parte que no estén en los datos; si falta un dato, lo omites.";
+
     private static readonly Regex ProhibitedWordsPattern = new(
         @"\b(oferta|envio gratis|gratis|descuento|remate|ganga|garantizado|el mejor|barato)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IConfiguration _configuration;
-    private readonly ILogger<GeminiProductAiEnricherService> _logger;
+    private readonly ClaudeClient _claude;
+    private readonly ILogger<ClaudeProductAiEnricherService> _logger;
 
-    public GeminiProductAiEnricherService(
-        IHttpClientFactory httpClientFactory,
-        IConfiguration configuration,
-        ILogger<GeminiProductAiEnricherService> logger)
+    public ClaudeProductAiEnricherService(
+        ClaudeClient claude,
+        ILogger<ClaudeProductAiEnricherService> logger)
     {
-        _httpClientFactory = httpClientFactory;
-        _configuration = configuration;
+        _claude = claude;
         _logger = logger;
     }
 
@@ -29,49 +30,24 @@ public sealed class GeminiProductAiEnricherService : IProductAiEnricherService
         ProductAiEnrichmentRequest request,
         CancellationToken cancellationToken = default)
     {
-        var apiKey = ResolveApiKey();
-
-        if (!string.IsNullOrWhiteSpace(apiKey))
+        if (_claude.IsConfigured)
         {
-            try
-            {
-                var aiResult = await CallGeminiAsync(apiKey, request, cancellationToken);
-                if (aiResult is not null)
-                    return aiResult;
-            }
-            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
-            {
-                _logger.LogWarning(
-                    exception,
-                    "Gemini AI enrichment failed for product '{Title}'. Falling back to local heuristic.",
-                    request.RawTitle);
-            }
+            var aiResult = await CallClaudeAsync(request, cancellationToken);
+            if (aiResult is not null)
+                return aiResult;
+
+            _logger.LogWarning(
+                "Claude enrichment returned no usable result for product '{Title}'. Falling back to local heuristic.",
+                request.RawTitle);
         }
 
         return FallbackEnrichment(request);
     }
 
-    private string? ResolveApiKey()
-    {
-        var key = _configuration["Gemini:ApiKey"];
-        if (!string.IsNullOrWhiteSpace(key))
-            return key;
-
-        key = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
-        if (!string.IsNullOrWhiteSpace(key))
-            return key;
-
-        return Environment.GetEnvironmentVariable("GOOGLE_API_KEY");
-    }
-
-    private async Task<ProductAiEnrichmentResult?> CallGeminiAsync(
-        string apiKey,
+    private async Task<ProductAiEnrichmentResult?> CallClaudeAsync(
         ProductAiEnrichmentRequest request,
         CancellationToken cancellationToken)
     {
-        var client = _httpClientFactory.CreateClient();
-        var endpoint = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={Uri.EscapeDataString(apiKey)}";
-
         var schemaSummary = request.RequiredAttributes.Select(attr => new
         {
             attr.Id,
@@ -82,7 +58,6 @@ public sealed class GeminiProductAiEnricherService : IProductAiEnricherService
         });
 
         var prompt = $$"""
-            Eres un experto en eCommerce y autopartes para Mercado Libre México.
             Tu misión es transformar este producto importado de {{request.SourceMarketplace ?? "EE.UU."}} para publicarlo automáticamente en Mercado Libre México (Categoría {{request.CategoryId}} - {{request.CategoryName ?? "General"}}).
 
             DATOS CRUDOS DEL PRODUCTO:
@@ -112,7 +87,7 @@ public sealed class GeminiProductAiEnricherService : IProductAiEnricherService
             6. 'highRiskIntellectualProperty': true si parece una réplica no autorizada o violación de marca; false si es refacción aftermarket legítima.
             7. 'confidenceScore': 0 a 100 de acuerdo a la completitud de los datos.
 
-            RESPONDE ÚNICAMENTE CON EL OBJETO JSON VÁLIDO CON ESTA ESTRUCTURA:
+            RESPONDE CON UN OBJETO JSON CON ESTA ESTRUCTURA:
             {
               "optimizedTitle": "...",
               "cleanDescription": "...",
@@ -125,62 +100,11 @@ public sealed class GeminiProductAiEnricherService : IProductAiEnricherService
             }
             """;
 
-        var payload = new
-        {
-            contents = new[]
-            {
-                new
-                {
-                    parts = new object[]
-                    {
-                        new { text = prompt }
-                    }
-                }
-            },
-            generationConfig = new
-            {
-                temperature = 0.2,
-                response_mime_type = "application/json"
-            }
-        };
-
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
-        httpRequest.Content = new StringContent(
-            JsonSerializer.Serialize(payload),
-            System.Text.Encoding.UTF8,
-            "application/json");
-
-        using var response = await client.SendAsync(httpRequest, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogWarning(
-                "Gemini API returned HTTP {StatusCode}: {ErrorBody}",
-                (int)response.StatusCode,
-                errorBody);
-            return null;
-        }
-
-        var jsonResponse = await response.Content.ReadAsStringAsync(cancellationToken);
-        using var doc = JsonDocument.Parse(jsonResponse);
-
-        if (!doc.RootElement.TryGetProperty("candidates", out var candidates) ||
-            candidates.ValueKind != JsonValueKind.Array ||
-            candidates.GetArrayLength() == 0)
-            return null;
-
-        var text = candidates[0]
-            .GetProperty("content")
-            .GetProperty("parts")[0]
-            .GetProperty("text")
-            .GetString();
-
-        if (string.IsNullOrWhiteSpace(text))
-            return null;
-
-        var parsed = JsonSerializer.Deserialize<GeminiEnrichmentDto>(
-            text,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        var parsed = await _claude.CompleteJsonAsync<EnrichmentDto>(
+            SystemPrompt,
+            prompt,
+            2000,
+            cancellationToken);
 
         if (parsed is null)
             return null;
@@ -191,13 +115,36 @@ public sealed class GeminiProductAiEnricherService : IProductAiEnricherService
         return new ProductAiEnrichmentResult(
             title,
             description,
-            parsed.Brand ?? request.RawBrand,
-            parsed.Model ?? request.RawModel,
-            parsed.Attributes ?? new Dictionary<string, string>(),
+            string.IsNullOrWhiteSpace(parsed.Brand) ? request.RawBrand : parsed.Brand,
+            string.IsNullOrWhiteSpace(parsed.Model) ? request.RawModel : parsed.Model,
+            ToStringDictionary(parsed.Attributes),
             parsed.HighRiskIntellectualProperty,
             parsed.IntellectualPropertyWarning,
             Math.Clamp(parsed.ConfidenceScore, 10, 100),
-            "Gemini-1.5-Flash");
+            $"Claude ({_claude.Model})");
+    }
+
+    private static IReadOnlyDictionary<string, string> ToStringDictionary(
+        Dictionary<string, JsonElement>? attributes)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (attributes is null)
+            return result;
+
+        foreach (var (key, value) in attributes)
+        {
+            var text = value.ValueKind switch
+            {
+                JsonValueKind.String => value.GetString(),
+                JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => value.GetRawText(),
+                _ => null
+            };
+
+            if (!string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(text))
+                result[key] = text.Trim();
+        }
+
+        return result;
     }
 
     private static ProductAiEnrichmentResult FallbackEnrichment(ProductAiEnrichmentRequest request)
@@ -295,13 +242,13 @@ public sealed class GeminiProductAiEnricherService : IProductAiEnricherService
             """.Trim();
     }
 
-    private sealed class GeminiEnrichmentDto
+    private sealed class EnrichmentDto
     {
         public string? OptimizedTitle { get; set; }
         public string? CleanDescription { get; set; }
         public string? Brand { get; set; }
         public string? Model { get; set; }
-        public Dictionary<string, string>? Attributes { get; set; }
+        public Dictionary<string, JsonElement>? Attributes { get; set; }
         public bool HighRiskIntellectualProperty { get; set; }
         public string? IntellectualPropertyWarning { get; set; }
         public int ConfidenceScore { get; set; }
