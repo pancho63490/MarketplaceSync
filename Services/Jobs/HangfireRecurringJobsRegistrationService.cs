@@ -64,6 +64,16 @@ public sealed class HangfireRecurringJobsRegistrationService : BackgroundService
                     job => job.PrepareTopCandidates(),
                     "15 13 * * *");
 
+                // Telegram: leer botones y respuestas cada minuto; avisos pendientes cada 5 minutos
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "telegram-poll",
+                    job => job.PollTelegram(),
+                    "* * * * *");
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "telegram-sweep",
+                    job => job.SweepTelegramNotifications(),
+                    "*/5 * * * *");
+
                 // Radar de compra: después de la captura diaria del ranking (12:15 UTC)
                 _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
                     "refresh-purchase-radar",

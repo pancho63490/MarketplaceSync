@@ -101,6 +101,7 @@ public sealed class AssistantController : Controller
             - Importar producto con IA: /Products/CreateFromUrl
             - Inventario (incluye caducidades por lote): /Inventory
             - Pedidos: /Orders
+            - Avisos por Telegram (preguntas, ventas, agotados y resumen; contestar desde Telegram): /Notifications
             - Preguntas de compradores (con respuesta sugerida por IA): /Questions  (?tab=answered)
             - Cuentas de Mercado Libre: /MercadoLibre/Status
 

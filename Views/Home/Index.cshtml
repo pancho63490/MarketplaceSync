@@ -25,6 +25,7 @@
     var openQuestions = (int)(ViewBag.OpenQuestions ?? 0);
     var expiringLots = (int)(ViewBag.ExpiringLots ?? 0);
     var watchedCategories = (int)(ViewBag.WatchedCategories ?? 0);
+    var telegramLinked = (bool)(ViewBag.TelegramLinked ?? false);
 
     // Lo que hay que hacer, en el orden en que conviene hacerlo.
     var tasks = new List<(int Count, string Title, string Detail, string Action, string Controller, string ActionName, object? Route, string Tone)>();
@@ -53,6 +54,7 @@
         (Done: watchedCategories > 0, Title: "Elige las categorías a vigilar", Controller: "WatchedCategories", Action: "Index"),
         (Done: totalProducts > 0, Title: "Importa tu primer producto", Controller: "Products", Action: "CreateFromUrl"),
         (Done: publishedProducts > 0, Title: "Publica en Mercado Libre", Controller: "Products", Action: "Index"),
+        (Done: telegramLinked, Title: "Recibe avisos en Telegram", Controller: "Notifications", Action: "Index"),
         (Done: totalOrders > 0, Title: "Recibe tu primera venta", Controller: "Orders", Action: "Index")
     };
     var setupDone = setupSteps.Count(x => x.Done);

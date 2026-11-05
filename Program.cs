@@ -140,6 +140,9 @@ builder.Services.AddScoped<MarketplaceSync.Services.Ai.ProductTitleTranslator>()
 builder.Services.AddScoped<MarketplaceSync.Services.Inventory.InventoryLotService>();
 builder.Services.AddScoped<MarketplaceSync.Services.MarketInsights.CategoryDiscoveryService>();
 builder.Services.AddScoped<MarketplaceSync.Services.Purchasing.RadarAutoPrepareService>();
+builder.Services.AddHttpClient(MarketplaceSync.Services.Notifications.TelegramClient.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20));
+builder.Services.AddScoped<MarketplaceSync.Services.Notifications.TelegramClient>();
+builder.Services.AddScoped<MarketplaceSync.Services.Notifications.TelegramNotificationService>();
 builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.IMercadoLibreQuestionService, MarketplaceSync.Services.MercadoLibre.MercadoLibreQuestionService>();
 
 builder.Services.AddScoped<ISourcePriceMonitorService, SourcePriceMonitorService>();

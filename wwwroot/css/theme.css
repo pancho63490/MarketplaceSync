@@ -1284,3 +1284,27 @@ img { color: transparent; }
 @media (max-width: 575.98px) { .acc-item { flex-wrap: wrap; } .disconnect-form { width: 100%; text-align: right; } }
 .panel > .panel-head > p { flex: 1 1 100%; }
 @media (max-width: 991.98px) { .pub-row { align-items: start; } }
+
+/* ── Avisos por Telegram ───────────────────────────── */
+.tg-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+.tg-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
+.tg-steps > li { display: flex; gap: .9rem; padding: 1rem 1.15rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); }
+.tg-steps > li.is-current { border-left: 4px solid var(--signal); }
+.tg-steps > li:not(.is-current):not(.is-done) { opacity: .6; }
+.tg-step-mark { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; border-radius: 50%; background: var(--paper-2); color: var(--ink-2); font-weight: 800; font-size: var(--fs-sm); }
+.tg-steps > li.is-current .tg-step-mark { background: var(--signal); color: var(--ink); }
+.tg-steps > li.is-done .tg-step-mark { background: var(--ok-soft); color: var(--ok); }
+.tg-step-body { flex: 1; min-width: 0; }
+.tg-step-body h2 { font-size: var(--fs-md); font-weight: 700; margin: .15rem 0 .5rem; }
+.tg-howto { margin: 0 0 .9rem; padding-left: 1.1rem; display: grid; gap: .3rem; font-size: var(--fs-sm); }
+.tg-token-form .form-control { flex: 1 1 260px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.tg-prefs { display: flex; flex-direction: column; gap: .6rem; }
+.tg-preview .panel-head h2 { display: inline-flex; align-items: center; gap: .45rem; }
+.tg-bubble { background: var(--denim-soft); border-radius: 14px 14px 14px 4px; padding: .75rem .9rem; font-size: var(--fs-sm); line-height: 1.45; color: var(--ink); }
+.tg-bubble-hint { margin-top: .5rem; font-style: italic; color: var(--muted); font-size: var(--fs-xs); }
+.tg-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem; margin-top: .35rem; }
+.tg-buttons span { text-align: center; padding: .45rem; border-radius: 8px; background: var(--paper-2); font-size: var(--fs-xs); font-weight: 700; color: var(--denim); }
+.tg-commands { margin: 1rem 0 0; display: grid; gap: .5rem; font-size: var(--fs-sm); }
+.tg-commands dt { font-weight: 700; }
+.tg-commands dd { margin: 0; color: var(--muted); }
+@media (max-width: 991.98px) { .tg-grid { grid-template-columns: minmax(0, 1fr); } }

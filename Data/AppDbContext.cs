@@ -36,6 +36,8 @@ namespace MarketplaceSync.Web.Data
         public DbSet<BuyerQuestion> BuyerQuestions { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Inventory.InventoryLot> InventoryLots { get; set; }
         public DbSet<MarketplaceSync.Web.Models.MarketInsights.WatchedCategory> WatchedCategories { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Notifications.NotificationSettings> NotificationSettings { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Notifications.NotificationLog> NotificationLogs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -294,6 +296,25 @@ namespace MarketplaceSync.Web.Data
                 entity.Property(x => x.Status).HasMaxLength(30);
                 entity.Property(x => x.PurchasedUnitCostUsd).HasColumnType("numeric(18,2)");
                 entity.Property(x => x.Notes).HasMaxLength(500);
+            });
+
+            builder.Entity<MarketplaceSync.Web.Models.Notifications.NotificationSettings>(entity =>
+            {
+                entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(x => x.OrganizationId).IsUnique();
+                entity.HasIndex(x => x.LinkCode);
+                entity.Property(x => x.NotifyQuestions).HasDefaultValue(true);
+                entity.Property(x => x.NotifyOrders).HasDefaultValue(true);
+                entity.Property(x => x.NotifyStock).HasDefaultValue(true);
+                entity.Property(x => x.DailySummary).HasDefaultValue(true);
+                entity.Property(x => x.DailySummaryHour).HasDefaultValue(8);
+            });
+
+            builder.Entity<MarketplaceSync.Web.Models.Notifications.NotificationLog>(entity =>
+            {
+                entity.HasIndex(x => new { x.OrganizationId, x.Key }).IsUnique();
+                entity.HasIndex(x => new { x.TelegramChatId, x.TelegramMessageId });
+                entity.HasIndex(x => x.SentAt);
             });
 
             builder.Entity<MarketplaceSync.Web.Models.MarketInsights.WatchedCategory>(entity =>

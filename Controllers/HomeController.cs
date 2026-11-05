@@ -81,6 +81,8 @@ namespace MarketplaceSync.Web.Controllers
             var expiryLimit = MarketplaceSync.Services.Inventory.InventoryLotService.Today.AddDays(MarketplaceSync.Services.Inventory.InventoryLotService.WarningDays);
             ViewBag.ExpiringLots = await _context.InventoryLots.CountAsync(x =>
                 x.OrganizationId == organizationId && x.WrittenOffAt == null && x.QuantityRemaining > 0 && x.ExpiresOn <= expiryLimit);
+            ViewBag.TelegramLinked = await _context.NotificationSettings.AnyAsync(x =>
+                x.OrganizationId == organizationId && x.TelegramChatId != null);
             ViewBag.WatchedCategories = await _context.WatchedCategories.CountAsync(x =>
                 x.OrganizationId == organizationId && x.IsSelected);
             ViewBag.OpenQuestions = await _context.BuyerQuestions.CountAsync(x =>

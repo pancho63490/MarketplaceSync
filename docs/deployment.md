@@ -71,3 +71,12 @@ Changing a file later does not remove a secret from Git history. Previously comm
 In the Mercado Libre developer panel (your application → Notifications), set the callback URL to
 `https://<your-render-domain>/MercadoLibre/Notifications` and enable the topics `orders_v2`, `items` and `questions`.
 Notifications whose `application_id` does not match `MercadoLibre__ClientId` are ignored. Scheduled jobs still run as a fallback.
+
+## Telegram notifications (optional)
+
+1. In Telegram, open @BotFather, send `/newbot`, and copy the token.
+2. Either paste it in the app (Configuración → Avisos por Telegram) or set `Telegram__BotToken` in Render (takes precedence; never shown in the UI).
+3. In the app, press "Abrir @tu_bot" and then Start in Telegram. Only that chat receives notifications and can answer questions.
+
+No webhook is needed: a Hangfire job reads the bot every minute. Do not set a webhook on the same bot elsewhere (Telegram disables `getUpdates` while a webhook is active; the app removes it when you connect the bot).
+

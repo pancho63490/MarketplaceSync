@@ -11,7 +11,7 @@ namespace MarketplaceSync.Web.Helpers;
 /// </summary>
 public static class IconHtmlHelper
 {
-    private const string SpritePath = "/img/icons.svg?v=2";
+    private const string SpritePath = "/img/icons.svg?v=3";
 
     public static IHtmlContent Icon(this IHtmlHelper html, string name, string? cssClass = null)
     {

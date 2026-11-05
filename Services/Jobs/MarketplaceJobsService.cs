@@ -15,6 +15,7 @@ namespace MarketplaceSync.Services.Jobs
         private readonly MarketplaceSync.Services.MarketInsights.CategoryDiscoveryService _discovery;
         private readonly MarketplaceSync.Services.Purchasing.RadarAutoPrepareService _autoPrepare;
         private readonly MarketplaceSync.Services.Ai.IListingAutopilotService _autopilot;
+        private readonly MarketplaceSync.Services.Notifications.TelegramNotificationService _telegram;
         private readonly ILogger<MarketplaceJobsService> _logger;
 
         public MarketplaceJobsService(
@@ -28,6 +29,7 @@ namespace MarketplaceSync.Services.Jobs
             MarketplaceSync.Services.MarketInsights.CategoryDiscoveryService discovery,
             MarketplaceSync.Services.Purchasing.RadarAutoPrepareService autoPrepare,
             MarketplaceSync.Services.Ai.IListingAutopilotService autopilot,
+            MarketplaceSync.Services.Notifications.TelegramNotificationService telegram,
             ILogger<MarketplaceJobsService> logger)
         {
             _authService = authService;
@@ -40,6 +42,7 @@ namespace MarketplaceSync.Services.Jobs
             _discovery = discovery;
             _autoPrepare = autoPrepare;
             _autopilot = autopilot;
+            _telegram = telegram;
             _logger = logger;
         }
 
@@ -52,6 +55,7 @@ namespace MarketplaceSync.Services.Jobs
         public async Task SyncMercadoLibreOrders()
         {
             await _orderSyncService.SyncAllAccountsAsync();
+            await _telegram.SweepAllAsync();
         }
 
         [DisableConcurrentExecution(timeoutInSeconds: 1800)]
@@ -98,6 +102,7 @@ namespace MarketplaceSync.Services.Jobs
         public async Task SyncMercadoLibreQuestions()
         {
             await _questions.SyncAllAsync();
+            await _telegram.SweepAllAsync();
         }
 
         /// <summary>Aviso de Mercado Libre: nueva pregunta.</summary>
@@ -105,6 +110,7 @@ namespace MarketplaceSync.Services.Jobs
         public async Task ProcessQuestionNotification(int marketplaceAccountId, string questionId)
         {
             await _questions.ProcessQuestionAsync(marketplaceAccountId, questionId);
+            await _telegram.SweepAllAsync();
         }
 
         /// <summary>Aviso de Mercado Libre: pedido nuevo o cambiado.</summary>
@@ -113,6 +119,7 @@ namespace MarketplaceSync.Services.Jobs
         public async Task SyncOrdersForOrganization(Guid organizationId)
         {
             await _orderSyncService.SyncAllAccountsAsync(organizationId);
+            await _telegram.SweepAsync(organizationId);
         }
 
         /// <summary>Aviso de Mercado Libre: cambió una publicación.</summary>
@@ -176,6 +183,22 @@ namespace MarketplaceSync.Services.Jobs
             var result = await _autopilot.RunAsync(organizationId, productId, publishIfReady: true);
             _logger.LogInformation("Publish after receipt for product {ProductId}: published={Published}, missing={Missing}",
                 productId, result.Published, string.Join("; ", result.Missing));
+        }
+
+        /// <summary>Lee los mensajes y botones que el vendedor mandó al bot de Telegram.</summary>
+        [AutomaticRetry(Attempts = 0)]
+        [DisableConcurrentExecution(timeoutInSeconds: 120)]
+        public async Task PollTelegram()
+        {
+            await _telegram.PollAllAsync();
+        }
+
+        /// <summary>Manda por Telegram lo que no se ha avisado (preguntas, ventas, agotados, resumen diario).</summary>
+        [AutomaticRetry(Attempts = 0)]
+        [DisableConcurrentExecution(timeoutInSeconds: 300)]
+        public async Task SweepTelegramNotifications()
+        {
+            await _telegram.SweepAllAsync();
         }
     }
 }

@@ -1,0 +1,182 @@
+@model MarketplaceSync.Services.Notifications.TelegramStatus
+
+@{
+    ViewData["Title"] = "Avisos por Telegram";
+    var s = Model.Settings;
+    var step = !Model.BotConnected ? 1 : !Model.ChatLinked ? 2 : 3;
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Avisos por Telegram</h1>
+        <p>Recibe en tu celular las preguntas, ventas y agotados al momento, y contesta preguntas desde Telegram sin abrir la app.</p>
+    </div>
+    @if (step == 3)
+    {
+        <div class="page-head-actions">
+            <form asp-action="SendTest" method="post">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-outline-secondary">@Html.Icon("send") Enviar mensaje de prueba</button>
+            </form>
+        </div>
+    }
+</header>
+
+@if (!string.IsNullOrWhiteSpace(s.LastError))
+{
+    <div class="alert alert-warning d-flex gap-2 align-items-start">@Html.Icon("triangle-alert") <span>@s.LastError</span></div>
+}
+
+<div class="tg-grid">
+    <div class="tg-main">
+        <ol class="tg-steps" aria-label="Pasos">
+            <li class="@(step > 1 ? "is-done" : step == 1 ? "is-current" : "")">
+                <span class="tg-step-mark" aria-hidden="true">@(step > 1 ? "✓" : "1")</span>
+                <div class="tg-step-body">
+                    <h2>Crea tu bot</h2>
+                    @if (step > 1)
+                    {
+                        <p class="text-muted mb-0">
+                            Bot <strong>@@@Model.BotUsername</strong> conectado@(Model.TokenFromEnvironment ? " (configurado en Render)" : "").
+                        </p>
+                    }
+                    else
+                    {
+                        <ol class="tg-howto">
+                            <li>En Telegram abre <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer">@@BotFather</a> y escribe <code>/newbot</code>.</li>
+                            <li>Ponle un nombre (por ejemplo “Refacciones Juárez Avisos”) y un usuario que termine en <code>bot</code>.</li>
+                            <li>BotFather te manda un token como <code>123456789:AAH…</code>. Cópialo completo y pégalo aquí.</li>
+                        </ol>
+                        <form asp-action="ConnectBot" method="post" class="tg-token-form">
+                            @Html.AntiForgeryToken()
+                            <label for="token" class="form-label">Token del bot</label>
+                            <div class="d-flex flex-wrap gap-2">
+                                <input id="token" name="token" type="password" class="form-control" autocomplete="off" spellcheck="false" placeholder="123456789:AAH…" required />
+                                <button type="submit" class="btn btn-primary">@Html.Icon("link") Conectar bot</button>
+                            </div>
+                            <div class="form-text">El token no se vuelve a mostrar. Si prefieres, guárdalo en Render como <code>Telegram__BotToken</code>.</div>
+                        </form>
+                    }
+                </div>
+            </li>
+
+            <li class="@(step > 2 ? "is-done" : step == 2 ? "is-current" : "")">
+                <span class="tg-step-mark" aria-hidden="true">@(step > 2 ? "✓" : "2")</span>
+                <div class="tg-step-body">
+                    <h2>Vincula tu Telegram</h2>
+                    @if (step > 2)
+                    {
+                        <p class="text-muted mb-0">Los avisos llegan a <strong>@(string.IsNullOrWhiteSpace(Model.ChatName) ? "tu chat" : Model.ChatName)</strong>.</p>
+                    }
+                    else if (step == 2)
+                    {
+                        <p class="mb-2">Abre tu bot y pulsa <strong>Iniciar</strong>. Así sabe a quién mandarle los avisos; nadie más puede usarlo.</p>
+                        <div class="d-flex flex-wrap gap-2">
+                            @if (Model.LinkUrl is not null)
+                            {
+                                <a href="@Model.LinkUrl" target="_blank" rel="noopener noreferrer" class="btn btn-primary">@Html.Icon("send") Abrir @@@Model.BotUsername</a>
+                            }
+                            <form asp-action="CheckLink" method="post">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-outline-secondary">Ya pulsé Iniciar</button>
+                            </form>
+                        </div>
+                        <div class="form-text">Si estás en la computadora, el botón abre Telegram Web o la app de escritorio. También puedes abrir el enlace en tu celular.</div>
+                    }
+                    else
+                    {
+                        <p class="text-muted mb-0">Después de crear el bot.</p>
+                    }
+                </div>
+            </li>
+
+            <li class="@(step == 3 ? "is-current" : "")">
+                <span class="tg-step-mark" aria-hidden="true">3</span>
+                <div class="tg-step-body">
+                    <h2>Elige qué avisar</h2>
+                    @if (step == 3)
+                    {
+                        <form asp-action="SavePreferences" method="post" class="tg-prefs">
+                            @Html.AntiForgeryToken()
+                            @foreach (var (name, value, title, help) in new[]
+                            {
+                                ("notifyQuestions", s.NotifyQuestions, "Preguntas nuevas", "Con la respuesta que sugiere la IA y un botón para enviarla."),
+                                ("notifyOrders", s.NotifyOrders, "Ventas", "Cada pedido pagado, con cuántas piezas te quedan."),
+                                ("notifyStock", s.NotifyStock, "Piezas agotadas", "Cuando un SKU llega a cero o se sobrevende."),
+                                ("dailySummary", s.DailySummary, "Resumen de cada mañana", "Ventas de ayer y lo pendiente de hoy.")
+                            })
+                            {
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="@name" name="@name" value="true" checked="@value" />
+                                    <input type="hidden" name="@name" value="false" />
+                                    <label class="form-check-label" for="@name"><strong>@title</strong><span class="d-block text-muted small">@help</span></label>
+                                </div>
+                            }
+                            <div class="d-flex align-items-center gap-2 mt-1">
+                                <label for="dailySummaryHour" class="form-label mb-0">Hora del resumen</label>
+                                <select id="dailySummaryHour" name="dailySummaryHour" class="form-select form-select-sm" style="width: 110px">
+                                    @for (var h = 5; h <= 12; h++)
+                                    {
+                                        <option value="@h" selected="@(s.DailySummaryHour == h)">@h:00</option>
+                                    }
+                                </select>
+                                <span class="small text-muted">hora de Juárez</span>
+                            </div>
+                            <button type="submit" class="btn btn-outline-secondary btn-sm mt-3 align-self-start">Guardar</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <p class="text-muted mb-0">Cuando esté vinculado.</p>
+                    }
+                </div>
+            </li>
+        </ol>
+
+        @if (step >= 2)
+        {
+            <form asp-action="Disconnect" method="post" class="mt-3 tg-disconnect">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-link btn-sm text-danger px-0">Desconectar Telegram</button>
+            </form>
+        }
+    </div>
+
+    <aside class="panel tg-preview" aria-labelledby="como-se-ve">
+        <div class="panel-head">
+            <h2 id="como-se-ve">@Html.Icon("message-circle") Así te llega una pregunta</h2>
+        </div>
+        <div class="panel-body">
+            <div class="tg-bubble">
+                <div>❓ <strong>Pregunta nueva</strong> · hace 2 min</div>
+                <div><strong>Bomba de Agua Gates Jetta A4 2.0</strong></div>
+                <div>«¿Le queda a un Jetta 2008 2.0?»</div>
+                <div class="mt-2">💡 <strong>Respuesta sugerida:</strong></div>
+                <div>Hola, sí le queda a tu Jetta 2008 con motor 2.0. ¡Saludos!</div>
+                <div class="tg-bubble-hint">Responde a este mensaje para contestar con tu propio texto.</div>
+            </div>
+            <div class="tg-buttons" aria-hidden="true">
+                <span>✅ Enviar respuesta</span><span>🔄 Otra sugerencia</span>
+            </div>
+            <dl class="tg-commands">
+                <div><dt>Enviar respuesta</dt><dd>Manda la sugerida a Mercado Libre.</dd></div>
+                <div><dt>Responder al mensaje</dt><dd>Manda tu propio texto. Sin teléfonos ni links: Mercado Libre los rechaza.</dd></div>
+                <div><dt><code>/pendientes</code></dt><dd>Las preguntas sin responder.</dd></div>
+                <div><dt><code>/resumen</code></dt><dd>Ventas de ayer y pendientes de hoy.</dd></div>
+            </dl>
+        </div>
+    </aside>
+</div>
+
+@section Scripts {
+    <script>
+        document.querySelector('.tg-disconnect')?.addEventListener('submit', function (event) {
+            var b = this.querySelector('button');
+            if (b.dataset.confirmed === '1') return;
+            event.preventDefault();
+            b.dataset.confirmed = '1';
+            b.textContent = 'Confirmar: desconectar Telegram';
+            setTimeout(function () { b.dataset.confirmed = ''; b.textContent = 'Desconectar Telegram'; }, 4000);
+        });
+    </script>
+}
