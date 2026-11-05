@@ -70,7 +70,7 @@
                     }
                     else if (step == 2)
                     {
-                        <p class="mb-2">Abre tu bot y pulsa <strong>Iniciar</strong>. Así sabe a quién mandarle los avisos; nadie más puede usarlo.</p>
+                        <p class="mb-2">Abre tu bot con este botón y pulsa <strong>Iniciar</strong>. Así sabe a quién mandarle los avisos; nadie más puede usarlo.</p>
                         <div class="d-flex flex-wrap gap-2">
                             @if (Model.LinkUrl is not null)
                             {
@@ -81,7 +81,14 @@
                                 <button type="submit" class="btn btn-outline-secondary">Ya pulsé Iniciar</button>
                             </form>
                         </div>
-                        <div class="form-text">Si estás en la computadora, el botón abre Telegram Web o la app de escritorio. También puedes abrir el enlace en tu celular.</div>
+                        @if (!string.IsNullOrWhiteSpace(s.LinkCode))
+                        {
+                            <div class="tg-code">
+                                <span>¿Abriste el bot por tu cuenta? Escríbele este código en el chat:</span>
+                                <strong>@s.LinkCode</strong>
+                            </div>
+                        }
+                        <div class="form-text">Después pulsa “Ya pulsé Iniciar” (o espera un minuto: la app revisa el bot sola).</div>
                     }
                     else
                     {
@@ -161,6 +168,8 @@
             <dl class="tg-commands">
                 <div><dt>Enviar respuesta</dt><dd>Manda la sugerida a Mercado Libre.</dd></div>
                 <div><dt>Responder al mensaje</dt><dd>Manda tu propio texto. Sin teléfonos ni links: Mercado Libre los rechaza.</dd></div>
+                <div><dt>Mandar un link</dt><dd>De Amazon, eBay, Walmart o AliExpress: se importa como producto y la IA lo prepara para publicar. Agrega el precio si la tienda no lo deja leer: <code>link 38.50</code>.</dd></div>
+                <div><dt><code>/ventas</code></dt><dd>Ventas de hoy, ayer, la semana y el mes, con lo más vendido.</dd></div>
                 <div><dt><code>/pendientes</code></dt><dd>Las preguntas sin responder.</dd></div>
                 <div><dt><code>/resumen</code></dt><dd>Ventas de ayer y pendientes de hoy.</dd></div>
             </dl>

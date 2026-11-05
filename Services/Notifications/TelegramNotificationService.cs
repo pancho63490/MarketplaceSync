@@ -26,7 +26,7 @@ public sealed record TelegramStatus(
 /// Responder a un aviso de pregunta con texto envía esa respuesta a Mercado Libre.
 /// No usa webhook: un trabajo de Hangfire lee los mensajes del bot cada minuto (getUpdates).
 /// </summary>
-public sealed class TelegramNotificationService
+public sealed partial class TelegramNotificationService
 {
     private static readonly CultureInfo Mx = CultureInfo.GetCultureInfo("es-MX");
 
@@ -35,14 +35,26 @@ public sealed class TelegramNotificationService
     private readonly IMercadoLibreQuestionService _questions;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TelegramNotificationService> _logger;
+    private readonly MarketplaceSync.Web.Services.ProductExtractorService _extractor;
+    private readonly MarketplaceSync.Services.Ai.ProductTitleTranslator _titleTranslator;
+    private readonly MarketplaceSync.Services.Ai.IListingAutopilotService _autopilot;
+    private readonly Hangfire.IBackgroundJobClient _jobs;
 
     public TelegramNotificationService(
         AppDbContext context,
         TelegramClient telegram,
         IMercadoLibreQuestionService questions,
         IConfiguration configuration,
-        ILogger<TelegramNotificationService> logger)
+        ILogger<TelegramNotificationService> logger,
+        MarketplaceSync.Web.Services.ProductExtractorService extractor,
+        MarketplaceSync.Services.Ai.ProductTitleTranslator titleTranslator,
+        MarketplaceSync.Services.Ai.IListingAutopilotService autopilot,
+        Hangfire.IBackgroundJobClient jobs)
     {
+        _extractor = extractor;
+        _titleTranslator = titleTranslator;
+        _autopilot = autopilot;
+        _jobs = jobs;
         _context = context;
         _telegram = telegram;
         _questions = questions;
@@ -92,7 +104,7 @@ public sealed class TelegramNotificationService
             }
         }
 
-        if (token is not null && settings.TelegramChatId is null && string.IsNullOrWhiteSpace(settings.LinkCode))
+        if (token is not null && settings.TelegramChatId is null && (string.IsNullOrWhiteSpace(settings.LinkCode) || settings.LinkCode.Length != 6))
         {
             settings.LinkCode = NewLinkCode();
             await _context.SaveChangesAsync(cancellationToken);
@@ -275,17 +287,22 @@ public sealed class TelegramNotificationService
 
         var text = update.Text?.Trim() ?? string.Empty;
 
-        // Vincular: /start CODIGO
-        if (text.StartsWith("/start", StringComparison.OrdinalIgnoreCase))
+        // Vincular: "/start CODIGO" (enlace de la app) o solo el código escrito en el chat.
+        var isStart = text.StartsWith("/start", StringComparison.OrdinalIgnoreCase);
+        var chatIsLinked = orgs.Any(x => x.TelegramChatId == update.ChatId);
+        var typedCode = !isStart && !chatIsLinked && System.Text.RegularExpressions.Regex.IsMatch(text, @"^[A-Za-z0-9]{6,16}$");
+        if (isStart || typedCode)
         {
-            var code = text.Length > 6 ? text[6..].Trim() : string.Empty;
-            var target = orgs.FirstOrDefault(x => !string.IsNullOrEmpty(code) && x.LinkCode == code);
+            var code = isStart ? (text.Length > 6 ? text[6..].Trim() : string.Empty) : text;
+            var target = orgs.FirstOrDefault(x => !string.IsNullOrEmpty(code) &&
+                                                  string.Equals(x.LinkCode, code, StringComparison.OrdinalIgnoreCase));
             if (target is null)
             {
-                var already = orgs.FirstOrDefault(x => x.TelegramChatId == update.ChatId);
-                await _telegram.SendMessageAsync(token, update.ChatId, already is not null
+                await _telegram.SendMessageAsync(token, update.ChatId, chatIsLinked
                     ? "Ya estás vinculado. Escribe /ayuda para ver lo que puedo hacer."
-                    : "Este bot es privado. Vincúlalo desde MarketplaceSync → <b>Avisos por Telegram</b>.",
+                    : string.IsNullOrEmpty(code)
+                        ? "Hola 👋 Para vincular este chat, escríbeme el <b>código de 6 letras</b> que aparece en MarketplaceSync → <b>Avisos por Telegram</b>, o abre el enlace desde ahí."
+                        : "Ese código no coincide. Revisa el que aparece en MarketplaceSync → <b>Avisos por Telegram</b> y escríbemelo otra vez.",
                     cancellationToken: cancellationToken);
                 return;
             }
@@ -317,7 +334,11 @@ public sealed class TelegramNotificationService
         {
             if (update.CallbackId is not null)
                 await _telegram.AnswerCallbackAsync(token, update.CallbackId, "Este chat no está vinculado.", cancellationToken);
-            return; // Ignora a desconocidos: el bot es privado.
+            else
+                await _telegram.SendMessageAsync(token, update.ChatId,
+                    "Este chat todavía no está vinculado. Escríbeme el <b>código de 6 letras</b> que aparece en MarketplaceSync → <b>Avisos por Telegram</b>.",
+                    cancellationToken: cancellationToken);
+            return;
         }
 
         var org = settings.OrganizationId;
@@ -344,8 +365,18 @@ public sealed class TelegramNotificationService
             }
         }
 
-        switch (text.Split(' ', 2)[0].ToLowerInvariant())
+        // Un link de Amazon, eBay, Walmart… → se importa como producto.
+        if (FindLink(text) is { } link)
         {
+            await ImportFromLinkAsync(token, settings, link, text, update.MessageId, cancellationToken);
+            return;
+        }
+
+        switch (text.Split(' ', 2)[0].Split('@')[0].ToLowerInvariant())
+        {
+            case "/ventas":
+                await SendSalesAsync(token, settings, cancellationToken);
+                break;
             case "/pendientes":
             case "/preguntas":
                 await SendPendingQuestionsAsync(token, settings, cancellationToken);
@@ -356,8 +387,11 @@ public sealed class TelegramNotificationService
             default:
                 await _telegram.SendMessageAsync(token, update.ChatId,
                     "<b>Lo que puedo hacer</b>\n" +
+                    "/ventas — ventas de hoy, ayer, la semana y el mes, con lo más vendido\n" +
                     "/pendientes — preguntas sin responder, con su respuesta sugerida\n" +
                     "/resumen — ventas de ayer y lo pendiente de hoy\n\n" +
+                    "📥 <b>Mándame un link</b> de Amazon, eBay, Walmart o AliExpress y lo importo como producto. " +
+                    "Si quieres, agrega el precio en dólares: <code>https://… 38.50</code>\n\n" +
                     "Para contestar una pregunta, <b>responde a su mensaje</b> con tu texto o usa sus botones.",
                     cancellationToken: cancellationToken);
                 break;
@@ -367,6 +401,11 @@ public sealed class TelegramNotificationService
     private async Task HandleCallbackAsync(string token, NotificationSettings settings, TelegramIncoming update, CancellationToken cancellationToken)
     {
         var data = update.CallbackData ?? string.Empty;
+        if (data.StartsWith("pb:", StringComparison.Ordinal) && int.TryParse(data[3..], out var productId))
+        {
+            await PublishFromTelegramAsync(token, settings, productId, update, cancellationToken);
+            return;
+        }
         var parts = data.Split(':');
         if (parts.Length != 2 || !long.TryParse(parts[1], out var questionId))
         {
@@ -732,5 +771,14 @@ public sealed class TelegramNotificationService
     /// <summary>Telegram (parse_mode HTML) solo necesita escapar &lt; &gt; y &amp;; los acentos van tal cual.</summary>
     private static string E(string? text) => (text ?? string.Empty).Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
-    private static string NewLinkCode() => Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
+    /// <summary>6 caracteres fáciles de escribir (sin 0/O ni 1/I/L).</summary>
+    private static string NewLinkCode()
+    {
+        const string alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+        return string.Create(6, alphabet, (span, a) =>
+        {
+            for (var i = 0; i < span.Length; i++)
+                span[i] = a[RandomNumberGenerator.GetInt32(a.Length)];
+        });
+    }
 }
