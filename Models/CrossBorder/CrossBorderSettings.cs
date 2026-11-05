@@ -68,5 +68,14 @@ public class CrossBorderSettings
     /// </summary>
     public bool AutoPublishEnabled { get; set; } = false;
 
+    /// <summary>
+    /// Cuántos productos del radar (los de más demanda y ganancia) se dejan preparados por semana, sin publicar.
+    /// 0 = no preparar en automático.
+    /// </summary>
+    public int AutoPrepareWeekly { get; set; } = 10;
+
+    /// <summary>Al marcar una compra como recibida, publicar el producto si ya está completo.</summary>
+    public bool PublishOnReceipt { get; set; } = true;
+
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

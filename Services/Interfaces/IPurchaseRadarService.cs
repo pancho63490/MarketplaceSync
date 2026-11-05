@@ -48,6 +48,12 @@ public interface IPurchaseRadarService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Deja listo el producto de un candidato antes de comprarlo: producto, SKU sin stock y borrador de publicación.
+    /// Devuelve el Id del producto (el existente si ya estaba preparado).
+    /// </summary>
+    Task<int> PrepareAsync(Guid organizationId, long candidateId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Registra la compra: crea (o reutiliza) producto, SKU y borrador de publicación.
     /// El stock no se suma hasta confirmar la recepción.
     /// </summary>

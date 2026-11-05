@@ -1,3 +1,4 @@
+using Hangfire;
 using MarketplaceSync.Services.Interfaces;
 using MarketplaceSync.Web.Data;
 using MarketplaceSync.Web.Models;
@@ -22,8 +23,9 @@ namespace MarketplaceSync.Services.Purchasing;
 public sealed class PurchaseRadarService : IPurchaseRadarService
 {
     private const int WindowDays = 21;
-    private const int MaxCandidates = 40;
-    private const int MaxSourceSearchesPerRefresh = 25;
+    // Con categorías vigiladas entran muchos más productos: se evalúan más y se busca proveedor para más.
+    private const int MaxCandidates = 120;
+    private const int MaxSourceSearchesPerRefresh = 60;
     private const int MinMatchConfidence = 40;
     private const int RestockTargetCoverDays = 21;
     private static readonly TimeSpan SourceSearchCacheTime = TimeSpan.FromHours(24);
@@ -35,6 +37,7 @@ public sealed class PurchaseRadarService : IPurchaseRadarService
     private readonly SourceSearchQueryBuilder _queryBuilder;
     private readonly ILogger<PurchaseRadarService> _logger;
     private readonly MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler _stockSync;
+    private readonly Hangfire.IBackgroundJobClient _jobs;
 
     public PurchaseRadarService(
         AppDbContext context,
@@ -42,8 +45,10 @@ public sealed class PurchaseRadarService : IPurchaseRadarService
         ICrossBorderPricingService pricingService,
         SourceSearchQueryBuilder queryBuilder,
         ILogger<PurchaseRadarService> logger,
-        MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler stockSync)
+        MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler stockSync,
+        Hangfire.IBackgroundJobClient jobs)
     {
+        _jobs = jobs;
         _context = context;
         _ebayApiService = ebayApiService;
         _pricingService = pricingService;
@@ -73,7 +78,7 @@ public sealed class PurchaseRadarService : IPurchaseRadarService
         if (snapshots.Count == 0)
         {
             return new PurchaseRadarRefreshResult(0, 0, 0, 0,
-                "Todavía no hay historial de Más vendidos. Consulta al menos una categoría en \"Más vendidos MX\" para empezar.");
+                "Todavía no hay historial de Más vendidos. Elige categorías en \"Categorías a vigilar\" y la app empezará a explorar sola.");
         }
 
         var demand = BuildDemandSignals(snapshots);
@@ -732,6 +737,79 @@ public sealed class PurchaseRadarService : IPurchaseRadarService
     // Compra y recepción
     // ─────────────────────────────────────────────────────────────
 
+    public async Task<int> PrepareAsync(Guid organizationId, long candidateId, CancellationToken cancellationToken = default)
+    {
+        var candidate = await RequireCandidateAsync(organizationId, candidateId, cancellationToken);
+        if (candidate.ProductId.HasValue &&
+            await _context.Products.AnyAsync(x => x.Id == candidate.ProductId && x.OrganizationId == organizationId, cancellationToken))
+            return candidate.ProductId.Value;
+
+        var accountId = candidate.MarketplaceAccountId ?? await _context.MarketplaceAccounts
+            .AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId && x.Marketplace == "MercadoLibre" && x.Status == "Connected")
+            .OrderBy(x => x.Id)
+            .Select(x => (int?)x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var product = new Product
+        {
+            OrganizationId = organizationId,
+            SourceUrl = Truncate(candidate.SourceUrl ?? candidate.MarketPermalink ?? string.Empty, 1000)!,
+            SourceMarketplace = candidate.SourceMarketplace ?? "Manual",
+            SourceProductId = Truncate(candidate.SourceProductId, 200),
+            Title = Truncate(candidate.MarketName, 300),
+            Description = null, // la escribe la IA
+            SourcePrice = candidate.SourcePriceUsd,
+            SourceCurrency = "USD",
+            // Solo la foto del proveedor: Mercado Libre detecta fotos copiadas de otros vendedores y penaliza.
+            // Si no hay, el producto queda pendiente de foto (lo mejor es una foto propia al recibirlo).
+            ImageUrl = Truncate(candidate.SourceImageUrl, 1000),
+            Brand = Truncate(candidate.MarketBrand, 200),
+            Model = Truncate(candidate.MarketModel, 200),
+            SourceStatus = "PurchaseRadar",
+            LastSourceCheckAt = candidate.LastSourceSearchAt,
+            Status = "NeedsReview",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        product.Variants.Add(new ProductVariant
+        {
+            OrganizationId = organizationId,
+            Sku = await GenerateUniqueSkuAsync(organizationId, candidate.Id, cancellationToken),
+            AttributesJson = "{}",
+            Price = candidate.RecommendedListingPriceMxn,
+            Stock = 0,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        _context.Products.Add(product);
+        _context.MarketplacePublications.Add(new MarketplacePublication
+        {
+            Product = product,
+            Marketplace = "MercadoLibre",
+            MarketplaceAccountId = accountId,
+            Price = candidate.RecommendedListingPriceMxn ?? candidate.MarketPriceMxn,
+            Stock = 0,
+            CurrencyId = "MXN",
+            CategoryId = candidate.CategoryId,
+            ListingTypeId = "gold_special",
+            Condition = "new",
+            Status = "Draft",
+            IsPublished = false,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        await _context.SaveChangesAsync(cancellationToken);
+
+        candidate.ProductId = product.Id;
+        candidate.MarketplaceAccountId = accountId;
+        candidate.PreparedAt = DateTime.UtcNow;
+        candidate.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+        return product.Id;
+    }
+
     public async Task<PurchaseConfirmation> MarkPurchasedAsync(
         Guid organizationId,
         long candidateId,
@@ -935,6 +1013,16 @@ public sealed class PurchaseRadarService : IPurchaseRadarService
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         _stockSync.RequestPush(new[] { variant.ProductId });
+
+        // Opción "comprar primero": al llegar a Juárez se publica solo si quedó completo.
+        var settings = await _pricingService.GetOrCreateSettingsAsync(organizationId, cancellationToken);
+        var alreadyPublished = await _context.MarketplacePublications
+            .AnyAsync(x => x.ProductId == variant.ProductId && x.Marketplace == "MercadoLibre" && x.IsPublished, cancellationToken);
+        if (settings.PublishOnReceipt && !alreadyPublished)
+        {
+            _jobs.Enqueue<MarketplaceSync.Services.Jobs.MarketplaceJobsService>(
+                job => job.PublishAfterReceipt(organizationId, variant.ProductId));
+        }
     }
 
     // ─────────────────────────────────────────────────────────────

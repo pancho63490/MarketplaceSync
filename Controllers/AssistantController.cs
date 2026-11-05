@@ -93,6 +93,7 @@ public sealed class AssistantController : Controller
             PANTALLAS:
             - Hoy (pendientes): /
             - Qué comprar en EE.UU.: /Purchasing  (pestañas: ?tab=review, ?tab=restock, ?tab=transit)
+            - Categorías a vigilar (la app explora sola y prepara los mejores): /WatchedCategories
             - Más vendidos en México: /MarketInsights
             - Costos de cruce: /CrossBorder
             - Productos: /Products  (filtros: ?stage=Draft, ?stage=NeedsReview, ?stage=Ready)

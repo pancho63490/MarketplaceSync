@@ -12,6 +12,10 @@ namespace MarketplaceSync.Services.Jobs
         private readonly IPurchaseRadarService _purchaseRadarService;
         private readonly MarketplaceSync.Services.MercadoLibre.IMercadoLibreListingSyncService _listingSync;
         private readonly MarketplaceSync.Services.MercadoLibre.IMercadoLibreQuestionService _questions;
+        private readonly MarketplaceSync.Services.MarketInsights.CategoryDiscoveryService _discovery;
+        private readonly MarketplaceSync.Services.Purchasing.RadarAutoPrepareService _autoPrepare;
+        private readonly MarketplaceSync.Services.Ai.IListingAutopilotService _autopilot;
+        private readonly ILogger<MarketplaceJobsService> _logger;
 
         public MarketplaceJobsService(
             IMercadoLibreAuthService authService,
@@ -20,7 +24,11 @@ namespace MarketplaceSync.Services.Jobs
             ISourcePriceMonitorService sourcePriceMonitor,
             IPurchaseRadarService purchaseRadarService,
             MarketplaceSync.Services.MercadoLibre.IMercadoLibreListingSyncService listingSync,
-            MarketplaceSync.Services.MercadoLibre.IMercadoLibreQuestionService questions)
+            MarketplaceSync.Services.MercadoLibre.IMercadoLibreQuestionService questions,
+            MarketplaceSync.Services.MarketInsights.CategoryDiscoveryService discovery,
+            MarketplaceSync.Services.Purchasing.RadarAutoPrepareService autoPrepare,
+            MarketplaceSync.Services.Ai.IListingAutopilotService autopilot,
+            ILogger<MarketplaceJobsService> logger)
         {
             _authService = authService;
             _orderSyncService = orderSyncService;
@@ -29,6 +37,10 @@ namespace MarketplaceSync.Services.Jobs
             _purchaseRadarService = purchaseRadarService;
             _listingSync = listingSync;
             _questions = questions;
+            _discovery = discovery;
+            _autoPrepare = autoPrepare;
+            _autopilot = autopilot;
+            _logger = logger;
         }
 
         public async Task RefreshMercadoLibreToken()
@@ -109,6 +121,61 @@ namespace MarketplaceSync.Services.Jobs
         public async Task SyncListingsForOrganization(Guid organizationId)
         {
             await _listingSync.SyncOrganizationAsync(organizationId);
+        }
+
+        /// <summary>Explora las categorías vigiladas de todas las organizaciones (antes del Radar diario).</summary>
+        [DisableConcurrentExecution(timeoutInSeconds: 3600)]
+        public async Task DiscoverCategories()
+        {
+            foreach (var organizationId in await _discovery.GetOrganizationsWithCategoriesAsync())
+            {
+                try
+                {
+                    var result = await _discovery.ScanOrganizationAsync(organizationId);
+                    _logger.LogInformation("Discovery for {OrganizationId}: {Scanned} categories, {WithRanking} with ranking.",
+                        organizationId, result.Scanned, result.WithRanking);
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogWarning(exception, "Discovery failed for {OrganizationId}.", organizationId);
+                }
+            }
+        }
+
+        /// <summary>Deja preparados con IA los mejores del Radar (máximo semanal de la configuración).</summary>
+        [DisableConcurrentExecution(timeoutInSeconds: 3600)]
+        public async Task PrepareTopCandidates()
+        {
+            foreach (var organizationId in await _discovery.GetOrganizationsWithCategoriesAsync())
+            {
+                try
+                {
+                    await _autoPrepare.PrepareTopAsync(organizationId);
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogWarning(exception, "Auto-prepare failed for {OrganizationId}.", organizationId);
+                }
+            }
+        }
+
+        /// <summary>Botón "Explorar ahora": explora, recalcula el Radar y prepara los mejores de una organización.</summary>
+        [AutomaticRetry(Attempts = 0)]
+        [DisableConcurrentExecution(timeoutInSeconds: 1800)]
+        public async Task DiscoverForOrganization(Guid organizationId)
+        {
+            await _discovery.ScanOrganizationAsync(organizationId, 30);
+            await _purchaseRadarService.RefreshAsync(organizationId);
+            await _autoPrepare.PrepareTopAsync(organizationId);
+        }
+
+        /// <summary>Al recibir una compra: publica el producto si ya quedó completo.</summary>
+        [AutomaticRetry(Attempts = 2)]
+        public async Task PublishAfterReceipt(Guid organizationId, int productId)
+        {
+            var result = await _autopilot.RunAsync(organizationId, productId, publishIfReady: true);
+            _logger.LogInformation("Publish after receipt for product {ProductId}: published={Published}, missing={Missing}",
+                productId, result.Published, string.Join("; ", result.Missing));
         }
     }
 }

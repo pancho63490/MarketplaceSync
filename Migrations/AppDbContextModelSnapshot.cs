@@ -33,6 +33,9 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<decimal>("AdditionalHandlingFeeUsd")
                         .HasColumnType("numeric(10,2)");
 
+                    b.Property<int>("AutoPrepareWeekly")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("AutoPublishEnabled")
                         .HasColumnType("boolean");
 
@@ -53,6 +56,9 @@ namespace MarketplaceSync.Web.Migrations
 
                     b.Property<decimal>("PlatformTaxWithholdingPercent")
                         .HasColumnType("numeric(6,2)");
+
+                    b.Property<bool>("PublishOnReceipt")
+                        .HasColumnType("boolean");
 
                     b.Property<decimal>("TargetProfitMarginPercent")
                         .HasColumnType("numeric(6,2)");
@@ -285,6 +291,71 @@ namespace MarketplaceSync.Web.Migrations
                         .IsUnique();
 
                     b.ToTable("MarketRankingSnapshotItems");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.MarketInsights.WatchedCategory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CategoryId")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsLeaf")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSelected")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime?>("LastExpandedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("LastItemsFound")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastScannedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("ParentWatchedCategoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PathText")
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentWatchedCategoryId");
+
+                    b.HasIndex("OrganizationId", "CategoryId")
+                        .IsUnique();
+
+                    b.HasIndex("OrganizationId", "IsLeaf", "Enabled", "LastScannedAt");
+
+                    b.ToTable("WatchedCategories");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", b =>
@@ -981,6 +1052,9 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("PreparedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int?>("ProductId")
                         .HasColumnType("integer");
 
@@ -1419,6 +1493,24 @@ namespace MarketplaceSync.Web.Migrations
                         .IsRequired();
 
                     b.Navigation("MarketRankingSnapshot");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.MarketInsights.WatchedCategory", b =>
+                {
+                    b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MarketplaceSync.Web.Models.MarketInsights.WatchedCategory", "ParentWatchedCategory")
+                        .WithMany()
+                        .HasForeignKey("ParentWatchedCategoryId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Organization");
+
+                    b.Navigation("ParentWatchedCategory");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", b =>

@@ -55,6 +55,9 @@ public sealed class PurchaseCandidate
     public string Status { get; set; } = PurchaseCandidateStatus.Suggested;
     public int? PurchasedQuantity { get; set; }
     public decimal? PurchasedUnitCostUsd { get; set; }
+    /// <summary>Cuándo la app lo dejó preparado (producto con título, atributos y precio) antes de comprarlo.</summary>
+    public DateTime? PreparedAt { get; set; }
+
     public DateTime? PurchasedAt { get; set; }
     public DateTime? ReceivedAt { get; set; }
     public int? ProductId { get; set; }

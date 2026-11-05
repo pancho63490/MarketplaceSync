@@ -1,0 +1,178 @@
+@model MarketplaceSync.Web.Controllers.WatchedCategoriesViewModel
+
+@{
+    ViewData["Title"] = "Categorías a vigilar";
+    string Ago(DateTime? utc)
+    {
+        if (utc is null) return "todavía no";
+        var span = DateTime.UtcNow - utc.Value;
+        if (span.TotalMinutes < 60) return $"hace {Math.Max(1, (int)span.TotalMinutes)} min";
+        if (span.TotalHours < 24) return $"hace {(int)span.TotalHours} h";
+        return $"hace {(int)span.TotalDays} d";
+    }
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+    <div>
+        <h1 class="page-title">Categorías a vigilar</h1>
+        <p class="text-muted mb-0">
+            Elige qué tipo de productos vendes. Cada día la app revisa sus más vendidos, busca quién los vende en EE.UU.
+            y te deja listos los que dejan ganancia. Tú solo compras.
+        </p>
+    </div>
+    @if (Model.Rows.Count > 0)
+    {
+        <form asp-action="ExploreNow" method="post">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-primary" @(Model.HasAccount ? "" : "disabled")>↻ Explorar ahora</button>
+        </form>
+    }
+</div>
+
+@if (!Model.HasAccount)
+{
+    <div class="alert alert-warning">
+        Conecta tu cuenta en <a asp-controller="MercadoLibre" asp-action="Status" class="alert-link">Cuentas de Mercado Libre</a>: la app la usa para leer los más vendidos.
+    </div>
+}
+
+<ol class="wc-flow" aria-label="Cómo funciona">
+    <li><strong>Explora</strong><span>Más vendidos de @Model.TotalLeaves subcategorías, todos los días</span></li>
+    <li><strong>Compara</strong><span>Precio en eBay EE.UU. + cruce contra el precio en Mercado Libre</span></li>
+    <li><strong>Prepara</strong><span>Título, atributos y precio con IA para los mejores</span></li>
+    <li><strong>Publica</strong><span>Cuando marcas la compra como recibida en Juárez</span></li>
+</ol>
+
+<div class="wc-grid">
+    <section aria-labelledby="mis-categorias">
+        <h2 id="mis-categorias" class="today-section-title">Tus categorías</h2>
+
+        @if (Model.Rows.Count == 0)
+        {
+            <div class="today-clear">
+                <div>
+                    <div class="fw-bold">Todavía no vigilas ninguna</div>
+                    <div class="text-muted small">Agrega una de la lista de la derecha. Para autopartes empieza con “Refacciones Autos y Camionetas”.</div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <ul class="wc-list">
+                @foreach (var row in Model.Rows)
+                {
+                    var c = row.Category;
+                    <li class="wc-item @(c.Enabled ? "" : "is-paused")">
+                        <div class="wc-main">
+                            <div class="wc-name">@c.Name</div>
+                            <div class="wc-path">@c.PathText</div>
+                            <div class="wc-stats">
+                                <span>@(row.Leaves) @(row.Leaves == 1 ? "categoría" : "subcategorías")</span>
+                                <span>@row.LeavesWithRanking con más vendidos</span>
+                                <span>revisada @Ago(row.LastScannedAt)</span>
+                                @if (row.ToBuy > 0)
+                                {
+                                    <a asp-controller="Purchasing" asp-action="Index" class="wc-buy">@row.ToBuy para comprar</a>
+                                }
+                            </div>
+                        </div>
+                        <div class="wc-actions">
+                            <form asp-action="Toggle" method="post">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@c.Id" />
+                                <input type="hidden" name="enabled" value="@(c.Enabled ? "false" : "true")" />
+                                <button type="submit" class="btn btn-sm btn-outline-secondary">@(c.Enabled ? "Pausar" : "Activar")</button>
+                            </form>
+                            <form asp-action="Remove" method="post">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@c.Id" />
+                                <button type="submit" class="btn btn-sm btn-link text-danger">Quitar</button>
+                            </form>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+
+        <h2 class="today-section-title mt-4">Preparar en automático</h2>
+        <form asp-action="SaveSettings" method="post" class="wc-settings">
+            @Html.AntiForgeryToken()
+            <label class="form-label" for="autoPrepareWeekly">Productos que la app deja listos por semana</label>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <input type="number" id="autoPrepareWeekly" name="autoPrepareWeekly" value="@Model.AutoPrepareWeekly" min="0" max="50" class="form-control" style="width: 96px" />
+                <span class="text-muted small">Esta semana van @Model.PreparedThisWeek. Usa 0 para solo ver la lista sin preparar nada.</span>
+            </div>
+            <div class="form-text mb-3">Se eligen los de más demanda y más ganancia. Quedan como borrador, sin publicar, en Productos.</div>
+
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="publishOnReceipt" name="publishOnReceipt" value="true" checked="@Model.PublishOnReceipt" />
+                <input type="hidden" name="publishOnReceipt" value="false" />
+                <label class="form-check-label" for="publishOnReceipt">
+                    <strong>Publicar cuando marque la compra como recibida</strong>
+                    <span class="d-block text-muted small">Si al producto le falta algo (foto, atributo), queda como borrador para que lo revises.</span>
+                </label>
+            </div>
+            <button type="submit" class="btn btn-outline-secondary btn-sm mt-3">Guardar</button>
+        </form>
+    </section>
+
+    <aside aria-labelledby="agregar">
+        <h2 id="agregar" class="today-section-title">Agregar categoría</h2>
+        <form method="get" class="d-flex gap-2 mb-3" role="search">
+            <input type="search" name="q" value="@Model.Query" class="form-control" placeholder="Ej. balatas, faros, herramienta…" aria-label="Buscar categoría" />
+            <button type="submit" class="btn btn-outline-secondary">Buscar</button>
+        </form>
+        <div class="small text-muted mb-2">
+            @(string.IsNullOrWhiteSpace(Model.Query) ? "Secciones de Accesorios para Vehículos:" : $"Categorías para “{Model.Query}”:")
+            @if (!string.IsNullOrWhiteSpace(Model.Query))
+            {
+                <a asp-action="Index" class="ms-1">ver secciones de autopartes</a>
+            }
+        </div>
+
+        @if (Model.SuggestionsError is not null)
+        {
+            <div class="alert alert-warning small">@Model.SuggestionsError</div>
+        }
+        else if (Model.Suggestions.Count == 0)
+        {
+            <div class="text-muted small">Sin resultados. Prueba con otra palabra.</div>
+        }
+        else
+        {
+            <ul class="wc-suggestions">
+                @foreach (var s in Model.Suggestions)
+                {
+                    var watched = Model.WatchedIds.Contains(s.Id);
+                    <li>
+                        <span class="wc-sname">@s.Name @if (!string.IsNullOrWhiteSpace(Model.Query) && !string.IsNullOrWhiteSpace(s.Path)) { <small>@s.Path</small> }</span>
+                        @if (watched)
+                        {
+                            <span class="wc-on">✓ Vigilando</span>
+                        }
+                        else
+                        {
+                            <form asp-action="Add" method="post" class="wc-add">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="categoryId" value="@s.Id" />
+                                <input type="hidden" name="q" value="@Model.Query" />
+                                <button type="submit" class="btn btn-sm btn-outline-primary">＋ Vigilar</button>
+                            </form>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </aside>
+</div>
+
+@section Scripts {
+    <script>
+        document.querySelectorAll('.wc-add').forEach(function (form) {
+            form.addEventListener('submit', function () {
+                var b = form.querySelector('button');
+                setTimeout(function () { b.disabled = true; b.textContent = 'Agregando…'; }, 0);
+            });
+        });
+    </script>
+}

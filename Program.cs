@@ -138,6 +138,8 @@ builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.IMercadoLibreLi
 builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler, MarketplaceSync.Services.MercadoLibre.StockSyncScheduler>();
 builder.Services.AddScoped<MarketplaceSync.Services.Ai.ProductTitleTranslator>();
 builder.Services.AddScoped<MarketplaceSync.Services.Inventory.InventoryLotService>();
+builder.Services.AddScoped<MarketplaceSync.Services.MarketInsights.CategoryDiscoveryService>();
+builder.Services.AddScoped<MarketplaceSync.Services.Purchasing.RadarAutoPrepareService>();
 builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.IMercadoLibreQuestionService, MarketplaceSync.Services.MercadoLibre.MercadoLibreQuestionService>();
 
 builder.Services.AddScoped<ISourcePriceMonitorService, SourcePriceMonitorService>();

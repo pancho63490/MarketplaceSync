@@ -52,6 +52,18 @@ public sealed class HangfireRecurringJobsRegistrationService : BackgroundService
                     job => job.SyncMercadoLibreQuestions(),
                     "*/10 * * * *");
 
+                // Categorías vigiladas: después de la captura diaria (12:15 UTC) y antes del Radar (12:45 UTC)
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "discover-watched-categories",
+                    job => job.DiscoverCategories(),
+                    "20 12 * * *");
+
+                // Preparar con IA los mejores del Radar, ya recalculado
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "prepare-top-candidates",
+                    job => job.PrepareTopCandidates(),
+                    "15 13 * * *");
+
                 // Radar de compra: después de la captura diaria del ranking (12:15 UTC)
                 _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
                     "refresh-purchase-radar",

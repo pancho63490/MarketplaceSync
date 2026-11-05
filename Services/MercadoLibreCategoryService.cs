@@ -5,10 +5,13 @@ namespace MarketplaceSync.Web.Services
     public class MercadoLibreCategoryService
     {
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly string _apiBase;
 
-        public MercadoLibreCategoryService(IHttpClientFactory httpClientFactory)
+        public MercadoLibreCategoryService(IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
             _httpClientFactory = httpClientFactory;
+            var configured = configuration["MercadoLibre:ApiBaseUrl"];
+            _apiBase = string.IsNullOrWhiteSpace(configured) ? "https://api.mercadolibre.com" : configured.TrimEnd('/');
         }
 
         public async Task<List<MercadoLibreCategorySuggestion>> SuggestCategoriesAsync(string title)
@@ -20,7 +23,7 @@ namespace MarketplaceSync.Web.Services
 
             var query = Uri.EscapeDataString(title.Trim());
 
-            var url = $"https://api.mercadolibre.com/sites/MLM/domain_discovery/search?q={query}&limit=8";
+            var url = $"{_apiBase}/sites/MLM/domain_discovery/search?q={query}&limit=8";
 
             using var response = await client.GetAsync(url);
             var content = await response.Content.ReadAsStringAsync();

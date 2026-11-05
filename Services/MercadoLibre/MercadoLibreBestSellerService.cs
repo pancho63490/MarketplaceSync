@@ -11,12 +11,16 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMemoryCache _cache;
     private readonly ILogger<MercadoLibreBestSellerService> _logger;
+    private readonly string _apiBase;
 
     public MercadoLibreBestSellerService(
         IHttpClientFactory httpClientFactory,
         IMemoryCache cache,
+        IConfiguration configuration,
         ILogger<MercadoLibreBestSellerService> logger)
     {
+        var configured = configuration["MercadoLibre:ApiBaseUrl"];
+        _apiBase = string.IsNullOrWhiteSpace(configured) ? "https://api.mercadolibre.com" : configured.TrimEnd('/');
         _httpClientFactory = httpClientFactory;
         _cache = cache;
         _logger = logger;
@@ -40,7 +44,7 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
         // las subcategorías: si la elegida no tiene, se prueba con la categoría superior.
         using var category = await GetJsonAsync(
             client,
-            $"https://api.mercadolibre.com/categories/{Uri.EscapeDataString(categoryId)}",
+            $"{_apiBase}/categories/{Uri.EscapeDataString(categoryId)}",
             accessToken,
             cancellationToken);
 
@@ -67,7 +71,7 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
             {
                 var document = await GetJsonAsync(
                     client,
-                    $"https://api.mercadolibre.com/highlights/MLM/category/{Uri.EscapeDataString(candidate.Id)}",
+                    $"{_apiBase}/highlights/MLM/category/{Uri.EscapeDataString(candidate.Id)}",
                     accessToken,
                     cancellationToken);
                 if (document.RootElement.TryGetProperty("content", out var probe) &&
@@ -156,7 +160,7 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
         {
             using var document = await GetJsonAsync(
                 client,
-                $"https://api.mercadolibre.com/{resource}",
+                $"{_apiBase}/{resource}",
                 accessToken,
                 cancellationToken);
             var root = document.RootElement;
@@ -226,7 +230,7 @@ public sealed class MercadoLibreBestSellerService : IMercadoLibreBestSellerServi
     {
         try
         {
-            var url = "https://api.mercadolibre.com/products/search" +
+            var url = $"{_apiBase}/products/search" +
                       $"?status=active&site_id=MLM&limit=1&q={Uri.EscapeDataString(userProductId)}";
             using var document = await GetJsonAsync(client, url, accessToken, cancellationToken);
             if (!document.RootElement.TryGetProperty("results", out var results) ||

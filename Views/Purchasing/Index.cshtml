@@ -122,8 +122,8 @@
     @if (!Model.HasRankingHistory)
     {
         <div class="alert alert-info border-0 shadow-sm">
-            Para empezar, busca en <a asp-controller="MarketInsights" asp-action="Index" class="alert-link">Más vendidos MX</a> los productos que te interesan.
-            Cada búsqueda guarda el ranking del día; con una semana de historial la lista es mucho más precisa.
+            Para empezar, elige en <a asp-controller="WatchedCategories" asp-action="Index" class="alert-link">Categorías a vigilar</a> qué tipo de productos vendes: la app explorará sola cada día.
+            Con una semana de historial la lista es mucho más precisa.
         </div>
     }
 
@@ -231,6 +231,14 @@
                                 </div>
                             }
 
+                            @if (c.PreparedAt.HasValue && c.ProductId.HasValue)
+                            {
+                                <div class="radar-prepared">
+                                    ✓ Ya está preparado (título, atributos y precio).
+                                    <a asp-controller="Products" asp-action="Details" asp-route-id="@c.ProductId">Revisar</a>
+                                    · Se publica cuando lo marques recibido.
+                                </div>
+                            }
                             <div class="radar-actions">
                                 <form asp-action="MarkPurchased" method="post" class="d-flex gap-2 align-items-end">
                                     @Html.AntiForgeryToken()
