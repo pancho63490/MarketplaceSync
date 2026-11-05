@@ -13,34 +13,34 @@
         {
             ("", new[]
             {
-                ("Home", "Index", "⌂", "Hoy")
+                ("Home", "Index", "house", "Hoy")
             }),
             ("Vender", new[]
             {
-                ("Orders", "Index", "≡", "Pedidos"),
-                ("Questions", "Index", "?", "Preguntas"),
-                ("Products", "Index", "□", "Productos"),
-                ("Publications", "Index", "↗", "Publicados"),
-                ("Inventory", "Index", "▦", "Inventario")
+                ("Orders", "Index", "receipt", "Pedidos"),
+                ("Questions", "Index", "message-circle-question", "Preguntas"),
+                ("Products", "Index", "package", "Productos"),
+                ("Publications", "Index", "store", "Publicados"),
+                ("Inventory", "Index", "boxes", "Inventario")
             }),
             ("Comprar en EE.UU.", new[]
             {
-                ("Purchasing", "Index", "◎", "Qué comprar"),
-                ("WatchedCategories", "Index", "◉", "Categorías a vigilar"),
-                ("MarketInsights", "Index", "★", "Más vendidos MX"),
-                ("CrossBorder", "Index", "⇄", "Costos de cruce")
+                ("Purchasing", "Index", "shopping-cart", "Qué comprar"),
+                ("WatchedCategories", "Index", "radar", "Categorías a vigilar"),
+                ("MarketInsights", "Index", "trending-up", "Más vendidos MX"),
+                ("CrossBorder", "Index", "calculator", "Costos de cruce")
             }),
             ("Configuración", new[]
             {
-                ("MercadoLibre", "Status", "⚙", "Cuentas de Mercado Libre")
+                ("MercadoLibre", "Status", "link", "Cuentas de Mercado Libre")
             })
         }
         : new (string Title, (string Controller, string Action, string Icon, string Label)[] Items)[]
         {
             ("Acceso", new[]
             {
-                ("Account", "Login", "→", "Iniciar sesión"),
-                ("Account", "Register", "＋", "Crear cuenta")
+                ("Account", "Login", "arrow-right", "Iniciar sesión"),
+                ("Account", "Register", "plus", "Crear cuenta")
             })
         };
 
@@ -65,7 +65,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#1b2a41" />
     <title>@ViewData["Title"] · MarketplaceSync</title>
 
     <link rel="preload" href="~/fonts/archivo-latin-wdth-normal.woff2" as="font" type="font/woff2" crossorigin />
@@ -95,7 +95,7 @@
                        asp-controller="@item.Controller"
                        asp-action="@item.Action"
                        aria-current="@(active == "active" ? "page" : null)">
-                        <span class="nav-icon" aria-hidden="true">@item.Icon</span>
+                        <span class="nav-icon">@Html.Icon(item.Icon)</span>
                         <span>@item.Label</span>
                     </a>
                 }
@@ -115,7 +115,7 @@
                 <div class="account-name" title="@userName">@userName</div>
                 <form asp-controller="Account" asp-action="Logout" method="post">
                     @Html.AntiForgeryToken()
-                    <button type="submit" class="account-logout">Cerrar sesión</button>
+                    <button type="submit" class="account-logout">@Html.Icon("log-out", "icon-xs") Cerrar sesión</button>
                 </form>
             </div>
         </div>
@@ -145,7 +145,7 @@ else
 
         @if (isAuthenticated)
         {
-            <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-primary sidebar-cta">＋ Importar producto</a>
+            <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-primary sidebar-cta">@Html.Icon("plus") Importar producto</a>
         }
 
         @{ await RenderNav(); }
@@ -161,9 +161,9 @@ else
             <div class="d-flex align-items-center gap-2">
                 @if (isAuthenticated)
                 {
-                    <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-primary btn-sm" aria-label="Importar producto">＋ Importar</a>
+                    <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-primary btn-sm" aria-label="Importar producto">@Html.Icon("plus") Importar</a>
                 }
-                <button class="mobile-menu-btn" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileDrawer" aria-controls="mobileDrawer">Menú</button>
+                <button class="mobile-menu-btn" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileDrawer" aria-controls="mobileDrawer" aria-label="Abrir menú">@Html.Icon("menu")</button>
             </div>
         </header>
 
@@ -190,7 +190,21 @@ else
             @pageBody
         </main>
 
-        <footer class="app-footer">MarketplaceSync © @DateTime.Now.Year</footer>
+        @* Celular: las 4 pantallas de todos los días, al alcance del pulgar. *@
+        <nav class="tab-bar" aria-label="Accesos rápidos">
+            @foreach (var tab in new[] { ("Home", "house", "Hoy"), ("Orders", "receipt", "Pedidos"), ("Products", "package", "Productos"), ("Purchasing", "shopping-cart", "Comprar") })
+            {
+                var activeTab = IsActive(tab.Item1);
+                <a asp-controller="@tab.Item1" asp-action="Index" class="tab-bar-item @activeTab" aria-current="@(activeTab == "active" ? "page" : null)">
+                    @Html.Icon(tab.Item2)
+                    <span>@tab.Item3</span>
+                </a>
+            }
+            <button type="button" class="tab-bar-item" data-bs-toggle="offcanvas" data-bs-target="#mobileDrawer" aria-controls="mobileDrawer">
+                @Html.Icon("menu")
+                <span>Más</span>
+            </button>
+        </nav>
     </div>
 </div>
 }

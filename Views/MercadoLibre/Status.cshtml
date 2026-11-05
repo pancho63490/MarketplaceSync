@@ -1,141 +1,81 @@
 @model IReadOnlyList<MarketplaceSync.Web.Models.Marketplace.MarketplaceAccountStatusViewModel>
-@{ Context.Items["FlashRendered"] = true; }
 
 @{
     ViewData["Title"] = "Cuentas de Mercado Libre";
     var accounts = Model ?? Array.Empty<MarketplaceSync.Web.Models.Marketplace.MarketplaceAccountStatusViewModel>();
-    var connectedCount = accounts.Count(x =>
-        x.Status.Equals("Connected", StringComparison.OrdinalIgnoreCase) && x.HasActiveToken);
-    var expiredCount = accounts.Count(x =>
-        x.HasActiveToken && x.TokenExpiresAt.HasValue && x.TokenExpiresAt.Value <= DateTime.UtcNow);
+    var connected = accounts.Where(x => x.Status.Equals("Connected", StringComparison.OrdinalIgnoreCase)).ToList();
 }
 
-<div class="container-fluid px-4 py-4">
-    @if (TempData["Success"] is string success)
-    {
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            @success
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-        </div>
-    }
-    @if (TempData["Error"] is string error)
-    {
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            @error
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-        </div>
-    }
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Cuentas de Mercado Libre</h1>
+        <p>La app usa tu cuenta para leer pedidos, preguntas y más vendidos, y para publicar. El acceso se renueva solo.</p>
+    </div>
+    <div class="page-head-actions">
+        <a asp-action="Connect" class="btn @(connected.Count == 0 ? "btn-primary" : "btn-outline-secondary")">@Html.Icon("link") @(connected.Count == 0 ? "Conectar mi cuenta" : "Conectar otra cuenta")</a>
+    </div>
+</header>
 
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+@if (accounts.Count == 0)
+{
+    <div class="today-clear">
+        @Html.Icon("link", "icon-lg")
         <div>
-            <h1 class="fw-bold mb-1">Cuentas de Mercado Libre</h1>
-            <p class="text-muted mb-0">Estado de conexión para la organización actual.</p>
+            <div class="fw-bold">Todavía no conectas tu cuenta</div>
+            <div class="text-muted small">Te llevamos a Mercado Libre para que autorices la app. No vemos ni guardamos tu contraseña.</div>
         </div>
-        <a asp-action="Connect" class="btn btn-success">Conectar cuenta</a>
+        <a asp-action="Connect" class="btn btn-primary btn-sm ms-auto">Conectar</a>
     </div>
-
-    <div class="row g-3 mb-4">
-        <div class="col-sm-4">
-            <div class="card border-0 shadow-sm h-100"><div class="card-body">
-                <div class="text-muted small">Cuentas registradas</div>
-                <div class="fs-3 fw-bold">@accounts.Count</div>
-            </div></div>
-        </div>
-        <div class="col-sm-4">
-            <div class="card border-0 shadow-sm h-100"><div class="card-body">
-                <div class="text-muted small">Conectadas</div>
-                <div class="fs-3 fw-bold text-success">@connectedCount</div>
-            </div></div>
-        </div>
-        <div class="col-sm-4">
-            <div class="card border-0 shadow-sm h-100"><div class="card-body">
-                <div class="text-muted small">Con token vencido</div>
-                <div class="fs-3 fw-bold @(expiredCount > 0 ? "text-danger" : "")">@expiredCount</div>
-            </div></div>
-        </div>
-    </div>
-
-    <div class="card border-0 shadow-sm">
-        @if (accounts.Count == 0)
+}
+else
+{
+    <ul class="acc-list">
+        @foreach (var account in accounts)
         {
-            <div class="card-body text-center py-5">
-                <h2 class="h5 fw-bold">Aún no hay cuentas conectadas</h2>
-                <p class="text-muted">Conecta tu cuenta para publicar y sincronizar productos.</p>
-                <a asp-action="Connect" class="btn btn-success">Conectar Mercado Libre</a>
-            </div>
-        }
-        else
-        {
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Cuenta</th>
-                            <th>ID de Mercado Libre</th>
-                            <th>Estado</th>
-                            <th>Token</th>
-                            <th>Vencimiento</th>
-                            <th>Conectada</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    @foreach (var account in accounts)
+            var isConnected = account.Status.Equals("Connected", StringComparison.OrdinalIgnoreCase);
+            var (label, tone) = isConnected
+                ? account.HasActiveToken ? ("Conectada", "pill-ok") : ("Vuelve a conectarla", "pill-warn")
+                : ("Desconectada", "");
+            <li class="acc-item panel">
+                <span class="acc-avatar" aria-hidden="true">@(string.IsNullOrWhiteSpace(account.DisplayName) ? "ML" : account.DisplayName[..1].ToUpperInvariant())</span>
+                <div class="acc-main">
+                    <div class="acc-name">@account.DisplayName <span class="pill @tone ms-1">@label</span></div>
+                    <div class="acc-meta">ID @account.ExternalAccountId · conectada el @account.ConnectedAt.AddHours(-7).ToString("dd/MM/yyyy")</div>
+                    @if (isConnected && !account.HasActiveToken)
                     {
-                        var isConnected = account.Status.Equals("Connected", StringComparison.OrdinalIgnoreCase);
-                        var tokenExpired = account.TokenExpiresAt.HasValue && account.TokenExpiresAt.Value <= DateTime.UtcNow;
-                        <tr>
-                            <td class="fw-semibold">@account.DisplayName</td>
-                            <td><code>@account.ExternalAccountId</code></td>
-                            <td>
-                                @if (isConnected && account.HasActiveToken && !tokenExpired)
-                                {
-                                    <span class="badge text-bg-success">Conectada</span>
-                                }
-                                else if (isConnected && tokenExpired)
-                                {
-                                    <span class="badge text-bg-warning">Token vencido</span>
-                                }
-                                else if (isConnected)
-                                {
-                                    <span class="badge text-bg-warning">Sin token activo</span>
-                                }
-                                else
-                                {
-                                    <span class="badge text-bg-secondary">Desconectada</span>
-                                }
-                            </td>
-                            <td>@(account.HasActiveToken ? "Activo" : "Inactivo")</td>
-                            <td>
-                                @if (account.TokenExpiresAt.HasValue)
-                                {
-                                    @account.TokenExpiresAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
-                                }
-                                else
-                                {
-                                    <span class="text-muted">—</span>
-                                }
-                            </td>
-                            <td>@account.ConnectedAt.ToLocalTime().ToString("dd/MM/yyyy")</td>
-                            <td class="text-end">
-                                @if (isConnected)
-                                {
-                                    <form asp-action="DisconnectAccount" method="post" class="d-inline"
-                                          onsubmit="return confirm('¿Desconectar esta cuenta de Mercado Libre?');">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="accountId" value="@account.Id" />
-                                        <button type="submit" class="btn btn-sm btn-outline-danger">Desconectar</button>
-                                    </form>
-                                }
-                            </td>
-                        </tr>
+                        <div class="small text-warning mt-1">Mercado Libre retiró el permiso. Pulsa “Conectar otra cuenta” y entra con esta misma cuenta.</div>
                     }
-                    </tbody>
-                </table>
-            </div>
+                </div>
+                @if (isConnected)
+                {
+                    <form asp-action="DisconnectAccount" method="post" class="disconnect-form">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="accountId" value="@account.Id" />
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Desconectar</button>
+                    </form>
+                }
+            </li>
         }
-        <div class="card-footer bg-white text-muted small">
-            Por seguridad, esta pantalla nunca muestra access tokens ni refresh tokens.
-        </div>
-    </div>
-</div>
+    </ul>
+    <p class="small text-muted mt-3">Por seguridad, la app nunca muestra las llaves de acceso de tu cuenta.</p>
+}
+
+@section Scripts {
+    <script>
+        document.querySelectorAll('.disconnect-form').forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                var button = form.querySelector('button');
+                if (button.dataset.confirmed === '1') return;
+                event.preventDefault();
+                button.dataset.confirmed = '1';
+                button.textContent = 'Confirmar: desconectar';
+                button.classList.replace('btn-outline-danger', 'btn-danger');
+                setTimeout(function () {
+                    button.dataset.confirmed = '';
+                    button.textContent = 'Desconectar';
+                    button.classList.replace('btn-danger', 'btn-outline-danger');
+                }, 4000);
+            });
+        });
+    </script>
+}

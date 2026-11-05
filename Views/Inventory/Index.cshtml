@@ -1,12 +1,11 @@
 @model MarketplaceSync.Web.ViewModels.Inventory.InventoryIndexViewModel
-@{ Context.Items["FlashRendered"] = true; }
 
 @functions {
     private static string MovementLabel(string type) => type switch
     {
         "OrderSale" => "Venta",
-        "OrderReversal" => "Reversión",
-        "ManualAdjustment" => "Ajuste manual",
+        "OrderReversal" => "Cancelación",
+        "ManualAdjustment" => "Ajuste",
         "PurchaseReceipt" => "Compra recibida",
         "ExpiredWriteOff" => "Baja por caducidad",
         _ => type
@@ -15,219 +14,201 @@
 
 @{
     ViewData["Title"] = "Inventario";
+    var mx = System.Globalization.CultureInfo.GetCultureInfo("es-MX");
+    var today = MarketplaceSync.Services.Inventory.InventoryLotService.Today;
+    var hasFilters = !string.IsNullOrWhiteSpace(Model.Search) || Model.LowStockOnly;
 }
 
-<div class="inventory-page">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
-        <div>
-            <div class="inventory-eyebrow">CONTROL DE EXISTENCIAS</div>
-            <h2 class="inventory-title mb-1">Inventario</h2>
-            <div class="text-muted">Controla el stock por SKU y revisa cada movimiento generado por tus ventas.</div>
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Inventario</h1>
+        <p>Las piezas que tienes en Juárez. Cada cambio se manda solo a Mercado Libre.</p>
+    </div>
+</header>
+
+<dl class="stats">
+    <div class="stat"><dt>SKU activos</dt><dd>@Model.TotalVariants.ToString("N0", mx)</dd></div>
+    <div class="stat"><dt>Piezas disponibles</dt><dd>@Model.TotalUnits.ToString("N0", mx)</dd></div>
+    <div class="stat @(Model.LowStockVariants > 0 ? "is-warn" : "")"><dt>Stock bajo</dt><dd><a asp-action="Index" asp-route-lowStockOnly="true">@Model.LowStockVariants.ToString("N0", mx)</a></dd></div>
+    <div class="stat @(Model.OutOfStockVariants > 0 ? "is-bad" : "")"><dt>Agotados o sobrevendidos</dt><dd>@Model.OutOfStockVariants.ToString("N0", mx)</dd></div>
+</dl>
+
+@if (Model.ExpiringLots.Count > 0)
+{
+    var expired = Model.ExpiringLots.Count(l => l.DaysLeft < 0);
+    <section class="panel inv-expiry mb-4" id="caducidades" aria-labelledby="caducidades-title">
+        <div class="panel-head">
+            <h2 id="caducidades-title">@Html.Icon("calendar-clock") Caducidades</h2>
+            <p>
+                Lotes que caducan en los próximos @MarketplaceSync.Services.Inventory.InventoryLotService.WarningDays días@(expired > 0 ? $" y {expired} ya caducados" : "").
+                Las ventas salen primero del lote que caduca antes. Baja el precio o arma un kit para moverlos; lo caducado dalo de baja.
+            </p>
         </div>
-        <a asp-controller="Products" asp-action="Index" class="btn btn-app-light">Administrar productos</a>
-    </div>
-
-    @if (TempData["Success"] is string success)
-    {
-        <div class="alert alert-success border-0 shadow-sm">@success</div>
-    }
-    @if (TempData["Error"] is string error)
-    {
-        <div class="alert alert-danger border-0 shadow-sm">@error</div>
-    }
-
-    <div class="row g-3 mb-4">
-        <div class="col-sm-6 col-xl-3"><div class="inventory-kpi"><div class="inventory-kpi-icon kpi-indigo">▦</div><div><div class="inventory-kpi-label">SKU activos</div><div class="inventory-kpi-value">@Model.TotalVariants.ToString("N0")</div></div></div></div>
-        <div class="col-sm-6 col-xl-3"><div class="inventory-kpi"><div class="inventory-kpi-icon kpi-green">Σ</div><div><div class="inventory-kpi-label">Unidades disponibles</div><div class="inventory-kpi-value">@Model.TotalUnits.ToString("N0")</div></div></div></div>
-        <div class="col-sm-6 col-xl-3"><div class="inventory-kpi"><div class="inventory-kpi-icon kpi-amber">!</div><div><div class="inventory-kpi-label">Stock bajo</div><div class="inventory-kpi-value">@Model.LowStockVariants.ToString("N0")</div></div></div></div>
-        <div class="col-sm-6 col-xl-3"><div class="inventory-kpi"><div class="inventory-kpi-icon kpi-red">0</div><div><div class="inventory-kpi-label">Agotados / sobreventa</div><div class="inventory-kpi-value">@Model.OutOfStockVariants.ToString("N0")</div></div></div></div>
-    </div>
-
-    @if (Model.ExpiringLots.Count > 0)
-    {
-        var expired = Model.ExpiringLots.Count(l => l.DaysLeft < 0);
-        <section class="card border-0 shadow-sm inventory-card mb-4 expiry-card" id="caducidades" aria-labelledby="caducidades-title">
-            <div class="card-header bg-white border-0 px-3 px-lg-4 py-3">
-                <h3 class="h6 fw-bold mb-1" id="caducidades-title">Caducidades</h3>
-                <div class="small text-muted">
-                    Lotes que caducan en los próximos @MarketplaceSync.Services.Inventory.InventoryLotService.WarningDays días@(expired > 0 ? $" y {expired} ya caducados" : "").
-                    Las ventas salen primero del lote que caduca antes. Para moverlos: baja el precio o arma un kit; lo caducado dalo de baja (Mercado Libre no permite venderlo).
-                </div>
-            </div>
-            <div class="table-responsive">
-                <table class="table inventory-table align-middle mb-0">
-                    <thead><tr><th>Producto / SKU</th><th>Lote</th><th>Caduca</th><th class="text-center">Quedan</th><th></th></tr></thead>
-                    <tbody>
-                    @foreach (var lot in Model.ExpiringLots)
-                    {
-                        var tone = lot.DaysLeft < 0 ? "stock-danger" : lot.DaysLeft <= 7 ? "stock-danger" : "stock-warning";
-                        <tr>
-                            <td>
-                                <div class="fw-bold inventory-product-title">@lot.ProductTitle</div>
-                                <span class="inventory-sku">@lot.Sku</span>
-                            </td>
-                            <td class="text-muted">@(lot.LotCode ?? "—")</td>
-                            <td>
-                                <div class="fw-semibold">@lot.ExpiresOn.ToString("dd/MM/yyyy")</div>
-                                <span class="expiry-pill @tone">@(lot.DaysLeft < 0 ? $"Caducó hace {-lot.DaysLeft} d" : lot.DaysLeft == 0 ? "Caduca hoy" : $"En {lot.DaysLeft} d")</span>
-                            </td>
-                            <td class="text-center fw-bold">@lot.QuantityRemaining</td>
-                            <td class="text-end">
-                                <form asp-action="WriteOffLot" method="post" class="d-inline writeoff-form">
-                                    @Html.AntiForgeryToken()
-                                    <input type="hidden" name="lotId" value="@lot.LotId" />
-                                    <button type="submit" class="btn btn-sm @(lot.DaysLeft < 0 ? "btn-danger" : "btn-outline-secondary")">Dar de baja</button>
-                                </form>
-                            </td>
-                        </tr>
-                    }
-                    </tbody>
-                </table>
-            </div>
-        </section>
-    }
-
-    <div class="card border-0 shadow-sm inventory-card mb-4">
-        <div class="card-body p-3 p-lg-4">
-            <form method="get" class="row g-3 align-items-end">
-                <div class="col-md-7 col-lg-5">
-                    <label for="search" class="form-label inventory-label">Buscar inventario</label>
-                    <input id="search" name="search" value="@Model.Search" class="form-control" placeholder="SKU, producto o código de barras" />
-                </div>
-                <div class="col-md-5 col-lg-3">
-                    <div class="form-check form-switch inventory-switch">
-                        <input class="form-check-input" type="checkbox" role="switch" id="lowStockOnly" name="lowStockOnly" value="true" checked="@Model.LowStockOnly" />
-                        <label class="form-check-label fw-semibold" for="lowStockOnly">Solo stock bajo</label>
-                    </div>
-                </div>
-                <div class="col-lg-4 d-flex gap-2">
-                    <button type="submit" class="btn btn-outline-secondary">Buscar</button>
-                    <a asp-action="Index" class="btn btn-outline-secondary">Limpiar</a>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div class="card border-0 shadow-sm inventory-card mb-4">
-        <div class="card-header bg-white border-0 px-3 px-lg-4 py-3"><h3 class="h6 fw-bold mb-1">Existencias por SKU</h3><div class="small text-muted">Los pedidos pagados descuentan stock automáticamente.</div></div>
-        <div class="table-responsive">
-            <table class="table inventory-table align-middle mb-0">
-                <thead><tr><th>Producto / SKU</th><th class="text-center">Disponible</th><th class="text-center">Vendido</th><th>Alerta mínima</th><th>Ajustar existencias</th></tr></thead>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead><tr><th>Producto</th><th>Lote</th><th>Caduca</th><th class="num">Quedan</th><th></th></tr></thead>
                 <tbody>
-                @if (Model.Variants.Count == 0)
+                @foreach (var lot in Model.ExpiringLots)
                 {
-                    <tr><td colspan="5" class="text-center py-5"><div class="inventory-empty">▦</div><div class="fw-bold mt-3">No hay variantes para mostrar</div><div class="text-muted small mt-1">Agrega variantes con SKU desde el catálogo de productos.</div></td></tr>
-                }
-                else
-                {
-                    @foreach (var row in Model.Variants)
-                    {
-                        var variant = row.Variant;
-                        var stockClass = variant.Stock <= 0 ? "stock-danger" : variant.Stock <= variant.LowStockThreshold ? "stock-warning" : "stock-success";
-                        <tr>
-                            <td>
-                                <div class="fw-bold inventory-product-title">@variant.Product.Title</div>
-                                <div class="d-flex flex-wrap align-items-center gap-2 mt-1"><span class="inventory-sku">@variant.Sku</span>@if (!string.IsNullOrWhiteSpace(variant.Barcode)) { <span class="small text-muted">@variant.Barcode</span> }
-                                    @if (Model.NextExpiryByVariant.TryGetValue(variant.Id, out var next))
-                                    {
-                                        var days = next.ExpiresOn.DayNumber - MarketplaceSync.Services.Inventory.InventoryLotService.Today.DayNumber;
-                                        <span class="expiry-pill @(days < 0 ? "stock-danger" : days <= 30 ? "stock-warning" : "expiry-ok")" title="@next.LotUnits piezas con lote">Caduca @next.ExpiresOn.ToString("dd/MM/yy") (@next.Units pzs)</span>
-                                    }
-                                </div>
-                            </td>
-                            <td class="text-center"><span class="inventory-stock @stockClass">@variant.Stock</span>@if (variant.Stock < 0) { <div class="small text-danger mt-1">Sobreventa</div> }</td>
-                            <td class="text-center fw-semibold">@Math.Max(0, row.NetSoldUnits)</td>
-                            <td>
-                                <form asp-action="SetThreshold" method="post" class="d-flex gap-2 threshold-form">
-                                    @Html.AntiForgeryToken()
-                                    <input type="hidden" name="variantId" value="@variant.Id" />
-                                    <input type="number" name="lowStockThreshold" value="@variant.LowStockThreshold" min="0" max="1000000" class="form-control form-control-sm" aria-label="Alerta mínima para @variant.Sku" />
-                                    <button class="btn btn-sm btn-outline-secondary" type="submit">Guardar</button>
-                                </form>
-                            </td>
-                            <td>
-                                <form asp-action="Adjust" method="post" class="adjust-form">
-                                    @Html.AntiForgeryToken()
-                                    <input type="hidden" name="variantId" value="@variant.Id" />
-                                    <div class="d-flex gap-2">
-                                        <input type="number" name="newStock" value="@Math.Max(0, variant.Stock)" min="0" max="1000000" class="form-control form-control-sm" aria-label="Nuevo stock para @variant.Sku" />
-                                        <input type="text" name="notes" maxlength="500" class="form-control form-control-sm inventory-note" placeholder="Motivo del ajuste" />
-                                        <input type="date" name="expiresOn" class="form-control form-control-sm inventory-expiry" title="Caducidad de las piezas que agregas (solo si caducan)" aria-label="Caducidad de las piezas que agregas, opcional" />
-                                        <button class="btn btn-sm btn-outline-secondary" type="submit">Ajustar</button>
-                                    </div>
-                                </form>
-                            </td>
-                        </tr>
-                    }
+                    <tr>
+                        <td><span class="fw-semibold">@lot.ProductTitle</span><span class="sub">@lot.Sku</span></td>
+                        <td class="text-muted">@(lot.LotCode ?? "—")</td>
+                        <td class="text-nowrap">
+                            @lot.ExpiresOn.ToString("dd/MM/yyyy")
+                            <span class="pill @(lot.DaysLeft <= 7 ? "pill-bad" : "pill-warn") ms-1">@(lot.DaysLeft < 0 ? $"Caducó hace {-lot.DaysLeft} d" : lot.DaysLeft == 0 ? "Caduca hoy" : $"En {lot.DaysLeft} d")</span>
+                        </td>
+                        <td class="num fw-bold">@lot.QuantityRemaining</td>
+                        <td class="text-end">
+                            <form asp-action="WriteOffLot" method="post" class="d-inline writeoff-form">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="lotId" value="@lot.LotId" />
+                                <button type="submit" class="btn btn-sm @(lot.DaysLeft < 0 ? "btn-danger" : "btn-outline-secondary")">Dar de baja</button>
+                            </form>
+                        </td>
+                    </tr>
                 }
                 </tbody>
             </table>
         </div>
-    </div>
+    </section>
+}
 
-    <div class="card border-0 shadow-sm inventory-card">
-        <div class="card-header bg-white border-0 px-3 px-lg-4 py-3"><h3 class="h6 fw-bold mb-1">Movimientos recientes</h3><div class="small text-muted">Historial auditable de ventas, reversiones y ajustes.</div></div>
-        <div class="table-responsive">
-            <table class="table inventory-table align-middle mb-0">
-                <thead><tr><th>Fecha</th><th>SKU / Producto</th><th>Tipo</th><th>Referencia</th><th class="text-end">Movimiento</th><th class="text-end">Existencia final</th></tr></thead>
+<form method="get" class="inv-filters mb-3" role="search">
+    <div class="input-icon inv-search">
+        @Html.Icon("search")
+        <input id="search" name="search" value="@Model.Search" class="form-control" placeholder="SKU, producto o código de barras" aria-label="Buscar en inventario" />
+    </div>
+    <div class="form-check form-switch m-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="lowStockOnly" name="lowStockOnly" value="true" checked="@Model.LowStockOnly" onchange="this.form.submit()" />
+        <label class="form-check-label" for="lowStockOnly">Solo stock bajo</label>
+    </div>
+    <button type="submit" class="btn btn-outline-secondary">Buscar</button>
+    @if (hasFilters)
+    {
+        <a asp-action="Index" class="btn btn-link px-1">Quitar filtros</a>
+    }
+</form>
+
+<section class="panel mb-4" aria-labelledby="existencias">
+    <div class="panel-head">
+        <h2 id="existencias">Existencias por SKU</h2>
+        <p>Escribe cuántas piezas tienes y pulsa Ajustar. Si las que agregas caducan, pon la fecha.</p>
+    </div>
+    @if (Model.Variants.Count == 0)
+    {
+        <div class="panel-body">
+            <div class="today-clear">
+                @Html.Icon("boxes", "icon-lg")
+                <div>
+                    <div class="fw-bold">@(hasFilters ? "Nada coincide con la búsqueda" : "Todavía no hay SKU")</div>
+                    <div class="text-muted small">@(hasFilters ? "Quita los filtros para ver todo." : "Se crean al marcar una compra como recibida o al controlar una publicación desde la app.")</div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="data-table inv-table">
+                <thead><tr><th>Producto</th><th class="num">Hay</th><th class="num">Vendidas</th><th>Avisar con</th><th>Ajustar existencias</th></tr></thead>
                 <tbody>
-                @if (Model.RecentMovements.Count == 0)
+                @foreach (var row in Model.Variants)
                 {
-                    <tr><td colspan="6" class="text-center text-muted py-4">Todavía no hay movimientos de inventario.</td></tr>
-                }
-                else
-                {
-                    @foreach (var movement in Model.RecentMovements)
-                    {
-                        <tr>
-                            <td><div class="fw-semibold">@movement.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy")</div><div class="small text-muted">@movement.CreatedAt.ToLocalTime().ToString("HH:mm")</div></td>
-                            <td><div class="fw-semibold">@movement.ProductVariant.Sku</div><div class="small text-muted inventory-movement-product">@movement.ProductVariant.Product.Title</div></td>
-                            <td><span class="movement-type">@MovementLabel(movement.Type)</span></td>
-                            <td>@if (movement.SalesOrder is not null) { <a asp-controller="Orders" asp-action="Details" asp-route-id="@movement.SalesOrderId" class="text-decoration-none">#@movement.SalesOrder.ExternalOrderId</a> } else { <span class="text-muted">@(movement.Notes ?? "—")</span> }</td>
-                            <td class="text-end fw-bold @(movement.QuantityDelta >= 0 ? "text-success" : "text-danger")">@(movement.QuantityDelta >= 0 ? "+" : "")@movement.QuantityDelta</td>
-                            <td class="text-end fw-bold">@movement.StockAfter</td>
-                        </tr>
-                    }
+                    var variant = row.Variant;
+                    var stockTone = variant.Stock <= 0 ? "pill-bad" : variant.Stock <= variant.LowStockThreshold ? "pill-warn" : "pill-ok";
+                    <tr>
+                        <td class="inv-product">
+                            <span class="fw-semibold">@variant.Product.Title</span>
+                            <span class="sub">
+                                @variant.Sku
+                                @if (!string.IsNullOrWhiteSpace(variant.Barcode)) { <text> · @variant.Barcode</text> }
+                            </span>
+                            @if (Model.NextExpiryByVariant.TryGetValue(variant.Id, out var next))
+                            {
+                                var days = next.ExpiresOn.DayNumber - today.DayNumber;
+                                <span class="pill @(days < 0 ? "pill-bad" : days <= 30 ? "pill-warn" : "") mt-1" title="@next.LotUnits piezas con lote">Caduca @next.ExpiresOn.ToString("dd/MM/yy") · @next.Units pzs</span>
+                            }
+                        </td>
+                        <td class="num">
+                            <span class="pill @stockTone inv-stock">@variant.Stock</span>
+                            @if (variant.Stock < 0) { <span class="sub text-danger">Sobreventa</span> }
+                        </td>
+                        <td class="num">@Math.Max(0, row.NetSoldUnits)</td>
+                        <td>
+                            <form asp-action="SetThreshold" method="post" class="inv-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="variantId" value="@variant.Id" />
+                                <input type="number" name="lowStockThreshold" value="@variant.LowStockThreshold" min="0" max="1000000" class="form-control form-control-sm inv-num" aria-label="Avisar cuando queden estas piezas de @variant.Sku" />
+                                <button class="btn btn-sm btn-outline-secondary" type="submit">Guardar</button>
+                            </form>
+                        </td>
+                        <td>
+                            <form asp-action="Adjust" method="post" class="inv-adjust">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="variantId" value="@variant.Id" />
+                                <input type="number" name="newStock" value="@Math.Max(0, variant.Stock)" min="0" max="1000000" class="form-control form-control-sm inv-num" aria-label="Piezas que tienes de @variant.Sku" />
+                                <input type="date" name="expiresOn" class="form-control form-control-sm inv-date" title="Caducidad de las piezas que agregas (solo si caducan)" aria-label="Caducidad de las piezas que agregas, opcional" />
+                                <button class="btn btn-sm btn-outline-secondary" type="submit">Ajustar</button>
+                                <input type="text" name="notes" maxlength="500" class="form-control form-control-sm inv-note" placeholder="Motivo (opcional)" aria-label="Motivo del ajuste" />
+                            </form>
+                        </td>
+                    </tr>
                 }
                 </tbody>
             </table>
         </div>
-    </div>
-</div>
+    }
+</section>
 
-<script>
-    document.querySelectorAll('.writeoff-form').forEach(function (form) {
-        form.addEventListener('submit', function (event) {
-            var button = form.querySelector('button');
-            if (button.dataset.confirmed === '1') return;
-            event.preventDefault();
-            button.dataset.confirmed = '1';
-            button.textContent = 'Confirmar baja';
-            button.classList.remove('btn-outline-secondary');
-            button.classList.add('btn-danger');
-            setTimeout(function () {
-                button.dataset.confirmed = '';
-                button.textContent = 'Dar de baja';
-            }, 4000);
+<section class="panel" aria-labelledby="movimientos">
+    <div class="panel-head">
+        <h2 id="movimientos">Movimientos recientes</h2>
+        <p>Cada venta, cancelación, compra y ajuste queda registrado.</p>
+    </div>
+    @if (Model.RecentMovements.Count == 0)
+    {
+        <div class="panel-body text-muted small">Todavía no hay movimientos.</div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead><tr><th>Fecha</th><th>Producto</th><th>Qué pasó</th><th>Detalle</th><th class="num">Cambio</th><th class="num">Quedaron</th></tr></thead>
+                <tbody>
+                @foreach (var movement in Model.RecentMovements)
+                {
+                    var local = movement.CreatedAt.AddHours(-7);
+                    <tr>
+                        <td class="text-nowrap">@local.ToString("dd/MM/yyyy")<span class="sub">@local.ToString("HH:mm")</span></td>
+                        <td class="inv-move-product"><span class="fw-semibold">@movement.ProductVariant.Sku</span><span class="sub">@movement.ProductVariant.Product.Title</span></td>
+                        <td><span class="pill">@MovementLabel(movement.Type)</span></td>
+                        <td>@if (movement.SalesOrder is not null) { <a asp-controller="Orders" asp-action="Details" asp-route-id="@movement.SalesOrderId">Pedido #@movement.SalesOrder.ExternalOrderId</a> } else { <span class="text-muted">@(movement.Notes ?? "—")</span> }</td>
+                        <td class="num fw-bold @(movement.QuantityDelta >= 0 ? "text-success" : "text-danger")">@(movement.QuantityDelta >= 0 ? "+" : "")@movement.QuantityDelta</td>
+                        <td class="num fw-bold">@movement.StockAfter</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@section Scripts {
+    <script>
+        document.querySelectorAll('.writeoff-form').forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                var button = form.querySelector('button');
+                if (button.dataset.confirmed === '1') return;
+                event.preventDefault();
+                button.dataset.confirmed = '1';
+                button.textContent = 'Confirmar baja';
+                button.classList.remove('btn-outline-secondary');
+                button.classList.add('btn-danger');
+                setTimeout(function () {
+                    button.dataset.confirmed = '';
+                    button.textContent = 'Dar de baja';
+                }, 4000);
+            });
         });
-    });
-</script>
-
-<style>
-    .inventory-eyebrow { color: var(--denim); font-size: .72rem; font-weight: 800; letter-spacing: 0; margin-bottom: .35rem; } .inventory-title { font-size: 1.65rem; font-weight: 850; letter-spacing: -.025em; }
-    .inventory-kpi { align-items: center; background: #fff; border: 1px solid var(--paper-2); border-radius: 16px; display: flex; gap: 14px; min-height: 96px; padding: 17px; box-shadow: 0 8px 28px rgba(15,23,42,.045); }
-    .inventory-kpi-icon { align-items: center; border-radius: 13px; display: flex; flex: 0 0 44px; font-size: 1.15rem; font-weight: 900; height: 44px; justify-content: center; } .kpi-indigo { background: var(--denim-soft); color: var(--denim); } .kpi-green { background: var(--ok-soft); color: var(--ok); } .kpi-amber { background: var(--warn-soft); color: var(--warn); } .kpi-red { background: var(--bad-soft); color: var(--bad); }
-    .inventory-kpi-label { color: var(--muted); font-size: .76rem; font-weight: 700; } .inventory-kpi-value { color: var(--ink); font-size: 1.45rem; font-weight: 850; }
-    .inventory-card { border-radius: 18px; overflow: hidden; } .inventory-label { color: var(--ink-2); font-size: .76rem; font-weight: 750; } .inventory-switch { padding-bottom: .45rem; }
-    .inventory-table thead th { background: var(--paper-2); border-color: var(--paper-2); color: var(--muted); font-size: .69rem; font-weight: 800; letter-spacing: 0; padding: .8rem 1rem; text-transform: none; white-space: nowrap; }
-    .inventory-table tbody td { border-color: var(--paper-2); color: var(--ink-2); font-size: .82rem; padding: .9rem 1rem; } .inventory-product-title { max-width: 300px; }
-    .inventory-sku { background: var(--denim-soft); border-radius: 6px; color: #4338ca; font-family: ui-monospace, monospace; font-size: .72rem; font-weight: 800; padding: .18rem .4rem; }
-    .inventory-stock { border-radius: 10px; display: inline-flex; font-size: 1rem; font-weight: 850; justify-content: center; min-width: 42px; padding: .35rem .55rem; } .stock-success { background: var(--ok-soft); color: var(--ok); } .stock-warning { background: var(--warn-soft); color: #a16207; } .stock-danger { background: var(--bad-soft); color: var(--bad); }
-    .threshold-form input { max-width: 78px; } .adjust-form { min-width: 330px; } .adjust-form .d-flex { flex-wrap: wrap; } .adjust-form .inventory-note { order: 9; flex: 1 1 100%; } .inventory-expiry { max-width: 150px; }
-    .threshold-form input { min-width: 64px; } .inventory-product-title { min-width: 180px; }
-    .expiry-pill { border-radius: 999px; display: inline-block; font-size: .7rem; font-weight: 800; padding: .15rem .5rem; } .expiry-ok { background: var(--paper-2); color: var(--ink-2); }
-    .expiry-card { border-left: 4px solid var(--signal) !important; } .adjust-form input[type="number"] { max-width: 88px; } .inventory-note { min-width: 145px; }
-    .movement-type { background: var(--paper-2); border-radius: 999px; color: var(--ink-2); font-size: .7rem; font-weight: 800; padding: .35rem .6rem; } .inventory-movement-product { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .inventory-empty { align-items: center; background: var(--denim-soft); border-radius: 50%; color: var(--denim); display: inline-flex; font-size: 1.5rem; height: 58px; justify-content: center; width: 58px; }
-    @@media (max-width: 767px) { .inventory-title { font-size: 1.4rem; } .inventory-kpi { min-height: 82px; } }
-</style>
+    </script>
+}

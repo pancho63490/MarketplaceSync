@@ -1,272 +1,212 @@
 @model MarketplaceSync.Web.Models.CrossBorder.CrossBorderSettings
-@{ Context.Items["FlashRendered"] = true; }
 @{
     ViewData["Title"] = "Costos de cruce";
     var sample = ViewBag.SampleCalculation as MarketplaceSync.Services.Interfaces.CrossBorderPricingBreakdown;
+    var mx = System.Globalization.CultureInfo.GetCultureInfo("es-MX");
+    string M(decimal? v, string fallback) => v.HasValue ? v.Value.ToString("C2", mx) : fallback;
 }
 
-<div class="container-fluid px-0">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-        <div>
-            <h1 class="page-title">Costos de cruce</h1>
-            <p class="text-muted mb-0">
-                Tus reglas para saber cuánto te cuesta cada pieza puesta en Juárez y a qué precio venderla sin perder.
-            </p>
-        </div>
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Costos de cruce</h1>
+        <p>Tus reglas para saber cuánto te cuesta cada pieza puesta en Juárez y a qué precio venderla sin perder.</p>
     </div>
+</header>
 
-    @if (TempData["Success"] is string successMsg)
-    {
-        <div class="alert alert-success border-0 shadow-sm d-flex align-items-center gap-2 mb-4">
-            <span>✓</span>
-            <div>@successMsg</div>
-        </div>
-    }
+<div class="cb-grid">
+    <form asp-action="Save" method="post" class="cb-form">
+        @Html.AntiForgeryToken()
+        <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+        <input type="hidden" asp-for="Id" />
+        <input type="hidden" asp-for="OrganizationId" />
 
-    @if (TempData["Error"] is string errorMsg)
-    {
-        <div class="alert alert-danger border-0 shadow-sm mb-4">@errorMsg</div>
-    }
-
-    <div class="row g-4">
-        <!-- FORMULARIO DE CONFIGURACIÓN -->
-        <div class="col-lg-7">
-            <div class="card border-0 shadow-sm rounded-4 h-100">
-                <div class="card-header bg-white border-0 pt-4 px-4 pb-0">
-                    <h5 class="fw-bold mb-1">Tus costos</h5>
-                    <div class="text-muted small">Estos valores se usan para calcular el precio de autopartes cazadas en eBay, Amazon y AliExpress.</div>
+        <section class="panel" aria-labelledby="cb-comprar">
+            <div class="panel-head">
+                <h2 id="cb-comprar">@Html.Icon("truck") Comprar y cruzar</h2>
+                <p>Lo que pagas desde El Paso hasta tener la pieza en Juárez.</p>
+            </div>
+            <div class="panel-body cb-fields">
+                <div>
+                    <label asp-for="UsdToMxnRate" class="form-label">Tipo de cambio</label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input asp-for="UsdToMxnRate" class="form-control" type="number" step="0.01" min="1" placeholder="20.00" />
+                        <span class="input-group-text">por dólar</span>
+                    </div>
+                    <span asp-validation-for="UsdToMxnRate" class="text-danger small"></span>
+                    <div class="form-text">El que te cobra tu tarjeta o tu casa de cambio.</div>
                 </div>
-                <div class="card-body p-4">
-                    <form asp-action="Save" method="post">
-                        @Html.AntiForgeryToken()
-                        <div asp-validation-summary="ModelOnly" class="alert alert-danger border-0 shadow-sm mb-3"></div>
-                        <input type="hidden" asp-for="Id" />
-                        <input type="hidden" asp-for="OrganizationId" />
-
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-6">
-                                <label asp-for="UsdToMxnRate" class="form-label fw-semibold small">Tipo de Cambio (USD ➔ MXN)</label>
-                                <div class="input-group">
-                                    <span class="input-group-text bg-light">$</span>
-                                    <input asp-for="UsdToMxnRate" class="form-control" type="number" step="0.01" min="1" placeholder="20.00" />
-                                </div>
-                                <span asp-validation-for="UsdToMxnRate" class="text-danger small"></span>
-                                <div class="form-text small">Tipo de cambio al comprar con tarjeta o proveedor.</div>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label asp-for="ImportFeePercent" class="form-label fw-semibold small">Impuesto Cruce / Comercializadora (%)</label>
-                                <div class="input-group">
-                                    <input asp-for="ImportFeePercent" class="form-control" type="number" step="0.5" min="0" max="100" placeholder="15.0" />
-                                    <span class="input-group-text bg-light">%</span>
-                                </div>
-                                <span asp-validation-for="ImportFeePercent" class="text-danger small"></span>
-                                <div class="form-text small">Arancel IGI (5%-15%) + DTA + IVA 8% o tarifa flat de comercializadora.</div>
-                            </div>
-                        </div>
-
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-6">
-                                <label asp-for="AdditionalHandlingFeeUsd" class="form-label fw-semibold small">Manejo en El Paso / Flete Puente (USD)</label>
-                                <div class="input-group">
-                                    <span class="input-group-text bg-light">$</span>
-                                    <input asp-for="AdditionalHandlingFeeUsd" class="form-control" type="number" step="0.25" min="0" placeholder="0.00" />
-                                    <span class="input-group-text bg-light">USD</span>
-                                </div>
-                                <div class="form-text small">Costo fijo por bulto/paquete en bodega de El Paso (opcional).</div>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label asp-for="EstimatedShippingMxn" class="form-label fw-semibold small">Envío Mercado Envíos (MXN)</label>
-                                <div class="input-group">
-                                    <span class="input-group-text bg-light">$</span>
-                                    <input asp-for="EstimatedShippingMxn" class="form-control" type="number" step="1" min="0" placeholder="110.00" />
-                                    <span class="input-group-text bg-light">MXN</span>
-                                </div>
-                                <div class="form-text small">Costo de guía promedio en productos ≥ $299 MXN (descuento MeLi).</div>
-                            </div>
-                        </div>
-
-                        <hr class="my-4 text-muted opacity-25" />
-
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-6">
-                                <label asp-for="TargetProfitMarginPercent" class="form-label fw-semibold small">Margen Neto Deseado (%)</label>
-                                <div class="input-group">
-                                    <input asp-for="TargetProfitMarginPercent" class="form-control" type="number" step="1" min="0" max="200" placeholder="25.0" />
-                                    <span class="input-group-text bg-light">%</span>
-                                </div>
-                                <div class="form-text small">Porcentaje de ganancia limpia sobre el costo puesto en Juárez.</div>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label asp-for="MinProfitAmountMxn" class="form-label fw-semibold small">Ganancia Mínima en Mano (MXN)</label>
-                                <div class="input-group">
-                                    <span class="input-group-text bg-light">$</span>
-                                    <input asp-for="MinProfitAmountMxn" class="form-control" type="number" step="10" min="0" placeholder="150.00" />
-                                    <span class="input-group-text bg-light">MXN</span>
-                                </div>
-                                <div class="form-text small">Piso mínimo de ganancia aunque el margen en % dé menos.</div>
-                            </div>
-                        </div>
-
-                        <div class="row g-3 mb-4">
-                            <div class="col-md-6">
-                                <label asp-for="DefaultMarketplaceFeePercent" class="form-label fw-semibold small">Comisión Mercado Libre (%)</label>
-                                <div class="input-group">
-                                    <input asp-for="DefaultMarketplaceFeePercent" class="form-control" type="number" step="0.5" min="5" max="30" placeholder="14.5" />
-                                    <span class="input-group-text bg-light">%</span>
-                                </div>
-                                <div class="form-text small">Comisión promedio en categoría Autopartes (12% - 16.5%).</div>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label asp-for="PlatformTaxWithholdingPercent" class="form-label fw-semibold small">Retención Impuestos MeLi (%)</label>
-                                <div class="input-group">
-                                    <input asp-for="PlatformTaxWithholdingPercent" class="form-control" type="number" step="0.5" min="0" max="36" placeholder="9.0" />
-                                    <span class="input-group-text bg-light">%</span>
-                                </div>
-                                <div class="form-text small">1% ISR + 8% IVA (9% con RFC activo; 0% para persona moral).</div>
-                            </div>
-                        </div>
-
-                        <div class="p-3 bg-light rounded-3 mb-4 border">
-                            <div class="form-check form-switch mb-1">
-                                <input asp-for="AutoPublishEnabled" class="form-check-input" type="checkbox" id="autoPublishSwitch" />
-                                <label class="form-check-label fw-bold" for="autoPublishSwitch">
-                                    Publicar automáticamente con IA
-                                </label>
-                            </div>
-                            <div class="small text-muted ms-4">
-                                Si está activado, cuando caces un producto en eBay/Amazon/AliExpress que cumpla todos los atributos y margen mínimo, la IA lo publicará automáticamente en Mercado Libre sin esperar confirmación manual.
-                            </div>
-                        </div>
-
-                        <div class="d-flex justify-content-end">
-                            <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm">
-                                Guardar costos
-                            </button>
-                        </div>
-                    </form>
+                <div>
+                    <label asp-for="ImportFeePercent" class="form-label">Impuestos o comercializadora</label>
+                    <div class="input-group">
+                        <input asp-for="ImportFeePercent" class="form-control" type="number" step="0.5" min="0" max="100" placeholder="15" />
+                        <span class="input-group-text">%</span>
+                    </div>
+                    <span asp-validation-for="ImportFeePercent" class="text-danger small"></span>
+                    <div class="form-text">Arancel, DTA e IVA, o la tarifa de tu comercializadora.</div>
+                </div>
+                <div>
+                    <label asp-for="AdditionalHandlingFeeUsd" class="form-label">Manejo en El Paso</label>
+                    <div class="input-group">
+                        <span class="input-group-text">US$</span>
+                        <input asp-for="AdditionalHandlingFeeUsd" class="form-control" type="number" step="0.25" min="0" placeholder="0.00" />
+                    </div>
+                    <div class="form-text">Bodega o flete del puente por pieza. Déjalo en 0 si no aplica.</div>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <!-- SIMULADOR EN TIEMPO REAL -->
-        <div class="col-lg-5">
-            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white">
-                <div class="card-header bg-white border-0 pt-4 px-4 pb-0">
-                    <h5 class="fw-bold mb-1">Prueba un precio</h5>
-                    <div class="text-muted small">Prueba el costo de una refacción comprada en EE.UU.</div>
+        <section class="panel" aria-labelledby="cb-vender">
+            <div class="panel-head">
+                <h2 id="cb-vender">@Html.Icon("store") Vender en Mercado Libre</h2>
+                <p>Lo que Mercado Libre descuenta de cada venta.</p>
+            </div>
+            <div class="panel-body cb-fields">
+                <div>
+                    <label asp-for="DefaultMarketplaceFeePercent" class="form-label">Comisión</label>
+                    <div class="input-group">
+                        <input asp-for="DefaultMarketplaceFeePercent" class="form-control" type="number" step="0.5" min="5" max="30" placeholder="14.5" />
+                        <span class="input-group-text">%</span>
+                    </div>
+                    <div class="form-text">En autopartes suele ir de 12% a 16.5%. Se usa la real cuando Mercado Libre la da.</div>
                 </div>
-                <div class="card-body p-4">
-                    <div class="mb-4">
-                        <label class="form-label fw-semibold small">Precio de compra en EE.UU. (USD):</label>
-                        <div class="input-group input-group-lg">
-                            <span class="input-group-text bg-light text-muted">$</span>
-                            <input type="number" id="simUsdPrice" class="form-control fw-bold fs-4" value="35.00" step="1" min="1" />
-                            <span class="input-group-text bg-light text-muted">USD</span>
-                        </div>
-                        <div class="d-flex gap-2 mt-2">
-                            <button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2" onclick="setSimPrice(15)">$15 USD</button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2" onclick="setSimPrice(35)">$35 USD</button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2" onclick="setSimPrice(75)">$75 USD</button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2" onclick="setSimPrice(150)">$150 USD</button>
-                        </div>
+                <div>
+                    <label asp-for="PlatformTaxWithholdingPercent" class="form-label">Retención de impuestos</label>
+                    <div class="input-group">
+                        <input asp-for="PlatformTaxWithholdingPercent" class="form-control" type="number" step="0.5" min="0" max="36" placeholder="9" />
+                        <span class="input-group-text">%</span>
                     </div>
-
-                    <div class="p-3 rounded-4 bg-light mb-4 border">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="text-muted small">Costo base compra (MXN):</span>
-                            <strong id="simProductCostMxn" class="text-dark">$@(sample?.ProductCostMxn.ToString("N2") ?? "700.00")</strong>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="text-muted small">Cruce aduanal / Comercializadora:</span>
-                            <strong id="simImportTaxesMxn" class="text-dark">+$@(sample?.ImportTaxesMxn.ToString("N2") ?? "105.00")</strong>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center py-2 border-top border-bottom border-secondary-subtle my-2">
-                            <span class="fw-bold small text-primary">Costo puesto en Juárez (Landed):</span>
-                            <strong id="simLandedCostMxn" class="fw-bold text-primary fs-6">$@(sample?.LandedCostJuarezMxn.ToString("N2") ?? "805.00")</strong>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="text-muted small">Envío Mercado Envíos:</span>
-                            <strong id="simShippingMxn" class="text-muted">+$@(sample?.EstimatedShippingMxn.ToString("N2") ?? "110.00")</strong>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="text-muted small">Comisión Mercado Libre (<span id="simMeliFeePct">14.5</span>%):</span>
-                            <strong id="simMarketplaceFeeMxn" class="text-danger">-$@(sample?.MarketplaceFeeMxn.ToString("N2") ?? "217.50")</strong>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="text-muted small">Retención SAT (<span id="simTaxPct">9.0</span>%):</span>
-                            <strong id="simTaxMxn" class="text-danger">-$@(sample?.TaxWithholdingMxn.ToString("N2") ?? "135.00")</strong>
-                        </div>
+                    <div class="form-text">9% con RFC registrado (1% ISR + 8% IVA); 0% si eres persona moral.</div>
+                </div>
+                <div>
+                    <label asp-for="EstimatedShippingMxn" class="form-label">Envío que pagas</label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input asp-for="EstimatedShippingMxn" class="form-control" type="number" step="1" min="0" placeholder="110" />
+                        <span class="input-group-text">MXN</span>
                     </div>
+                    <div class="form-text">Promedio de la guía en ventas de $299 o más (envío gratis para el comprador).</div>
+                </div>
+            </div>
+        </section>
 
-                    <div class="card border-0 bg-primary text-white rounded-4 p-4 shadow mb-3">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div>
-                                <div class="text-white-50 text-uppercase small fw-bold">Precio de Venta Sugerido en MeLi</div>
-                                <div id="simSuggestedPrice" class="display-6 fw-bold text-white">$@(sample?.SuggestedListingPriceMxn.ToString("N0") ?? "1,500") MXN</div>
-                            </div>
-                            <span class="badge bg-white text-primary fw-bold px-2 py-1 mt-1">Margen OK</span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center pt-3 border-top border-white-50">
-                            <span class="text-white-50 small">Ganancia neta limpia:</span>
-                            <strong id="simNetProfit" class="fs-5 text-white">+$@(sample?.EffectiveNetProfitMxn.ToString("N2") ?? "300.00") MXN</strong>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center mt-1">
-                            <span class="text-white-50 small">Margen neto real:</span>
-                            <strong id="simNetMargin" class="text-white">@(sample?.EffectiveNetMarginPercent.ToString("N1") ?? "20.0")%</strong>
-                        </div>
+        <section class="panel" aria-labelledby="cb-ganar">
+            <div class="panel-head">
+                <h2 id="cb-ganar">@Html.Icon("badge-dollar-sign") Lo que quieres ganar</h2>
+                <p>El precio sugerido cumple las dos reglas: el porcentaje y el mínimo en pesos.</p>
+            </div>
+            <div class="panel-body cb-fields">
+                <div>
+                    <label asp-for="TargetProfitMarginPercent" class="form-label">Ganancia sobre el costo</label>
+                    <div class="input-group">
+                        <input asp-for="TargetProfitMarginPercent" class="form-control" type="number" step="1" min="0" max="200" placeholder="25" />
+                        <span class="input-group-text">%</span>
                     </div>
-
-                    <div class="text-center text-muted small">
-                        La fórmula garantiza que las comisiones de MeLi se deduzcan sobre el precio final sin comerse tu margen neto.
+                    <div class="form-text">Ganancia limpia sobre lo que te costó en Juárez.</div>
+                </div>
+                <div>
+                    <label asp-for="MinProfitAmountMxn" class="form-label">Ganancia mínima por pieza</label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input asp-for="MinProfitAmountMxn" class="form-control" type="number" step="10" min="0" placeholder="150" />
+                        <span class="input-group-text">MXN</span>
+                    </div>
+                    <div class="form-text">Aunque el porcentaje dé menos, nunca gana menos que esto.</div>
+                </div>
+                <div class="cb-switch">
+                    <div class="form-check form-switch">
+                        <input asp-for="AutoPublishEnabled" class="form-check-input" type="checkbox" role="switch" id="autoPublishSwitch" />
+                        <label class="form-check-label" for="autoPublishSwitch">
+                            <strong>Publicar solo al importar con IA</strong>
+                            <span class="d-block text-muted small">Si el producto queda completo y deja tu ganancia mínima, se publica sin que lo revises.</span>
+                        </label>
                     </div>
                 </div>
             </div>
+        </section>
+
+        <div class="cb-save">
+            <button type="submit" class="btn btn-primary">@Html.Icon("check") Guardar costos</button>
         </div>
-    </div>
+    </form>
+
+    <aside class="cb-sim" aria-labelledby="cb-prueba">
+        <div class="panel cb-ticket">
+            <div class="panel-head">
+                <h2 id="cb-prueba">@Html.Icon("calculator") Prueba un precio</h2>
+                <p>Escribe lo que cuesta una pieza en EE.UU. y ve el precio al que conviene venderla.</p>
+            </div>
+            <div class="panel-body">
+                <label for="simUsdPrice" class="form-label">Precio en EE.UU.</label>
+                <div class="input-group cb-sim-input">
+                    <span class="input-group-text">US$</span>
+                    <input type="number" id="simUsdPrice" class="form-control" value="35.00" step="1" min="1" inputmode="decimal" />
+                </div>
+                <div class="cb-presets" role="group" aria-label="Precios de ejemplo">
+                    @foreach (var p in new[] { 15, 35, 75, 150 })
+                    {
+                        <button type="button" class="pub-chip" data-usd="@p">US$ @p</button>
+                    }
+                </div>
+
+                <dl class="cb-lines">
+                    <div><dt>Pieza en pesos</dt><dd id="simProductCostMxn">@M(sample?.ProductCostMxn, "$700.00")</dd></div>
+                    <div><dt>Impuestos o comercializadora</dt><dd id="simImportTaxesMxn">+@M(sample?.ImportTaxesMxn, "$105.00")</dd></div>
+                    <div class="cb-subtotal"><dt>Te cuesta en Juárez</dt><dd id="simLandedCostMxn">@M(sample?.LandedCostJuarezMxn, "$805.00")</dd></div>
+                    <div><dt>Envío</dt><dd id="simShippingMxn">+@M(sample?.EstimatedShippingMxn, "$110.00")</dd></div>
+                    <div><dt>Comisión (<span id="simMeliFeePct">@(sample?.MarketplaceFeePercent.ToString("0.#", mx) ?? "14.5")</span>%)</dt><dd id="simMarketplaceFeeMxn">−@M(sample?.MarketplaceFeeMxn, "$217.50")</dd></div>
+                    <div><dt>Retención (<span id="simTaxPct">@(sample?.TaxWithholdingPercent.ToString("0.#", mx) ?? "9")</span>%)</dt><dd id="simTaxMxn">−@M(sample?.TaxWithholdingMxn, "$135.00")</dd></div>
+                </dl>
+
+                <div class="cb-result">
+                    <div class="cb-result-label">Véndelo en</div>
+                    <div class="cb-result-price" id="simSuggestedPrice">@(sample?.SuggestedListingPriceMxn.ToString("C0", mx) ?? "$1,500")</div>
+                    <div class="cb-result-profit">
+                        Ganas <strong id="simNetProfit">@(sample?.EffectiveNetProfitMxn.ToString("C0", mx) ?? "$300")</strong> por pieza
+                        · margen <span id="simNetMargin">@(sample?.EffectiveNetMarginPercent.ToString("0.#", mx) ?? "20")%</span>
+                    </div>
+                </div>
+                <p class="small text-muted mt-3 mb-0">Con los valores guardados. Guarda tus cambios para ver el cálculo nuevo.</p>
+            </div>
+        </div>
+    </aside>
 </div>
 
 @section Scripts {
     <script>
-        function setSimPrice(usd) {
-            document.getElementById('simUsdPrice').value = usd;
-            runSimulation();
-        }
+        (function () {
+            var input = document.getElementById('simUsdPrice');
+            var money = function (v, digits) { return v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: digits, maximumFractionDigits: digits }); };
+            var set = function (id, text) { var el = document.getElementById(id); if (el) el.textContent = text; };
+            var timer;
 
-        document.getElementById('simUsdPrice').addEventListener('input', runSimulation);
-
-        async function runSimulation() {
-            var usd = parseFloat(document.getElementById('simUsdPrice').value);
-            if (isNaN(usd) || usd <= 0) return;
-
-            var formData = new FormData();
-            formData.append('sourcePriceUsd', usd);
-
-            try {
-                var response = await fetch('@Url.Action("Simulate", "CrossBorder")', {
-                    method: 'POST',
-                    body: formData
-                });
-                if (!response.ok) return;
-                var data = await response.json();
-
-                document.getElementById('simProductCostMxn').textContent = '$' + data.productCostMxn.toLocaleString('es-MX', { minimumFractionDigits: 2 });
-                document.getElementById('simImportTaxesMxn').textContent = '+$' + data.importTaxesMxn.toLocaleString('es-MX', { minimumFractionDigits: 2 });
-                document.getElementById('simLandedCostMxn').textContent = '$' + data.landedCostJuarezMxn.toLocaleString('es-MX', { minimumFractionDigits: 2 });
-                document.getElementById('simShippingMxn').textContent = '+$' + data.estimatedShippingMxn.toLocaleString('es-MX', { minimumFractionDigits: 2 });
-                document.getElementById('simMarketplaceFeeMxn').textContent = '-$' + data.marketplaceFeeMxn.toLocaleString('es-MX', { minimumFractionDigits: 2 });
-                document.getElementById('simTaxMxn').textContent = '-$' + data.taxWithholdingMxn.toLocaleString('es-MX', { minimumFractionDigits: 2 });
-                document.getElementById('simSuggestedPrice').textContent = '$' + data.suggestedListingPriceMxn.toLocaleString('es-MX', { maximumFractionDigits: 0 }) + ' MXN';
-                document.getElementById('simNetProfit').textContent = '+$' + data.effectiveNetProfitMxn.toLocaleString('es-MX', { minimumFractionDigits: 2 }) + ' MXN';
-                document.getElementById('simNetMargin').textContent = data.effectiveNetMarginPercent.toFixed(1) + '%';
-                document.getElementById('simMeliFeePct').textContent = data.marketplaceFeePercent.toFixed(1);
-                document.getElementById('simTaxPct').textContent = data.taxWithholdingPercent.toFixed(1);
-            } catch (e) {
-                console.error(e);
+            async function run() {
+                var usd = parseFloat(input.value);
+                if (isNaN(usd) || usd <= 0) return;
+                var body = new FormData();
+                body.append('sourcePriceUsd', usd);
+                try {
+                    var response = await fetch('@Url.Action("Simulate", "CrossBorder")', { method: 'POST', body: body });
+                    if (!response.ok) return;
+                    var d = await response.json();
+                    set('simProductCostMxn', money(d.productCostMxn, 2));
+                    set('simImportTaxesMxn', '+' + money(d.importTaxesMxn, 2));
+                    set('simLandedCostMxn', money(d.landedCostJuarezMxn, 2));
+                    set('simShippingMxn', '+' + money(d.estimatedShippingMxn, 2));
+                    set('simMarketplaceFeeMxn', '−' + money(d.marketplaceFeeMxn, 2));
+                    set('simTaxMxn', '−' + money(d.taxWithholdingMxn, 2));
+                    set('simSuggestedPrice', money(d.suggestedListingPriceMxn, 0));
+                    set('simNetProfit', money(d.effectiveNetProfitMxn, 0));
+                    set('simNetMargin', d.effectiveNetMarginPercent.toFixed(1) + '%');
+                    set('simMeliFeePct', d.marketplaceFeePercent.toFixed(1));
+                    set('simTaxPct', d.taxWithholdingPercent.toFixed(1));
+                } catch (e) { console.error(e); }
             }
-        }
+
+            input.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(run, 250); });
+            document.querySelectorAll('.cb-presets [data-usd]').forEach(function (b) {
+                b.addEventListener('click', function () { input.value = b.dataset.usd; run(); });
+            });
+        })();
     </script>
 }

@@ -8,8 +8,7 @@
 <div class="insights-page">
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
         <div>
-            <div class="insights-kicker">INTELIGENCIA DE MERCADO</div>
-            <h2 class="insights-title mb-1">Más vendidos en México</h2>
+            <h1 class="page-title">Más vendidos en México</h1>
             <p class="text-muted mb-0">Los 10 productos que más se venden en una categoría, y cuáles conviene traer de EE.UU.</p>
         </div>
         @if (Model.Ranking is not null)
@@ -98,7 +97,7 @@
     @if (Model.Ranking is null && string.IsNullOrWhiteSpace(Model.ErrorMessage) && Model.Accounts.Count > 0)
     {
         <div class="text-center text-muted py-5">
-            <div class="fs-2 mb-2">★</div>
+            <div class="mb-2 text-muted">@Html.Icon("trending-up", "icon-lg")</div>
             <div class="fw-bold text-dark mb-1">Escribe qué producto quieres analizar</div>
             <div class="small">Por ejemplo “bomba de agua” o “faros led”. Verás el Top 10 de su categoría y qué conviene traer de EE.UU.</div>
         </div>
@@ -242,7 +241,7 @@
                                     </div>
                                     @if (!string.IsNullOrWhiteSpace(item.Permalink))
                                     {
-                                        <a href="@item.Permalink" target="_blank" rel="noopener" class="best-seller-link">Ver ↗</a>
+                                        <a href="@item.Permalink" target="_blank" rel="noopener" class="best-seller-link">Ver @Html.Icon("external-link", "icon-xs")</a>
                                     }
                                 </div>
                             </div>
@@ -274,7 +273,6 @@
             <div class="card border-0 shadow-sm history-card">
                 <div class="card-header bg-white border-0 px-3 px-lg-4 py-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
                     <div>
-                        <div class="insights-kicker">TENDENCIAS</div>
                         <h3 class="h5 fw-bold mb-1">Historial del ranking</h3>
                         <div class="small text-muted">
                             @history.SnapshotCount captura(s) · Última @history.LatestCapturedAt?.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
@@ -384,7 +382,7 @@
                     var series = @Html.Raw(chartJson);
                     var canvas = document.getElementById('ranking-history-chart');
                     if (!canvas || !series.length) return;
-                    var colors = ['var(--denim)', '#20a36a', '#f59e0b', '#8b5cf6', '#ef5b67'];
+                    var colors = ['#2a5a85', '#2e7350', '#f0a202', '#3b4a5e', '#b3362b']; // tokens denim, ok, signal, ink-2, bad (canvas no entiende var())
                     var context = canvas.getContext('2d');
                     var ratio = window.devicePixelRatio || 1;
                     var width = canvas.clientWidth || 900;
@@ -398,7 +396,7 @@
                     var dates = series[0].points.map(function (point) { return point.date; });
 
                     context.font = '10px system-ui';
-                    context.strokeStyle = '#e8ecf2';
+                    context.strokeStyle = '#dcdfd8'; // --line
                     context.fillStyle = 'var(--muted)';
                     context.lineWidth = 1;
                     [1, 3, 5, 7, 10].forEach(function (position) {
@@ -446,59 +444,59 @@
 <style>
     .insights-kicker { color: var(--denim); font-size: .67rem; font-weight: 850; letter-spacing: 0; margin-bottom: .35rem; }
     .insights-title { color: var(--ink); font-size: 1.65rem; font-weight: 850; letter-spacing: -.035em; }
-    .insights-updated { background: var(--ok-soft); border-radius: 999px; color: #168759; font-size: .7rem; font-weight: 750; padding: .45rem .75rem; }
-    .insights-updated span { background: #1bae6f; border-radius: 50%; display: inline-block; height: 7px; margin-right: 5px; width: 7px; }
+    .insights-updated { background: var(--ok-soft); border-radius: 999px; color: var(--ok); font-size: .7rem; font-weight: 750; padding: .45rem .75rem; }
+    .insights-updated span { background: var(--ok); border-radius: 50%; display: inline-block; height: 7px; margin-right: 5px; width: 7px; }
     .insights-filter-card, .insights-ranking-card { border-radius: 16px; overflow: hidden; }
     .insights-label { color: var(--ink-2); font-size: .73rem; font-weight: 750; }
-    .saved-category { background: var(--paper-2); border: 1px solid #e2e7ee; border-radius: 999px; color: #59677c; display: inline-flex; font-size: .68rem; font-weight: 750; gap: 5px; margin: 3px; padding: .35rem .58rem; text-decoration: none; }
-    .saved-category small { align-items: center; background: #fff; border-radius: 50%; display: inline-flex; font-size: .58rem; height: 17px; justify-content: center; width: 17px; }
-    .saved-category.active, .saved-category:hover { background: var(--denim-soft); border-color: #8ab2ff; color: var(--denim); }
+    .saved-category { background: var(--paper-2); border: 1px solid var(--line); border-radius: 999px; color: var(--muted); display: inline-flex; font-size: .68rem; font-weight: 750; gap: 5px; margin: 3px; padding: .35rem .58rem; text-decoration: none; }
+    .saved-category small { align-items: center; background: var(--surface); border-radius: 50%; display: inline-flex; font-size: .58rem; height: 17px; justify-content: center; width: 17px; }
+    .saved-category.active, .saved-category:hover { background: var(--denim-soft); border-color: var(--denim); color: var(--denim); }
     .ranking-count { background: var(--paper-2); border-radius: 999px; color: var(--muted); font-size: .67rem; font-weight: 750; padding: .4rem .65rem; }
     .opportunity-summary { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .opportunity-summary-card { background: #fff; border: 1px solid #e9edf3; border-radius: 14px; box-shadow: 0 5px 18px rgba(19, 36, 67, .05); min-width: 0; padding: 16px; }
-    .opportunity-summary-card.featured { background: linear-gradient(135deg, var(--denim), #347cfa); border-color: transparent; color: #fff; }
-    .opportunity-summary-card span { color: #8a96a8; display: block; font-size: .62rem; font-weight: 800; letter-spacing: 0; margin-bottom: 7px; text-transform: none; }
+    .opportunity-summary-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: none; min-width: 0; padding: 16px; }
+    .opportunity-summary-card.featured { background: var(--ink); border-color: transparent; color: var(--surface); }
+    .opportunity-summary-card span { color: var(--muted); display: block; font-size: .62rem; font-weight: 800; letter-spacing: 0; margin-bottom: 7px; text-transform: none; }
     .opportunity-summary-card strong { color: var(--ink); display: block; font-size: 1.2rem; font-weight: 850; line-height: 1.1; }
     .opportunity-summary-card strong small { font-size: .62rem; opacity: .7; }
     .opportunity-summary-card p { color: var(--muted); font-size: .63rem; line-height: 1.35; margin: 6px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .opportunity-summary-card.featured span, .opportunity-summary-card.featured p { color: rgba(255,255,255,.75); }
-    .opportunity-summary-card.featured strong { color: #fff; }
+    .opportunity-summary-card.featured strong { color: var(--surface); }
     .best-seller-grid { display: grid; gap: 1px; grid-template-columns: repeat(2, minmax(0, 1fr)); background: var(--paper-2); border-top: 1px solid var(--paper-2); }
-    .best-seller-card { background: #fff; display: grid; gap: 14px; grid-template-columns: 34px 94px minmax(0, 1fr); min-height: 235px; padding: 17px; position: relative; }
-    .best-seller-position { align-items: center; align-self: start; background: var(--paper-2); border-radius: 9px; color: #6d798c; display: inline-flex; font-size: .72rem; font-weight: 900; height: 32px; justify-content: center; width: 32px; }
-    .best-seller-position.position-1 { background: #fff2bf; color: #a66b00; } .best-seller-position.position-2 { background: var(--paper-2); color: var(--muted); } .best-seller-position.position-3 { background: #f8e6d8; color: #a65f31; }
-    .best-seller-image { align-items: center; background: #f7f8fa; border: 1px solid var(--paper-2); border-radius: 11px; display: flex; height: 100px; justify-content: center; overflow: hidden; width: 94px; }
+    .best-seller-card { background: var(--surface); display: grid; gap: 14px; grid-template-columns: 34px 94px minmax(0, 1fr); min-height: 235px; padding: 17px; position: relative; }
+    .best-seller-position { align-items: center; align-self: start; background: var(--paper-2); border-radius: 9px; color: var(--muted); display: inline-flex; font-size: .72rem; font-weight: 900; height: 32px; justify-content: center; width: 32px; }
+    .best-seller-position.position-1 { background: var(--signal-soft); color: var(--warn); } .best-seller-position.position-2 { background: var(--paper-2); color: var(--muted); } .best-seller-position.position-3 { background: var(--paper-2); color: var(--ink-2); }
+    .best-seller-image { align-items: center; background: var(--paper); border: 1px solid var(--paper-2); border-radius: 11px; display: flex; height: 100px; justify-content: center; overflow: hidden; width: 94px; }
     .best-seller-image img { height: 100%; object-fit: contain; width: 100%; } .best-seller-image span { color: var(--muted-2); font-size: 1.4rem; }
     .best-seller-content { display: flex; flex-direction: column; min-width: 0; }
     .best-seller-type { color: var(--denim); font-size: .57rem; font-weight: 850; letter-spacing: 0; text-transform: none; }
     .best-seller-content h4 { color: var(--ink-2); display: -webkit-box; font-size: .78rem; font-weight: 780; line-height: 1.4; margin: 5px 0 2px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
     .best-seller-id { color: var(--muted-2); font-family: ui-monospace, monospace; font-size: .58rem; }
-    .catalog-badge { background: var(--ok-soft); border-radius: 999px; color: #168759; display: inline-block; font-family: inherit; font-weight: 750; margin-left: 5px; padding: 2px 6px; }
+    .catalog-badge { background: var(--ok-soft); border-radius: 999px; color: var(--ok); display: inline-block; font-family: inherit; font-weight: 750; margin-left: 5px; padding: 2px 6px; }
     .opportunity-level { border-radius: 999px; font-size: .56rem; font-weight: 850; padding: 3px 7px; text-transform: none; }
-    .opportunity-level.level-alta { background: var(--ok-soft); color: var(--ok); } .opportunity-level.level-buena { background: var(--denim-soft); color: var(--denim); } .opportunity-level.level-media { background: var(--warn-soft); color: #9a6b00; } .opportunity-level.level-baja { background: var(--paper-2); color: var(--muted); }
-    .opportunity-level.level-limitada { background: var(--paper-2); color: #7b8493; }
+    .opportunity-level.level-alta { background: var(--ok-soft); color: var(--ok); } .opportunity-level.level-buena { background: var(--denim-soft); color: var(--denim); } .opportunity-level.level-media { background: var(--warn-soft); color: var(--warn); } .opportunity-level.level-baja { background: var(--paper-2); color: var(--muted); }
+    .opportunity-level.level-limitada { background: var(--paper-2); color: var(--muted); }
     .opportunity-score-row { align-items: center; display: grid; gap: 8px; grid-template-columns: 44px 1fr; margin-top: 9px; }
     .opportunity-score-row > strong { color: var(--ink); font-size: .86rem; font-weight: 900; } .opportunity-score-row small { color: var(--muted-2); font-size: .52rem; }
-    .opportunity-score-track { background: var(--paper-2); border-radius: 999px; height: 6px; overflow: hidden; } .opportunity-score-track span { background: linear-gradient(90deg, var(--denim), #27b27b); border-radius: inherit; display: block; height: 100%; }
+    .opportunity-score-track { background: var(--paper-2); border-radius: 999px; height: 6px; overflow: hidden; } .opportunity-score-track span { background: var(--ok); border-radius: inherit; display: block; height: 100%; }
     .opportunity-components { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; } .opportunity-components span { background: var(--paper-2); border-radius: 6px; color: var(--muted); font-size: .55rem; padding: 3px 5px; } .opportunity-components strong { color: var(--ink-2); }
     .opportunity-recommendation { color: var(--muted); font-size: .61rem; line-height: 1.35; margin: 7px 0; }
     .opportunity-publish-button { border-radius: 8px; font-size: .66rem; font-weight: 800; padding: .42rem .65rem; }
-    .unavailable-product-note { background: var(--paper-2); border-radius: 8px; color: #7b8493; font-size: .62rem; font-weight: 750; padding: .48rem .65rem; text-align: center; }
+    .unavailable-product-note { background: var(--paper-2); border-radius: 8px; color: var(--muted); font-size: .62rem; font-weight: 750; padding: .48rem .65rem; text-align: center; }
     .best-seller-price strong, .best-seller-price small { display: block; } .best-seller-price strong { color: var(--ink); font-size: .86rem; } .best-seller-price small, .best-seller-price span { color: var(--muted-2); font-size: .6rem; }
     .best-seller-link { color: var(--denim); font-size: .67rem; font-weight: 750; text-decoration: none; }
-    .insights-note { color: #7b8798; font-size: .68rem; line-height: 1.5; text-align: center; }
+    .insights-note { color: var(--muted); font-size: .68rem; line-height: 1.5; text-align: center; }
     .history-card { border-radius: 16px; overflow: hidden; }
     .history-periods { background: var(--paper-2); border-radius: 10px; display: flex; gap: 3px; padding: 3px; }
-    .history-periods a { border-radius: 8px; color: #6d798c; font-size: .66rem; font-weight: 800; padding: .4rem .62rem; text-decoration: none; }
-    .history-periods a.active { background: #fff; box-shadow: 0 2px 7px rgba(24, 42, 75, .1); color: var(--denim); }
-    .history-first-capture { background: var(--denim-soft); border-radius: 10px; color: #3465ad; font-size: .72rem; padding: .8rem 1rem; }
+    .history-periods a { border-radius: 8px; color: var(--muted); font-size: .66rem; font-weight: 800; padding: .4rem .62rem; text-decoration: none; }
+    .history-periods a.active { background: var(--surface); box-shadow: none; color: var(--denim); }
+    .history-first-capture { background: var(--denim-soft); border-radius: 10px; color: var(--denim); font-size: .72rem; padding: .8rem 1rem; }
     .history-chart-wrap { border-bottom: 1px solid var(--paper-2); }
     #ranking-history-chart { display: block; height: 230px; width: 100%; }
     .history-chart-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 8px; }
     .history-chart-legend span { color: var(--muted); font-size: .58rem; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .history-chart-legend i { border-radius: 50%; display: inline-block; height: 7px; margin-right: 5px; width: 7px; }
-    .history-trend-row { align-items: center; background: #fff; border-top: 1px solid var(--paper-2); display: grid; gap: 12px; grid-template-columns: 46px minmax(0, 1fr) 145px 100px 54px; padding: 12px 18px; }
-    .history-trend-row.exited { background: #fafbfc; opacity: .72; }
+    .history-trend-row { align-items: center; background: var(--surface); border-top: 1px solid var(--paper-2); display: grid; gap: 12px; grid-template-columns: 46px minmax(0, 1fr) 145px 100px 54px; padding: 12px 18px; }
+    .history-trend-row.exited { background: var(--paper); opacity: .72; }
     .history-trend-image { align-items: center; background: var(--paper-2); border-radius: 8px; display: flex; height: 42px; justify-content: center; overflow: hidden; width: 42px; }
     .history-trend-image img { height: 100%; object-fit: contain; width: 100%; } .history-trend-image span { color: var(--muted-2); }
     .history-trend-main { min-width: 0; } .history-trend-main strong { color: var(--ink-2); display: block; font-size: .7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .history-trend-main small { color: var(--muted-2); font-size: .56rem; }

@@ -11,11 +11,11 @@
 
     private static (string Label, string Css) TrendBadge(string trend) => trend switch
     {
-        PurchaseTrend.Rising => ("▲ Subiendo", "radar-trend-up"),
-        PurchaseTrend.Falling => ("▼ Bajando", "radar-trend-down"),
-        PurchaseTrend.New => ("★ Nuevo en el Top", "radar-trend-new"),
-        PurchaseTrend.Exited => ("Salió del Top", "radar-trend-down"),
-        _ => ("● Estable", "radar-trend-flat")
+        PurchaseTrend.Rising => ("Subiendo", "radar-trend-up"),
+        PurchaseTrend.Falling => ("Bajando", "radar-trend-down"),
+        PurchaseTrend.New => ("Nuevo en el top", "radar-trend-new"),
+        PurchaseTrend.Exited => ("Salió del top", "radar-trend-down"),
+        _ => ("Estable", "radar-trend-flat")
     };
 
     private static string DemandCss(int score) => score switch
@@ -42,14 +42,14 @@
 
 <style>
     .radar-eyebrow { font-size: .75rem; font-weight: 700; letter-spacing: 0; color: var(--denim); }
-    .radar-kpi { background: #fff; border-radius: 14px; padding: 1rem 1.25rem; box-shadow: 0 1px 3px rgba(15,23,42,.08); height: 100%; }
+    .radar-kpi { background: var(--surface); border-radius: 14px; padding: 1rem 1.25rem; box-shadow: none; height: 100%; }
     .radar-kpi-label { font-size: .78rem; color: var(--muted); font-weight: 600; }
     .radar-kpi-value { font-size: 1.45rem; font-weight: 800; color: var(--ink); }
     .radar-kpi-hint { font-size: .75rem; color: var(--muted-2); }
     .radar-tabs .nav-link { font-weight: 600; color: var(--ink-2); border-radius: 10px; }
-    .radar-tabs .nav-link.active { background: var(--ink); color: #fff; }
+    .radar-tabs .nav-link.active { background: var(--ink); color: var(--surface); }
     .radar-tabs .badge { font-size: .7rem; }
-    .radar-card { background: #fff; border-radius: 16px; box-shadow: 0 1px 3px rgba(15,23,42,.08); padding: 1.1rem; height: 100%; display: flex; flex-direction: column; gap: .75rem; }
+    .radar-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); padding: 1.1rem; height: 100%; display: flex; flex-direction: column; gap: .75rem; }
     .radar-img { width: 72px; height: 72px; object-fit: contain; border-radius: 10px; background: var(--paper-2); flex-shrink: 0; }
     .radar-title { font-weight: 700; font-size: .95rem; line-height: 1.25; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .radar-meta { font-size: .78rem; color: var(--muted); }
@@ -77,26 +77,25 @@
 </style>
 
 <div class="container-fluid px-0">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
-        <div>
-            <div class="radar-eyebrow">COMPRAR EN EE.UU.</div>
+    <header class="page-head">
+        <div class="page-head-text">
             <h1 class="page-title">Qué comprar</h1>
-            <p class="text-muted mb-0">
+            <p>
                 Productos con demanda en Mercado Libre, oferta en EE.UU. y una ganancia de al menos @Mxn(Model.MinProfitAmountMxn) por pieza.
             </p>
             @if (Model.LastEvaluatedAt.HasValue)
             {
-                <div class="small text-muted mt-1">Actualizado el @Model.LastEvaluatedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div>
+                <span class="page-head-meta">Actualizado el @Model.LastEvaluatedAt.Value.AddHours(-7).ToString("dd/MM/yyyy HH:mm")</span>
             }
         </div>
-        <div class="d-flex flex-wrap gap-2">
-            <a asp-action="ExportShoppingList" class="btn btn-outline-secondary">⬇ Lista de compras (Excel)</a>
+        <div class="page-head-actions">
+            <a asp-action="ExportShoppingList" class="btn btn-outline-secondary">@Html.Icon("download") Lista de compras</a>
             <form asp-action="Refresh" method="post" class="d-inline">
                 @Html.AntiForgeryToken()
-                <button type="submit" class="btn btn-primary">↻ Actualizar radar</button>
+                <button type="submit" class="btn btn-primary">@Html.Icon("refresh-cw") Buscar de nuevo</button>
             </form>
         </div>
-    </div>
+    </header>
 
     @if (TempData["Success"] is string success)
     {
@@ -106,7 +105,7 @@
             {
                 <a asp-controller="Products" asp-action="PublishToMercadoLibre"
                    asp-route-id="@publishProductId" asp-route-marketplaceAccountId="@publishAccountId"
-                   class="alert-link ms-1">Preparar publicación →</a>
+                   class="alert-link ms-1">Preparar publicación</a>
             }
         </div>
     }
@@ -127,44 +126,19 @@
         </div>
     }
 
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-xl-3">
-            <div class="radar-kpi">
-                <div class="radar-kpi-label">Listos para comprar</div>
-                <div class="radar-kpi-value">@Model.ToBuy.Count</div>
-                <div class="radar-kpi-hint">@Model.ShoppingListUnits piezas sugeridas</div>
-            </div>
-        </div>
-        <div class="col-6 col-xl-3">
-            <div class="radar-kpi">
-                <div class="radar-kpi-label">Inversión estimada</div>
-                <div class="radar-kpi-value">@Usd(Model.ShoppingListTotalUsd)</div>
-                <div class="radar-kpi-hint">≈ @Mxn(Model.ShoppingListTotalUsd * Model.UsdToMxnRate) antes de cruce</div>
-            </div>
-        </div>
-        <div class="col-6 col-xl-3">
-            <div class="radar-kpi">
-                <div class="radar-kpi-label">Ganancia esperada</div>
-                <div class="radar-kpi-value radar-profit">@Mxn(Model.ShoppingListExpectedProfitMxn)</div>
-                <div class="radar-kpi-hint">si vendes todo al precio del mercado</div>
-            </div>
-        </div>
-        <div class="col-6 col-xl-3">
-            <div class="radar-kpi">
-                <div class="radar-kpi-label">Volver a comprar</div>
-                <div class="radar-kpi-value">@Model.Restock.Count</div>
-                <div class="radar-kpi-hint">SKU propios que se están agotando</div>
-            </div>
-        </div>
-    </div>
+    <dl class="stats">
+        <div class="stat"><dt>Para comprar</dt><dd>@Model.ToBuy.Count <small>@Model.ShoppingListUnits pzs</small></dd></div>
+        <div class="stat"><dt>Inversión</dt><dd>@Usd(Model.ShoppingListTotalUsd) <small>≈ @Mxn(Model.ShoppingListTotalUsd * Model.UsdToMxnRate)</small></dd></div>
+        <div class="stat is-ok"><dt>Ganancia si vendes todo</dt><dd>@Mxn(Model.ShoppingListExpectedProfitMxn)</dd></div>
+        <div class="stat @(Model.Restock.Count > 0 ? "is-warn" : "")"><dt>Por resurtir</dt><dd>@Model.Restock.Count</dd></div>
+    </dl>
 
-    <ul class="nav nav-pills radar-tabs gap-2 mb-3 flex-wrap">
-        <li class="nav-item"><a class="nav-link @(tab == "buy" ? "active" : "")" asp-action="Index" asp-route-tab="buy">Comprar <span class="badge bg-light text-dark">@Model.ToBuy.Count</span></a></li>
-        <li class="nav-item"><a class="nav-link @(tab == "review" ? "active" : "")" asp-action="Index" asp-route-tab="review">Por revisar <span class="badge bg-light text-dark">@Model.ToReview.Count</span></a></li>
-        <li class="nav-item"><a class="nav-link @(tab == "restock" ? "active" : "")" asp-action="Index" asp-route-tab="restock">Volver a comprar <span class="badge bg-light text-dark">@Model.Restock.Count</span></a></li>
-        <li class="nav-item"><a class="nav-link @(tab == "transit" ? "active" : "")" asp-action="Index" asp-route-tab="transit">En camino <span class="badge bg-light text-dark">@Model.InTransit.Count</span></a></li>
-        <li class="nav-item"><a class="nav-link @(tab == "discarded" ? "active" : "")" asp-action="Index" asp-route-tab="discarded">Descartados</a></li>
-    </ul>
+    <nav class="pl-chips mb-3" aria-label="Secciones">
+        @foreach (var t in new (string Key, string Label, int? Count)[] { ("buy", "Comprar", Model.ToBuy.Count), ("review", "Por revisar", Model.ToReview.Count), ("restock", "Volver a comprar", Model.Restock.Count), ("transit", "En camino", Model.InTransit.Count), ("discarded", "Descartados", null) })
+        {
+            <a class="pub-chip @(tab == t.Key ? "active" : "")" asp-action="Index" asp-route-tab="@t.Key" aria-current="@(tab == t.Key ? "page" : null)">@t.Label @if (t.Count.HasValue) { <span>@t.Count</span> }</a>
+        }
+    </nav>
 
     @* ───────────── COMPRAR ───────────── *@
     @if (tab == "buy")
@@ -172,9 +146,9 @@
         @if (Model.ToBuy.Count == 0)
         {
             <div class="radar-card radar-empty">
-                <div class="radar-empty-icon">◎</div>
+                <div class="radar-empty-icon">@Html.Icon("shopping-cart")</div>
                 <div class="fw-bold">Todavía no hay productos validados</div>
-                <div class="small">Pulsa <strong>Actualizar radar</strong>. Si ya lo hiciste, revisa la pestaña <em>Por revisar</em>: ahí están los que tienen demanda pero sin oferta clara en eBay o sin margen suficiente.</div>
+                <div class="small">Pulsa <strong>Buscar de nuevo</strong>. Si ya lo hiciste, revisa la pestaña <em>Por revisar</em>: ahí están los que tienen demanda pero sin oferta clara en eBay o sin margen suficiente.</div>
             </div>
         }
         else
@@ -234,7 +208,7 @@
                             @if (c.PreparedAt.HasValue && c.ProductId.HasValue)
                             {
                                 <div class="radar-prepared">
-                                    ✓ Ya está preparado (título, atributos y precio).
+                                    @Html.Icon("circle-check", "icon-sm") Ya está preparado (título, atributos y precio).
                                     <a asp-controller="Products" asp-action="Details" asp-route-id="@c.ProductId">Revisar</a>
                                     · Se publica cuando lo marques recibido.
                                 </div>
@@ -251,12 +225,12 @@
                                         <label class="form-label small mb-1" for="cost-@c.Id">Costo real US$</label>
                                         <input id="cost-@c.Id" type="text" inputmode="decimal" name="unitCostUsd" value="@unitUsd.ToString("0.00", CultureInfo.InvariantCulture)" class="form-control form-control-sm" />
                                     </div>
-                                    <button type="submit" class="btn btn-sm btn-success flex-grow-1">✓ Ya lo compré</button>
+                                    <button type="submit" class="btn btn-sm btn-primary flex-grow-1">@Html.Icon("check") Ya lo compré</button>
                                 </form>
                                 <div class="d-flex justify-content-between mt-2">
                                     @if (!string.IsNullOrWhiteSpace(c.MarketPermalink))
                                     {
-                                        <a href="@c.MarketPermalink" target="_blank" rel="noopener noreferrer" class="small text-decoration-none">Ver en Mercado Libre ↗</a>
+                                        <a href="@c.MarketPermalink" target="_blank" rel="noopener noreferrer" class="small text-decoration-none">Ver en Mercado Libre @Html.Icon("external-link", "icon-xs")</a>
                                     }
                                     else
                                     {
@@ -282,7 +256,7 @@
     {
         @if (Model.ToReview.Count == 0)
         {
-            <div class="radar-card radar-empty"><div class="radar-empty-icon">✓</div><div class="fw-bold">Nada pendiente de revisar</div></div>
+            <div class="radar-card radar-empty"><div class="radar-empty-icon">@Html.Icon("circle-check")</div><div class="fw-bold">Nada pendiente de revisar</div></div>
         }
         else
         {
@@ -320,7 +294,7 @@
                                     </div>
                                     @if (!string.IsNullOrWhiteSpace(c.SourceUrl))
                                     {
-                                        <a href="@c.SourceUrl" target="_blank" rel="noopener noreferrer" class="small">Ver oferta usada ↗</a>
+                                        <a href="@c.SourceUrl" target="_blank" rel="noopener noreferrer" class="small">Ver oferta usada @Html.Icon("external-link", "icon-xs")</a>
                                     }
                                 </div>
                             }
@@ -358,7 +332,7 @@
                                 <div class="d-flex justify-content-between mt-2">
                                     @if (!string.IsNullOrWhiteSpace(c.MarketPermalink))
                                     {
-                                        <a href="@c.MarketPermalink" target="_blank" rel="noopener noreferrer" class="small text-decoration-none">Ver en Mercado Libre ↗</a>
+                                        <a href="@c.MarketPermalink" target="_blank" rel="noopener noreferrer" class="small text-decoration-none">Ver en Mercado Libre @Html.Icon("external-link", "icon-xs")</a>
                                     }
                                     else
                                     {
@@ -412,7 +386,7 @@
                                 <td>
                                     @if (!string.IsNullOrWhiteSpace(r.SourceUrl) && Uri.TryCreate(r.SourceUrl, UriKind.Absolute, out _))
                                     {
-                                        <a href="@r.SourceUrl" target="_blank" rel="noopener noreferrer" class="text-decoration-none">@(r.SourceMarketplace ?? "Fuente") ↗</a>
+                                        <a href="@r.SourceUrl" target="_blank" rel="noopener noreferrer" class="text-decoration-none">@(r.SourceMarketplace ?? "Fuente") @Html.Icon("external-link", "icon-xs")</a>
                                         @if (r.SourcePrice.HasValue)
                                         {
                                             <div class="small text-muted">@(string.Equals(r.SourceCurrency, "MXN", StringComparison.OrdinalIgnoreCase) ? Mxn(r.SourcePrice) : Usd(r.SourcePrice))</div>
@@ -456,7 +430,7 @@
                                     <div class="fw-semibold">@c.MarketName</div>
                                     @if (!string.IsNullOrWhiteSpace(c.SourceUrl))
                                     {
-                                        <a href="@c.SourceUrl" target="_blank" rel="noopener noreferrer" class="small text-decoration-none">@c.SourceMarketplace ↗</a>
+                                        <a href="@c.SourceUrl" target="_blank" rel="noopener noreferrer" class="small text-decoration-none">@c.SourceMarketplace @Html.Icon("external-link", "icon-xs")</a>
                                     }
                                 </td>
                                 <td class="text-center fw-semibold">@c.PurchasedQuantity</td>
@@ -468,7 +442,7 @@
                                         <input type="hidden" name="id" value="@c.Id" />
                                         <input type="number" name="quantity" value="@c.PurchasedQuantity" min="1" max="500" class="form-control form-control-sm" style="width: 80px;" aria-label="Piezas recibidas" />
                                         <input type="date" name="expiresOn" class="form-control form-control-sm" style="width: 150px;" title="Caducidad (solo si el producto caduca)" aria-label="Caducidad, opcional" />
-                                        <button type="submit" class="btn btn-sm btn-success text-nowrap">Recibido</button>
+                                        <button type="submit" class="btn btn-sm btn-primary text-nowrap">@Html.Icon("check") Recibido</button>
                                     </form>
                                 </td>
                                 <td class="text-end">

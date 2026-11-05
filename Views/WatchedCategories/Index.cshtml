@@ -24,7 +24,7 @@
     {
         <form asp-action="ExploreNow" method="post">
             @Html.AntiForgeryToken()
-            <button type="submit" class="btn btn-primary" @(Model.HasAccount ? "" : "disabled")>↻ Explorar ahora</button>
+            <button type="submit" class="btn btn-primary" @(Model.HasAccount ? "" : "disabled")>@Html.Icon("refresh-cw") Explorar ahora</button>
         </form>
     }
 </div>
@@ -156,7 +156,7 @@
                                 @Html.AntiForgeryToken()
                                 <input type="hidden" name="categoryId" value="@s.Id" />
                                 <input type="hidden" name="q" value="@Model.Query" />
-                                <button type="submit" class="btn btn-sm btn-outline-primary">＋ Vigilar</button>
+                                <button type="submit" class="btn btn-sm btn-outline-primary">@Html.Icon("plus") Vigilar</button>
                             </form>
                         }
                     </li>

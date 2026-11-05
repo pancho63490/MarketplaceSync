@@ -24,17 +24,18 @@
     .pl-toolbar { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; }
     .pl-search { max-width: 420px; flex: 1 1 260px; }
     .pl-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
-    .pl-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .75rem; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--ink-2); font-size: .82rem; font-weight: 600; text-decoration: none; }
+    .pl-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .75rem; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); font-size: .82rem; font-weight: 600; text-decoration: none; }
     .pl-chip:hover { border-color: var(--muted-2); color: var(--ink); }
-    .pl-chip.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+    .pl-chip.active { background: var(--ink); border-color: var(--ink); color: var(--surface); }
     .pl-chip .count { font-size: .72rem; opacity: .75; }
-    .pl-card { background: #fff; border-radius: 16px; box-shadow: 0 1px 3px rgba(15,23,42,.08); overflow: hidden; }
-    .pl-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 140px 110px 190px 250px; gap: 1rem; align-items: center; padding: .9rem 1.1rem; border-bottom: 1px solid var(--paper-2); }
+    .pl-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); overflow: hidden; }
+    .pl-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) 112px 92px 168px 214px; gap: 1rem; align-items: center; padding: .8rem 1.1rem; border-bottom: 1px solid var(--line); }
     .pl-row:last-child { border-bottom: 0; }
-    .pl-row:hover { background: var(--paper-2); }
+    .pl-row:hover { background: #fafbf9; }
     .pl-head { font-size: .72rem; font-weight: 700; text-transform: none; letter-spacing: 0; color: var(--muted); background: var(--paper-2); padding-top: .6rem; padding-bottom: .6rem; }
     .pl-head:hover { background: var(--paper-2); }
-    .pl-thumb { width: 64px; height: 64px; border-radius: 12px; background: var(--paper-2); object-fit: contain; display: flex; align-items: center; justify-content: center; color: var(--muted-2); font-size: 1.4rem; }
+    .pl-thumb { width: 56px; height: 56px; border-radius: 10px; background: var(--paper-2); object-fit: contain; display: flex; align-items: center; justify-content: center; color: var(--muted-2); }
+    img.pl-thumb { background: var(--surface); border: 1px solid var(--line); }
     .pl-title { font-weight: 700; color: var(--ink); text-decoration: none; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; }
     .pl-title:hover { color: var(--denim); }
     .pl-meta { font-size: .78rem; color: var(--muted); margin-top: .2rem; }
@@ -49,7 +50,7 @@
     .stage-published { background: var(--ok-soft); color: var(--ok); }
     .stage-paused { background: var(--bad-soft); color: var(--bad); }
     .stage-out { background: var(--bad-soft); color: var(--bad); }
-    .pl-actions { display: flex; gap: .4rem; justify-content: flex-end; align-items: center; }
+    .pl-actions { display: flex; gap: .4rem; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
     .pl-empty { text-align: center; padding: 3.5rem 1rem; color: var(--muted); }
     @@media (max-width: 1199px) {
         .pl-head { display: none; }
@@ -125,11 +126,11 @@
     @if (Model.TotalCount == 0)
     {
         <div class="pl-empty">
-            <div class="fs-1 mb-2">📦</div>
+            <div class="mb-2 text-muted">@Html.Icon("package", "icon-lg")</div>
             <div class="fw-bold text-dark mb-1">Todavía no tienes productos</div>
             <div class="small mb-3">Importa uno con el link de eBay, Amazon o AliExpress, o elige qué comprar en el Radar de compra.</div>
             <div class="d-flex justify-content-center gap-2 flex-wrap">
-                <a asp-action="CreateFromUrl" class="btn btn-primary">＋ Importar producto</a>
+                <a asp-action="CreateFromUrl" class="btn btn-primary">@Html.Icon("plus") Importar producto</a>
                 <a asp-controller="Purchasing" asp-action="Index" class="btn btn-outline-secondary">Ver Radar de compra</a>
             </div>
         </div>
@@ -171,11 +172,11 @@
                     @if (!string.IsNullOrWhiteSpace(p.ImageUrl))
                     {
                         <img src="@p.ImageUrl" alt="" class="pl-thumb" loading="lazy" referrerpolicy="no-referrer"
-                             onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pl-thumb',textContent:'□'}))" />
+                             onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pl-thumb'}))" />
                     }
                     else
                     {
-                        <div class="pl-thumb" aria-hidden="true">□</div>
+                        <div class="pl-thumb">@Html.Icon("image")</div>
                     }
                 </div>
 
@@ -189,7 +190,7 @@
                             <span>
                                 @if (Uri.TryCreate(p.SourceUrl, UriKind.Absolute, out _))
                                 {
-                                    <a href="@p.SourceUrl" target="_blank" rel="noopener noreferrer" class="text-decoration-none">@p.SourceMarketplace ↗</a>
+                                    <a href="@p.SourceUrl" target="_blank" rel="noopener noreferrer" class="text-decoration-none">@p.SourceMarketplace @Html.Icon("external-link", "icon-xs")</a>
                                 }
                                 else
                                 {
@@ -246,14 +247,10 @@
                     {
                         case ProductStage.Published:
                         case ProductStage.Paused:
-                            @if (!string.IsNullOrWhiteSpace(pub?.Permalink))
-                            {
-                                <a href="@pub.Permalink" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary">Ver en ML ↗</a>
-                            }
-                            <a asp-action="PublishToMercadoLibre" asp-route-id="@p.Id" asp-route-marketplaceAccountId="@pub?.MarketplaceAccountId" class="btn btn-sm btn-outline-primary">Editar publicación</a>
+                            <a asp-action="PublishToMercadoLibre" asp-route-id="@p.Id" asp-route-marketplaceAccountId="@pub?.MarketplaceAccountId" class="btn btn-sm btn-outline-secondary">@Html.Icon("pencil") Editar</a>
                             break;
                         case ProductStage.Ready:
-                            <a asp-action="PublishToMercadoLibre" asp-route-id="@p.Id" class="btn btn-sm btn-outline-secondary fw-bold">Publicar</a>
+                            <a asp-action="PublishToMercadoLibre" asp-route-id="@p.Id" class="btn btn-sm btn-outline-secondary fw-bold">@Html.Icon("send") Publicar</a>
                             break;
                         case ProductStage.OutOfStock:
                             <a asp-action="Details" asp-route-id="@p.Id" class="btn btn-sm btn-outline-secondary">Revisar</a>
@@ -261,15 +258,19 @@
                         default:
                             <form asp-action="CompleteWithAi" asp-route-id="@p.Id" method="post" class="d-inline ai-form">
                                 @Html.AntiForgeryToken()
-                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Categoría, título, descripción, atributos y precio con IA">✨ Completar con IA</button>
+                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Categoría, título, descripción, atributos y precio con IA">@Html.Icon("sparkles") Completar con IA</button>
                             </form>
                             break;
                     }
 
                     <div class="dropdown">
                         <button class="btn btn-sm btn-light border" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Más acciones para @title">⋯</button>
-                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" asp-action="Details" asp-route-id="@p.Id">Ver detalle</a></li>
+                            @if (!string.IsNullOrWhiteSpace(pub?.Permalink) && row.Stage is ProductStage.Published or ProductStage.Paused)
+                            {
+                                <li><a class="dropdown-item" href="@pub!.Permalink" target="_blank" rel="noopener noreferrer">Ver en Mercado Libre</a></li>
+                            }
                             <li><a class="dropdown-item" asp-action="Edit" asp-route-id="@p.Id">Editar datos</a></li>
                             <li><a class="dropdown-item" asp-action="Variants" asp-route-id="@p.Id">SKU y variantes</a></li>
                             @if (row.Stage is not (ProductStage.Draft or ProductStage.NeedsReview))
@@ -277,7 +278,7 @@
                                 <li>
                                     <form asp-action="CompleteWithAi" asp-route-id="@p.Id" method="post" class="ai-form">
                                         @Html.AntiForgeryToken()
-                                        <button type="submit" class="dropdown-item">✨ Completar con IA</button>
+                                        <button type="submit" class="dropdown-item">Completar con IA</button>
                                     </form>
                                 </li>
                             }
@@ -286,7 +287,7 @@
                                 <li>
                                     <form asp-action="CompleteWithAi" asp-route-id="@p.Id" asp-route-publish="true" method="post" class="ai-form">
                                         @Html.AntiForgeryToken()
-                                        <button type="submit" class="dropdown-item">⚡ Completar y publicar con IA</button>
+                                        <button type="submit" class="dropdown-item">Completar y publicar con IA</button>
                                     </form>
                                 </li>
                             }
@@ -304,13 +305,7 @@
                                 </li>
                             }
                             <li><hr class="dropdown-divider" /></li>
-                            <li>
-                                <form asp-action="DeleteConfirmed" asp-route-id="@p.Id" method="post"
-                                      onsubmit="return confirm('¿Borrar este producto? Solo se borra de MarketplaceSync, no de Mercado Libre.');">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="dropdown-item text-danger">Borrar</button>
-                                </form>
-                            </li>
+                            <li><a class="dropdown-item text-danger" asp-action="Delete" asp-route-id="@p.Id">Borrar…</a></li>
                         </ul>
                     </div>
                 </div>
@@ -325,7 +320,7 @@
         document.querySelectorAll('.ai-form').forEach(function (form) {
             form.addEventListener('submit', function () {
                 var button = form.querySelector('button');
-                if (button) { button.disabled = true; button.textContent = 'Preparando con IA…'; }
+                if (button) { setTimeout(function () { button.disabled = true; button.textContent = 'Preparando con IA…'; }, 0); }
             });
         });
     </script>

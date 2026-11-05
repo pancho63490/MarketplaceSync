@@ -21,7 +21,7 @@
     </div>
     <form asp-action="Sync" method="post">
         @Html.AntiForgeryToken()
-        <button type="submit" class="btn btn-primary" @(Model.HasAccounts ? "" : "disabled")>↻ Buscar preguntas nuevas</button>
+        <button type="submit" class="btn btn-primary" @(Model.HasAccounts ? "" : "disabled")>@Html.Icon("refresh-cw") Buscar preguntas nuevas</button>
     </form>
 </div>
 
@@ -103,7 +103,7 @@ else
                             {
                                 <button type="submit" class="btn btn-outline-secondary btn-sm ai-suggest"
                                         formaction="@Url.Action("Suggest")" formnovalidate>
-                                    ✨ @(string.IsNullOrWhiteSpace(q.SuggestedAnswer) ? "Sugerir respuesta" : "Volver a sugerir")
+                                    @Html.Icon("sparkles") @(string.IsNullOrWhiteSpace(q.SuggestedAnswer) ? "Sugerir respuesta" : "Volver a sugerir")
                                 </button>
                             }
                             <span class="small text-muted align-self-center ms-auto">Sin teléfonos, correos ni links: Mercado Libre los rechaza.</span>

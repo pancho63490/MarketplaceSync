@@ -66,28 +66,28 @@
 
                         <div class="col-md-6">
                             <div class="bg-light rounded-4 p-3">
-                                <div class="text-muted small fw-bold text-uppercase">ID</div>
+                                <div class="text-muted small fw-bold">ID</div>
                                 <div class="fs-5 fw-bold">@Model.Id</div>
                             </div>
                         </div>
 
                         <div class="col-md-6">
                             <div class="bg-light rounded-4 p-3">
-                                <div class="text-muted small fw-bold text-uppercase">Marketplace</div>
+                                <div class="text-muted small fw-bold">Tienda</div>
                                 <div class="fs-5 fw-bold">@Model.SourceMarketplace</div>
                             </div>
                         </div>
 
                         <div class="col-md-6">
                             <div class="bg-light rounded-4 p-3">
-                                <div class="text-muted small fw-bold text-uppercase">Source Product ID</div>
+                                <div class="text-muted small fw-bold">ID en la tienda</div>
                                 <div class="fs-5 fw-bold">@(Model.SourceProductId ?? "N/A")</div>
                             </div>
                         </div>
 
                         <div class="col-md-6">
                             <div class="bg-light rounded-4 p-3">
-                                <div class="text-muted small fw-bold text-uppercase">Precio fuente</div>
+                                <div class="text-muted small fw-bold">Precio fuente</div>
                                 <div class="fs-5 fw-bold">
                                     @(Model.SourcePrice.HasValue ? Model.SourcePrice.Value.ToString("C") : "N/A")
                                 </div>
@@ -97,21 +97,21 @@
 
                         <div class="col-md-6">
                             <div class="bg-light rounded-4 p-3">
-                                <div class="text-muted small fw-bold text-uppercase">Stock fuente</div>
+                                <div class="text-muted small fw-bold">Stock fuente</div>
                                 <div class="fs-5 fw-bold">@(Model.SourceStock?.ToString() ?? "N/A")</div>
                             </div>
                         </div>
 
                         <div class="col-md-6">
                             <div class="bg-light rounded-4 p-3">
-                                <div class="text-muted small fw-bold text-uppercase">Mercado Libre Item</div>
+                                <div class="text-muted small fw-bold">Publicación en Mercado Libre</div>
                                 <div class="fs-5 fw-bold">@(mlPublication?.ExternalItemId ?? "No publicado")</div>
                             </div>
                         </div>
 
                         <div class="col-12">
                             <div class="bg-light rounded-4 p-3">
-                                <div class="text-muted small fw-bold text-uppercase">URL origen</div>
+                                <div class="text-muted small fw-bold">URL origen</div>
                                 @if (!string.IsNullOrWhiteSpace(Model.SourceUrl))
                                 {
                                     <a href="@Model.SourceUrl" target="_blank" class="text-decoration-none">

@@ -1,393 +1,240 @@
 @model MarketplaceSync.Web.Models.Product
+@using System.Globalization
 
 @{
-    ViewData["Title"] = "Detalle del producto";
-    var mlPublication = Model.MarketplacePublications?
-        .FirstOrDefault(x => x.Marketplace == "MercadoLibre");
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    var ml = Model.MarketplacePublications?.FirstOrDefault(x => x.Marketplace == "MercadoLibre");
+    var isPublished = ml?.IsPublished == true;
+    var title = string.IsNullOrWhiteSpace(Model.Title) ? "Producto sin título" : Model.Title;
+    ViewData["Title"] = title;
+
+    var activeVariants = Model.Variants.Where(v => v.IsActive).ToList();
+    var ownStock = activeVariants.Sum(v => Math.Max(0, v.Stock));
+
+    var (stageLabel, stageTone) = isPublished
+        ? (string.Equals(ml!.Status, "paused", StringComparison.OrdinalIgnoreCase) ? ("Pausado en Mercado Libre", "pill-warn") : ("Publicado en Mercado Libre", "pill-ok"))
+        : Model.Status switch
+        {
+            "ReadyToPublish" => ("Listo para publicar", "pill-info"),
+            "NeedsReview" => ("Por revisar", "pill-warn"),
+            "OutOfStock" => ("Agotado en la tienda de origen", "pill-bad"),
+            "Archived" => ("Archivado", ""),
+            _ => ("Borrador", "")
+        };
+
+    // Lo que falta, en palabras del vendedor (el piloto automático lo deja en AutopilotNotes).
+    var missing = new List<string>();
+    if (!isPublished)
+    {
+        if (ml?.AutopilotNotes is { } notes && notes.StartsWith("Falta:", StringComparison.Ordinal))
+            missing.AddRange(notes["Falta:".Length..].Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        else
+        {
+            if (string.IsNullOrWhiteSpace(Model.ImageUrl)) missing.Add("Foto del producto");
+            if (string.IsNullOrWhiteSpace(ml?.CategoryId)) missing.Add("Categoría de Mercado Libre");
+            if (ml?.Price is not > 0) missing.Add("Precio de venta");
+            if (ownStock == 0 && (ml?.Stock ?? 0) == 0) missing.Add("Stock: recibe la mercancía o define cuántas piezas tienes");
+        }
+    }
+
+    string ListingType(string? id) => id switch
+    {
+        "gold_pro" => "Premium (meses sin intereses)",
+        "gold_special" => "Clásica",
+        "free" => "Gratuita",
+        null or "" => "—",
+        _ => id
+    };
+    string Local(DateTime? utc) => utc.HasValue ? utc.Value.AddHours(-7).ToString("dd/MM/yyyy HH:mm") : "—";
+    string SourcePrice() => Model.SourcePrice is > 0
+        ? (string.Equals(Model.SourceCurrency, "MXN", StringComparison.OrdinalIgnoreCase)
+            ? Model.SourcePrice.Value.ToString("C2", mx)
+            : $"US$ {Model.SourcePrice.Value.ToString("0.00", CultureInfo.InvariantCulture)}")
+        : "Sin precio";
 }
 
-<div class="container-fluid px-4 py-4">
+<a asp-action="Index" class="back-link">@Html.Icon("chevron-right", "icon-xs pd-back-icon") Productos</a>
 
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
-        <div>
-            
-            <h1 class="fw-bold mb-1">Detalle del producto</h1>
-            <p class="text-muted mb-0">
-                Revisa la información extraída, datos de Mercado Libre y errores del producto.
-            </p>
+<header class="pd-head">
+    <div class="pd-media">
+        @if (!string.IsNullOrWhiteSpace(Model.ImageUrl))
+        {
+            <img src="@Model.ImageUrl" alt="" referrerpolicy="no-referrer" onerror="this.parentElement.classList.add('is-empty'); this.remove()" />
+        }
+        else
+        {
+            <span class="pd-media-empty">@Html.Icon("image", "icon-lg")<span>Sin foto</span></span>
+        }
+    </div>
+    <div class="pd-summary">
+        <span class="pill @stageTone">@stageLabel</span>
+        <h1 class="pd-title">@title</h1>
+        <div class="pd-meta">
+            @if (!string.IsNullOrWhiteSpace(Model.Brand)) { <span>@Model.Brand</span> }
+            @if (!string.IsNullOrWhiteSpace(Model.Model)) { <span>Parte @Model.Model</span> }
+            <span>De @(Model.SourceMarketplace ?? "tienda sin nombre")</span>
+            @if (activeVariants.Count > 0) { <span>@ownStock @(ownStock == 1 ? "pieza" : "piezas") en Juárez</span> }
         </div>
-
-        <div class="d-flex gap-2 flex-wrap">
-            <a asp-controller="Products"
-               asp-action="Index"
-               class="btn btn-outline-secondary">
-                Volver
-            </a>
-
-            <a asp-controller="Products"
-               asp-action="Edit"
-               asp-route-id="@Model.Id"
-               class="btn btn-outline-primary">
-                Editar
-            </a>
-
-            <a asp-controller="Products"
-               asp-action="Variants"
-               asp-route-id="@Model.Id"
-               class="btn btn-outline-primary">
-                Variantes y SKU (@Model.Variants.Count)
-            </a>
-
-            <form asp-controller="Products"
-                  asp-action="RefreshProduct"
-                  asp-route-id="@Model.Id"
-                  method="post">
-                @Html.AntiForgeryToken()
-                <button type="submit" class="btn btn-outline-secondary">
-                    Revisar precio en la fuente
-                </button>
-            </form>
-
-            <a asp-controller="Products"
-               asp-action="PublishToMercadoLibre"
-               asp-route-id="@Model.Id"
-               class="btn btn-primary">
-                Publicar en Mercado Libre
-            </a>
+        <div class="pd-price">
+            <div>
+                <span class="pd-price-label">Precio en Mercado Libre</span>
+                <span class="pd-price-value">@(ml?.Price is > 0 ? ml.Price.Value.ToString("C0", mx) : "Sin precio")</span>
+            </div>
+            <div>
+                <span class="pd-price-label">Te cuesta en la tienda</span>
+                <span class="pd-price-value pd-price-cost">@SourcePrice()</span>
+            </div>
+        </div>
+        <div class="pd-actions">
+            @if (isPublished)
+            {
+                @if (!string.IsNullOrWhiteSpace(ml!.Permalink))
+                {
+                    <a href="@ml.Permalink" target="_blank" rel="noopener noreferrer" class="btn btn-primary">@Html.Icon("external-link") Ver en Mercado Libre</a>
+                }
+                <a asp-action="PublishToMercadoLibre" asp-route-id="@Model.Id" class="btn btn-outline-secondary">@Html.Icon("pencil") Editar publicación</a>
+            }
+            else if (missing.Count == 0)
+            {
+                <a asp-action="PublishToMercadoLibre" asp-route-id="@Model.Id" class="btn btn-primary">@Html.Icon("send") Publicar en Mercado Libre</a>
+            }
+            else
+            {
+                <form asp-action="CompleteWithAi" asp-route-id="@Model.Id" method="post" class="ai-form">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-primary">@Html.Icon("sparkles") Completar con IA</button>
+                </form>
+                <a asp-action="PublishToMercadoLibre" asp-route-id="@Model.Id" class="btn btn-outline-secondary">Revisar y publicar</a>
+            }
+            <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-secondary">Editar datos</a>
         </div>
     </div>
+</header>
 
-
-
-    <div class="row g-4">
-
-        <div class="col-lg-4">
-            <div class="card border-0 shadow-sm detail-card">
-                <div class="card-body">
-
-                    @if (!string.IsNullOrWhiteSpace(Model.ImageUrl))
+<div class="pd-grid">
+    <div class="pd-main">
+        @if (!isPublished && missing.Count > 0)
+        {
+            <section class="panel pd-missing" aria-labelledby="falta">
+                <div class="panel-head">
+                    <h2 id="falta">@Html.Icon("list-checks") Falta para publicar</h2>
+                    <p>“Completar con IA” resuelve lo que se puede sacar de los datos; lo demás complétalo en Editar.</p>
+                </div>
+                <ul class="pd-missing-list">
+                    @foreach (var item in missing)
                     {
-                        <img src="@Model.ImageUrl"
-                             alt="@Model.Title"
-                             class="product-detail-img mb-3" />
+                        <li>@Html.Icon("circle-alert", "icon-sm") @item</li>
                     }
-                    else
-                    {
-                        <div class="product-detail-placeholder mb-3">
-                            Sin imagen
-                        </div>
-                    }
+                </ul>
+            </section>
+        }
 
-                    <h4 class="fw-bold">
-                        @(string.IsNullOrWhiteSpace(Model.Title) ? "Sin título" : Model.Title)
-                    </h4>
+        @if (!string.IsNullOrWhiteSpace(Model.LastErrorMessage))
+        {
+            <div class="alert alert-danger d-flex gap-2 align-items-start">
+                @Html.Icon("triangle-alert")
+                <div>
+                    <div class="fw-bold">Último problema (@Local(Model.LastErrorAt))</div>
+                    <div class="small">@Model.LastErrorMessage</div>
+                </div>
+            </div>
+        }
 
-                    <p class="text-muted mb-3">
-                        @(string.IsNullOrWhiteSpace(Model.Description) ? "Sin descripción." : Model.Description)
-                    </p>
+        <section class="panel" aria-labelledby="descripcion">
+            <div class="panel-head"><h2 id="descripcion">Descripción</h2></div>
+            <div class="panel-body">
+                @if (string.IsNullOrWhiteSpace(Model.Description))
+                {
+                    <p class="text-muted mb-0">Sin descripción. La IA la escribe con “Completar con IA”.</p>
+                }
+                else
+                {
+                    <div class="pd-description" id="pdDescription">@Model.Description</div>
+                    <button type="button" class="btn btn-link btn-sm px-0 mt-1" id="pdMore" hidden>Ver toda la descripción</button>
+                }
+            </div>
+        </section>
+    </div>
 
-                    <div class="d-flex gap-2 flex-wrap mb-3">
-                        <span class="badge bg-dark">
-                            @(Model.SourceMarketplace ?? "Unknown")
-                        </span>
+    <aside class="pd-side">
+        <section class="panel" aria-labelledby="ml-datos">
+            <div class="panel-head"><h2 id="ml-datos">En Mercado Libre</h2></div>
+            <div class="panel-body">
+                <dl class="facts pd-facts">
+                    <div><dt>Publicación</dt><dd class="@(string.IsNullOrWhiteSpace(ml?.ExternalItemId) ? "is-missing" : "")">@(ml?.ExternalItemId ?? "Sin publicar")</dd></div>
+                    <div><dt>Categoría</dt><dd class="@(string.IsNullOrWhiteSpace(ml?.CategoryId) ? "is-missing" : "")">@(ml?.CategoryId ?? "Sin elegir")</dd></div>
+                    <div><dt>Piezas publicadas</dt><dd>@(ml?.Stock?.ToString() ?? "—")</dd></div>
+                    <div><dt>Tipo de publicación</dt><dd>@ListingType(ml?.ListingTypeId)</dd></div>
+                    <div><dt>Condición</dt><dd>@(ml?.Condition == "used" ? "Usado" : "Nuevo")</dd></div>
+                    <div><dt>Publicado el</dt><dd>@Local(ml?.PublishedAt)</dd></div>
+                </dl>
+            </div>
+        </section>
 
-                        <span class="badge bg-warning text-dark">
-                            @(Model.Status switch { "ReadyToPublish" => "Listo para publicar", "NeedsReview" => "Por revisar", "OutOfStock" => "Sin stock en la fuente", "Archived" => "Archivado", _ => "Borrador" })
-                        </span>
+        <section class="panel" aria-labelledby="origen">
+            <div class="panel-head">
+                <h2 id="origen">Tienda de origen</h2>
+                @if (!string.IsNullOrWhiteSpace(Model.SourceUrl))
+                {
+                    <a href="@Model.SourceUrl" target="_blank" rel="noopener noreferrer" class="small">Abrir @Html.Icon("external-link", "icon-xs")</a>
+                }
+            </div>
+            <div class="panel-body">
+                <dl class="facts pd-facts">
+                    <div><dt>Tienda</dt><dd>@(Model.SourceMarketplace ?? "—")</dd></div>
+                    <div><dt>Precio</dt><dd>@SourcePrice()</dd></div>
+                    <div><dt>Disponibilidad</dt><dd class="@(Model.SourceAvailabilityText is null && Model.SourceStock is null ? "is-missing" : "")">@(Model.SourceAvailabilityText ?? (Model.SourceStock is > 0 ? "Disponible" : Model.SourceStock == 0 ? "Agotado" : "Sin dato"))</dd></div>
+                    <div><dt>Revisado</dt><dd>@Local(Model.LastSourceCheckAt)</dd></div>
+                </dl>
+                <form asp-action="RefreshProduct" asp-route-id="@Model.Id" method="post" class="mt-3">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">@Html.Icon("refresh-cw") Revisar precio ahora</button>
+                </form>
+            </div>
+        </section>
 
-                        @if (!string.IsNullOrWhiteSpace(mlPublication?.ExternalItemId))
+        <section class="panel" aria-labelledby="skus">
+            <div class="panel-head">
+                <h2 id="skus">SKU y variantes</h2>
+                <a asp-action="Variants" asp-route-id="@Model.Id" class="small">Administrar</a>
+            </div>
+            <div class="panel-body">
+                @if (activeVariants.Count == 0)
+                {
+                    <p class="text-muted small mb-0">Sin SKU. Se crea al recibir la compra, o agrégalo en Administrar para controlar el stock desde la app.</p>
+                }
+                else
+                {
+                    <ul class="pd-skus">
+                        @foreach (var v in activeVariants)
                         {
-                            <span class="badge bg-success">
-                                Publicado ML
-                            </span>
+                            <li><span>@v.Sku</span><span class="pill @(v.Stock <= 0 ? "pill-bad" : v.Stock <= v.LowStockThreshold ? "pill-warn" : "pill-ok")">@v.Stock pzs</span></li>
                         }
-                    </div>
-
-                    @if (!string.IsNullOrWhiteSpace(Model.SourceUrl))
-                    {
-                        <a href="@Model.SourceUrl"
-                           target="_blank"
-                           class="btn btn-outline-dark w-100">
-                            Abrir producto original
-                        </a>
-                    }
-
-                    @if (!string.IsNullOrWhiteSpace(mlPublication?.Permalink))
-                    {
-                        <a href="@mlPublication.Permalink"
-                           target="_blank"
-                           class="btn btn-outline-success w-100 mt-2">
-                            Abrir publicación ML
-                        </a>
-                    }
-
-                </div>
+                    </ul>
+                }
             </div>
-        </div>
+        </section>
 
-        <div class="col-lg-8">
-
-            <div class="card border-0 shadow-sm detail-card mb-4">
-                <div class="card-header bg-white border-0 pt-4 px-4">
-                    <h5 class="fw-bold mb-0">Información fuente</h5>
-                </div>
-
-                <div class="card-body px-4">
-                    <div class="row g-3">
-
-                        <div class="col-md-6">
-                            <div class="info-box">
-                                <span>Tienda de origen</span>
-                                <strong>@(Model.SourceMarketplace ?? "N/A")</strong>
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <div class="info-box">
-                                <span>ID en la tienda</span>
-                                <strong>@(Model.SourceProductId ?? "N/A")</strong>
-                            </div>
-                        </div>
-
-                        <div class="col-md-4">
-                            <div class="info-box">
-                                <span>Precio fuente</span>
-                                <strong>
-                                    @(Model.SourcePrice.HasValue ? Model.SourcePrice.Value.ToString("N2") : "Sin precio")
-                                </strong>
-                                <small>@(Model.SourceCurrency ?? "MXN")</small>
-                            </div>
-                        </div>
-
-                        <div class="col-md-4">
-                            <div class="info-box">
-                                <span>Stock fuente</span>
-                                <strong>
-                                    @(Model.SourceStock.HasValue ? Model.SourceStock.ToString() : "No detectado")
-                                </strong>
-                            </div>
-                        </div>
-
-                        <div class="col-md-4">
-                            <div class="info-box">
-                                <span>Disponibilidad</span>
-                                <strong>@(Model.SourceAvailabilityText ?? "Sin dato")</strong>
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <div class="info-box">
-                                <span>Marca</span>
-                                <strong>@(Model.Brand ?? "N/A")</strong>
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <div class="info-box">
-                                <span>Modelo</span>
-                                <strong>@(Model.Model ?? "N/A")</strong>
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <div class="info-box">
-                                <span>Última revisión fuente</span>
-                                <strong>
-                                    @(Model.LastSourceCheckAt.HasValue
-                                                                        ? Model.LastSourceCheckAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
-                                                                        : "Nunca")
-                                </strong>
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <div class="info-box">
-                                <span>Creado</span>
-                                <strong>@Model.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</strong>
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
-            </div>
-
-            <div class="card border-0 shadow-sm detail-card mb-4">
-                <div class="card-header bg-white border-0 pt-4 px-4">
-                    <h5 class="fw-bold mb-0">Datos Mercado Libre</h5>
-                </div>
-
-                <div class="card-body px-4">
-                    <div class="row g-3">
-
-                        <div class="col-md-4">
-                            <div class="info-box">
-                                <span>ML Item ID</span>
-                                <strong>@(mlPublication?.ExternalItemId ?? "No publicado")</strong>
-                            </div>
-                        </div>
-
-                        <div class="col-md-4">
-                            <div class="info-box">
-                                <span>Categoría ML</span>
-                                <strong>@(mlPublication?.CategoryId ?? "N/A")</strong>
-                            </div>
-                        </div>
-
-                        <div class="col-md-4">
-                            <div class="info-box">
-                                <span>Estado ML</span>
-                                <strong>@(mlPublication?.Status ?? "N/A")</strong>
-                            </div>
-                        </div>
-
-                        <div class="col-md-4">
-                            <div class="info-box">
-                                <span>Precio ML</span>
-                                <strong>
-                                    @(mlPublication?.Price?.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("es-MX")) ?? "N/A")
-                                </strong>
-                            </div>
-                        </div>
-
-                        <div class="col-md-4">
-                            <div class="info-box">
-                                <span>Stock ML</span>
-                                <strong>
-                                    @(mlPublication?.Stock?.ToString() ?? "N/A")
-                                </strong>
-                            </div>
-                        </div>
-
-                        <div class="col-md-4">
-                            <div class="info-box">
-                                <span>Moneda</span>
-                                <strong>@(mlPublication?.CurrencyId ?? "MXN")</strong>
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <div class="info-box">
-                                <span>Tipo publicación</span>
-                                <strong>@(mlPublication?.ListingTypeId ?? "N/A")</strong>
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <div class="info-box">
-                                <span>Condición</span>
-                                <strong>@((mlPublication?.Condition ?? "new") == "used" ? "Usado" : "Nuevo")</strong>
-                            </div>
-                        </div>
-
-                        <div class="col-md-12">
-                            <div class="info-box">
-                                <span>Publicado en ML</span>
-                                <strong>
-                                    @(mlPublication?.PublishedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "No publicado")
-                                </strong>
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
-            </div>
-
-            <div class="card border-0 shadow-sm detail-card">
-                <div class="card-header bg-white border-0 pt-4 px-4">
-                    <h5 class="fw-bold mb-0">Último error registrado</h5>
-                </div>
-
-                <div class="card-body px-4">
-                    @if (string.IsNullOrWhiteSpace(Model.LastErrorMessage))
-                    {
-                        <div class="alert alert-success mb-0">
-                            No hay errores registrados para este producto.
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="alert alert-danger">
-                            <div class="fw-bold mb-2">
-                                @(Model.LastErrorAt.HasValue
-                                                                    ? Model.LastErrorAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
-                                                                    : "Fecha no disponible")
-                            </div>
-
-                            <pre class="error-pre mb-0">@Model.LastErrorMessage</pre>
-                        </div>
-                    }
-                </div>
-            </div>
-
-        </div>
-
-    </div>
-
+        <p class="small text-muted">
+            Creado el @Local(Model.CreatedAt).
+            <a asp-action="Delete" asp-route-id="@Model.Id" class="text-danger ms-1">Eliminar producto</a>
+        </p>
+    </aside>
 </div>
 
-<style>
-    .detail-card {
-        border-radius: 18px;
-    }
-
-    .product-detail-img {
-        width: 100%;
-        max-height: 360px;
-        object-fit: contain;
-        border-radius: 18px;
-        border: 1px solid var(--line);
-        background: #fff;
-    }
-
-    .product-detail-placeholder {
-        width: 100%;
-        height: 260px;
-        border-radius: 18px;
-        border: 1px dashed var(--line);
-        background: var(--paper-2);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--muted-2);
-        font-weight: 700;
-    }
-
-    .info-box {
-        background: var(--paper-2);
-        border: 1px solid var(--line);
-        border-radius: 16px;
-        padding: 16px;
-        min-height: 88px;
-    }
-
-    .info-box span {
-        display: block;
-        color: var(--muted);
-        font-size: 0.8rem;
-        font-weight: 700;
-        text-transform: none;
-        letter-spacing: 0;
-        margin-bottom: 6px;
-    }
-
-    .info-box strong {
-        display: block;
-        color: var(--ink);
-        font-size: 1rem;
-        word-break: break-word;
-    }
-
-    .info-box small {
-        color: var(--muted);
-    }
-
-    .error-pre {
-        white-space: pre-wrap;
-        word-break: break-word;
-        font-size: 0.85rem;
-        background: transparent;
-        border: 0;
-        padding: 0;
-        color: #842029;
-    }
-</style>
+@section Scripts {
+    <script>
+        (function () {
+            var d = document.getElementById('pdDescription'), b = document.getElementById('pdMore');
+            if (!d || !b) return;
+            if (d.scrollHeight > d.clientHeight + 4) b.hidden = false;
+            b.addEventListener('click', function () { d.classList.add('is-open'); b.remove(); });
+        })();
+        document.querySelectorAll('.ai-form').forEach(function (f) {
+            f.addEventListener('submit', function () {
+                var btn = f.querySelector('button');
+                setTimeout(function () { btn.disabled = true; btn.textContent = 'Completando con IA…'; }, 0);
+            });
+        });
+    </script>
+}

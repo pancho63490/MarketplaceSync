@@ -316,7 +316,7 @@
                     @if (Model.CategorySuggestions.Any())
                     {
                         <div class="category-suggestions mt-4">
-                            <div class="small fw-bold text-uppercase text-muted mb-2">Categorías sugeridas</div>
+                            <div class="small fw-bold text-muted mb-2">Categorías sugeridas</div>
                             <div class="row g-2">
                                 @foreach (var suggestion in Model.CategorySuggestions.Where(x => !string.IsNullOrWhiteSpace(x.Category_Id)))
                                 {
@@ -698,20 +698,20 @@
 <style>
     .publication-readiness { background: var(--denim-soft); border-radius: 999px; color: var(--denim); font-size: .72rem; font-weight: 850; padding: .35rem .6rem; }
     .profitability-card { overflow: hidden; }
-    .profitability-estimate-badge { background: var(--warn-soft); border-radius: 999px; color: #946800; font-size: .65rem; font-weight: 800; padding: .38rem .62rem; text-transform: none; }
-    .profitability-result { background: var(--paper-2); border: 1px solid #e7ebf1; border-radius: 12px; display: grid; gap: 1px; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; overflow: hidden; }
-    .profitability-metric { background: #fff; min-width: 0; padding: 14px; }
+    .profitability-estimate-badge { background: var(--warn-soft); border-radius: 999px; color: var(--warn); font-size: .65rem; font-weight: 800; padding: .38rem .62rem; text-transform: none; }
+    .profitability-result { background: var(--paper-2); border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 1px; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; overflow: hidden; }
+    .profitability-metric { background: var(--surface); min-width: 0; padding: 14px; }
     .profitability-metric span, .profitability-metric small { color: var(--muted); display: block; font-size: .62rem; }
     .profitability-metric strong { color: var(--ink); display: block; font-size: 1rem; font-weight: 850; margin: 4px 0; }
-    .profitability-status { align-items: center; background: #eef1f5; color: #5f6b7c; display: flex; font-size: .7rem; font-weight: 850; justify-content: center; min-width: 115px; padding: 14px; text-align: center; text-transform: none; }
-    .profitability-status.healthy { background: var(--ok-soft); color: var(--ok); } .profitability-status.low { background: var(--warn-soft); color: #946800; } .profitability-status.loss { background: var(--bad-soft); color: var(--bad); }
+    .profitability-status { align-items: center; background: var(--paper-2); color: var(--muted); display: flex; font-size: .7rem; font-weight: 850; justify-content: center; min-width: 115px; padding: 14px; text-align: center; text-transform: none; }
+    .profitability-status.healthy { background: var(--ok-soft); color: var(--ok); } .profitability-status.low { background: var(--warn-soft); color: var(--warn); } .profitability-status.loss { background: var(--bad-soft); color: var(--bad); }
     @@media (max-width: 991px) { .profitability-result { grid-template-columns: repeat(2, minmax(0, 1fr)); } .profitability-status { grid-column: 1 / -1; } }
-    .category-suggestion { align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 10px; color: var(--ink-2); display: flex; gap: 10px; padding: 10px 12px; text-align: left; width: 100%; }
-    .category-suggestion:hover { background: var(--denim-soft); border-color: #9cbcff; }
+    .category-suggestion { align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: var(--ink-2); display: flex; gap: 10px; padding: 10px 12px; text-align: left; width: 100%; }
+    .category-suggestion:hover { background: var(--denim-soft); border-color: var(--denim); }
     .category-suggestion.selected { background: var(--denim-soft); border-color: var(--denim); color: var(--denim); }
-    .category-suggestion-check { align-items: center; background: #eef2f6; border-radius: 50%; color: transparent; display: inline-flex; flex: 0 0 24px; height: 24px; justify-content: center; font-size: .7rem; font-weight: 900; }
-    .category-suggestion.selected .category-suggestion-check { background: var(--denim); color: #fff; }
+    .category-suggestion-check { align-items: center; background: var(--paper-2); border-radius: 50%; color: transparent; display: inline-flex; flex: 0 0 24px; height: 24px; justify-content: center; font-size: .7rem; font-weight: 900; }
+    .category-suggestion.selected .category-suggestion-check { background: var(--denim); color: var(--surface); }
     .category-suggestion strong, .category-suggestion small { display: block; }
     .category-suggestion strong { font-size: .78rem; }
-    .category-suggestion small { color: #8792a4; font-size: .66rem; margin-top: 2px; }
+    .category-suggestion small { color: var(--muted); font-size: .66rem; margin-top: 2px; }
 </style>

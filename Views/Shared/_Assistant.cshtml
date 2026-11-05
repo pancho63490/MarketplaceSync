@@ -4,8 +4,8 @@
     var tokens = Antiforgery.GetAndStoreTokens(Context);
 }
 
-<button type="button" class="assistant-fab" data-bs-toggle="offcanvas" data-bs-target="#assistantPanel" aria-controls="assistantPanel">
-    <span aria-hidden="true">✦</span> Asistente
+<button type="button" class="assistant-fab" data-bs-toggle="offcanvas" data-bs-target="#assistantPanel" aria-controls="assistantPanel" aria-label="Abrir asistente">
+    @Html.Icon("sparkles") <span class="assistant-fab-label">Asistente</span>
 </button>
 
 <div class="offcanvas offcanvas-end assistant-panel" tabindex="-1" id="assistantPanel" aria-labelledby="assistantTitle">

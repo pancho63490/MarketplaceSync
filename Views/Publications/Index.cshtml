@@ -28,7 +28,7 @@
     </div>
     <form asp-action="Sync" method="post" id="syncForm">
         @Html.AntiForgeryToken()
-        <button type="submit" class="btn btn-primary" id="syncButton" @(Model.HasConnectedAccount ? "" : "disabled")>↻ Sincronizar con Mercado Libre</button>
+        <button type="submit" class="btn btn-primary" id="syncButton" @(Model.HasConnectedAccount ? "" : "disabled")>@Html.Icon("refresh-cw") Actualizar desde Mercado Libre</button>
     </form>
 </div>
 
@@ -39,11 +39,11 @@
     </div>
 }
 
-<dl class="pub-summary">
-    <div><dt>Activas</dt><dd>@Model.ActiveCount</dd></div>
-    <div><dt>Piezas publicadas</dt><dd>@Model.UnitsListed.ToString("N0", mx)</dd></div>
-    <div><dt>Ganancia si vendes todo</dt><dd class="@(Model.PotentialProfitMxn < 0 ? "text-danger" : "")">@Mxn(Model.PotentialProfitMxn)</dd></div>
-    <div><dt>Sin costo registrado</dt><dd>@Model.NoCostCount</dd></div>
+<dl class="stats">
+    <div class="stat"><dt>Activas</dt><dd>@Model.ActiveCount</dd></div>
+    <div class="stat"><dt>Piezas publicadas</dt><dd>@Model.UnitsListed.ToString("N0", mx)</dd></div>
+    <div class="stat @(Model.PotentialProfitMxn < 0 ? "is-bad" : Model.PotentialProfitMxn > 0 ? "is-ok" : "")"><dt>Ganancia si vendes todo</dt><dd>@Mxn(Model.PotentialProfitMxn)</dd></div>
+    <div class="stat @(Model.NoCostCount > 0 ? "is-warn" : "")"><dt>Sin costo registrado</dt><dd>@Model.NoCostCount</dd></div>
 </dl>
 
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
@@ -104,7 +104,7 @@ else
                     <div class="pl-meta">
                         <span>@r.ItemId</span>
                         @if (r.Status != "active") { <span class="text-danger">@(r.Status == "paused" ? "Pausada" : r.Status)</span> }
-                        @if (!string.IsNullOrWhiteSpace(r.Permalink)) { <span><a href="@r.Permalink" target="_blank" rel="noopener noreferrer">Ver en ML ↗</a></span> }
+                        @if (!string.IsNullOrWhiteSpace(r.Permalink)) { <span><a href="@r.Permalink" target="_blank" rel="noopener noreferrer">Ver en Mercado Libre @Html.Icon("external-link", "icon-xs")</a></span> }
                     </div>
                     @if (r.Kit is { } kit)
                     {
@@ -116,7 +116,7 @@ else
                     }
                 </div>
 
-                <div class="text-end">
+                <div class="text-end" data-label="Precio">
                     <div class="pl-value">@Mxn(r.Price)</div>
                     @if (profit != null)
                     {
@@ -124,7 +124,7 @@ else
                     }
                 </div>
 
-                <div class="text-end">
+                <div class="text-end" data-label="Te cuesta">
                     @if (r.CostKnown)
                     {
                         <div class="pl-value">@Mxn(r.LandedCostMxn)</div>
@@ -136,7 +136,7 @@ else
                             @Html.AntiForgeryToken()
                             <input type="hidden" name="productId" value="@r.ProductId" />
                             <input type="hidden" name="filter" value="@Model.Filter" />
-                            <div class="input-group input-group-sm">
+                            <div class="pub-cost-input">
                                 <input type="text" inputmode="decimal" name="cost" class="form-control" placeholder="38.50" aria-label="Costo por pieza de @r.Title" required />
                                 <select name="currency" class="form-select" aria-label="Moneda del costo">
                                     <option value="USD">USD</option>
@@ -148,7 +148,7 @@ else
                     }
                 </div>
 
-                <div class="text-end">
+                <div class="text-end" data-label="Ganas por pieza">
                     @if (profit != null)
                     {
                         <div class="pl-value @(profit.NetProfitMxn < 0 ? "text-danger" : profit.IsProfitable ? "text-success" : "")">@Mxn(profit.NetProfitMxn)</div>
@@ -160,7 +160,7 @@ else
                     }
                 </div>
 
-                <div class="text-center">
+                <div class="text-center" data-label="Stock">
                     <div class="pl-value">@(r.MercadoLibreStock?.ToString() ?? "—")</div>
                     @if (r.AppStock.HasValue)
                     {
@@ -183,7 +183,7 @@ else
                     }
                 </div>
 
-                <div class="text-center pl-value">@(r.Sold?.ToString("N0", mx) ?? "—")</div>
+                <div class="text-center pl-value" data-label="Vendidos">@(r.Sold?.ToString("N0", mx) ?? "—")</div>
             </div>
         }
     </div>
@@ -193,7 +193,7 @@ else
 @section Scripts {
     <script>
         document.getElementById('syncForm')?.addEventListener('submit', function () {
-            var b = document.getElementById('syncButton'); b.disabled = true; b.textContent = 'Sincronizando…';
+            var b = document.getElementById('syncButton'); setTimeout(function () { b.disabled = true; b.textContent = 'Actualizando…'; }, 0);
         });
     </script>
 }
