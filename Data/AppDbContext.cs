@@ -34,6 +34,7 @@ namespace MarketplaceSync.Web.Data
         public DbSet<CrossBorderSettings> CrossBorderSettings { get; set; }
         public DbSet<PurchaseCandidate> PurchaseCandidates { get; set; }
         public DbSet<BuyerQuestion> BuyerQuestions { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Inventory.InventoryLot> InventoryLots { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -292,6 +293,14 @@ namespace MarketplaceSync.Web.Data
                 entity.Property(x => x.Status).HasMaxLength(30);
                 entity.Property(x => x.PurchasedUnitCostUsd).HasColumnType("numeric(18,2)");
                 entity.Property(x => x.Notes).HasMaxLength(500);
+            });
+
+            builder.Entity<MarketplaceSync.Web.Models.Inventory.InventoryLot>(entity =>
+            {
+                entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(x => x.ProductVariant).WithMany().HasForeignKey(x => x.ProductVariantId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(x => new { x.OrganizationId, x.ExpiresOn });
+                entity.HasIndex(x => new { x.ProductVariantId, x.ExpiresOn });
             });
 
             builder.Entity<BuyerQuestion>(entity =>

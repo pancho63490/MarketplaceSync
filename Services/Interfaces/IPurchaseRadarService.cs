@@ -65,6 +65,7 @@ public interface IPurchaseRadarService
         long candidateId,
         int? receivedQuantity,
         string? userId,
+        DateOnly? expiresOn = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -29,7 +29,7 @@ public sealed class SourcePriceMonitorService : ISourcePriceMonitorService
     private const decimal PriceChangeTriggerThreshold = 0.03m; // 3 %
     private const int MaxRestoreQuantity = 5;
     private static readonly TimeSpan DelayBetweenProducts = TimeSpan.FromMilliseconds(750);
-    private static readonly string[] MonitoredMarketplaces = { "EBAY", "AMAZON", "ALIEXPRESS" };
+    private static readonly string[] MonitoredMarketplaces = { "EBAY", "AMAZON", "ALIEXPRESS", "WALMART" };
 
     private readonly AppDbContext _context;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -119,6 +119,14 @@ public sealed class SourcePriceMonitorService : ISourcePriceMonitorService
         try
         {
             var freshData = await _extractor.ExtractAsync(product.SourceUrl);
+
+            // Si la tienda no dejó leer la página (CAPTCHA o error), no hay datos reales: no se pausa ni se reactiva nada.
+            if (freshData.SourceStatus is "Blocked" or "ScrapeFailed")
+            {
+                product.LastSourceCheckAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync(cancellationToken);
+                return new SourceCheckResult(product.Id, false, false, product.SourceStock, null, null, "Unreadable");
+            }
 
             var stockChanged = false;
             var priceChanged = false;

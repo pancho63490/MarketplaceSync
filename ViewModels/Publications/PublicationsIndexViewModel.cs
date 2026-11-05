@@ -24,6 +24,7 @@ public sealed class PublicationRow
     public string? CostCurrency { get; init; }
     public decimal? LandedCostMxn { get; init; }
     public CrossBorderProfitEstimate? Profit { get; init; }
+    public KitSuggestion? Kit { get; init; }
     public bool FeeIsReal { get; init; }
     public DateTime? LastSyncedAt { get; init; }
     public string? LastStockPushError { get; init; }

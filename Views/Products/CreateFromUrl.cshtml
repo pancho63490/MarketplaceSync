@@ -7,7 +7,7 @@
 
 <div class="import-page">
     <h1 class="page-title">Importar producto</h1>
-    <p class="text-muted mb-4">Pega el link de eBay, Amazon, AliExpress u otra tienda. La IA arma la publicación por ti.</p>
+    <p class="text-muted mb-4">Pega el link de eBay, Amazon, Walmart, AliExpress u otra tienda. La IA arma la publicación por ti.</p>
 
     @if (!Claude.IsConfigured)
     {
@@ -27,6 +27,16 @@
             <span class="import-store" id="storeBadge" aria-live="polite"></span>
         </div>
         <span asp-validation-for="SourceUrl" class="text-danger small"></span>
+
+        <div class="import-price mt-3" id="manualPriceBox" hidden>
+            <label asp-for="ManualPriceUsd" class="form-label">Precio en la tienda (USD) <span class="text-muted fw-normal">— recomendado</span></label>
+            <div class="input-group" style="max-width: 240px">
+                <span class="input-group-text">US$</span>
+                <input asp-for="ManualPriceUsd" class="form-control" inputmode="decimal" placeholder="38.50" />
+            </div>
+            <div class="form-text" id="manualPriceHelp">Esta tienda casi nunca deja leer el precio desde el servidor. Escríbelo para que la ganancia salga bien.</div>
+            <span asp-validation-for="ManualPriceUsd" class="text-danger small"></span>
+        </div>
 
         <ol class="import-steps" aria-label="Qué hace la IA">
             <li>Lee la foto, el precio y los datos de la tienda.</li>
@@ -50,8 +60,8 @@
     </form>
 
     <p class="small text-muted mt-3 import-note">
-        eBay se lee por su API oficial. Amazon y AliExpress a veces bloquean la lectura desde servidores;
-        si pasa, te avisamos qué falta completar.
+        eBay se lee por su API oficial. Walmart, RockAuto, Amazon y AliExpress a veces bloquean la lectura desde servidores;
+        si pasa, el título se toma del link, se traduce al español y te avisamos qué falta completar.
     </p>
 </div>
 
@@ -74,7 +84,13 @@
                 return u.startsWith('http') ? 'Otra tienda' : '';
             }
 
-            function update() { badge.textContent = store(input.value); }
+            var priceBox = document.getElementById('manualPriceBox');
+            function update() {
+                var name = store(input.value);
+                badge.textContent = name;
+                // eBay y Mercado Libre se leen bien; para el resto conviene escribir el precio.
+                priceBox.hidden = !name || name === 'eBay';
+            }
             input.addEventListener('input', update);
             update();
 

@@ -72,6 +72,7 @@ public sealed class ClaudeProductAiEnricherService : IProductAiEnricherService
             {{JsonSerializer.Serialize(schemaSummary)}}
 
             REGLAS ESTRICTAS DE PUBLICACIÓN EN MERCADO LIBRE:
+            0. IDIOMA: todo en español de México. Si el título o la descripción original están en inglés, TRADÚCELOS; no dejes palabras en inglés salvo marca, modelo, número de parte y nombres de vehículos. Usa términos mexicanos (balatas, maza, balero, rótula, calavera, defensa, cofre, salpicadera, mofle, marcha, banda, lado piloto / lado copiloto).
             1. 'optimizedTitle': EXACTAMENTE máximo 60 caracteres. Formato: [Tipo de producto/pieza] + [Marca] + [Modelo o aplicación] + [Año o especificación clave]. NUNCA uses palabras promocionales (ej. oferta, gratis, garantia, original).
             2. 'cleanDescription': Formato en TEXTO PLANO legible con viñetas con guiones (MeLi no admite HTML ni Markdown complejo).
                Incluye:
@@ -112,6 +113,8 @@ public sealed class ClaudeProductAiEnricherService : IProductAiEnricherService
             return null;
 
         var title = SanitizeTitle(parsed.OptimizedTitle, request.RawTitle);
+        if (ProductTitleTranslator.LooksEnglish(title))
+            title = SanitizeTitle(ProductTitleTranslator.Translate(title), request.RawTitle);
         var description = CleanDescriptionText(parsed.CleanDescription);
 
         return new ProductAiEnrichmentResult(
@@ -151,7 +154,10 @@ public sealed class ClaudeProductAiEnricherService : IProductAiEnricherService
 
     private static ProductAiEnrichmentResult FallbackEnrichment(ProductAiEnrichmentRequest request)
     {
-        var title = SanitizeTitle(request.RawTitle, request.RawTitle);
+        var spanishTitle = ProductTitleTranslator.LooksEnglish(request.RawTitle)
+            ? ProductTitleTranslator.Translate(request.RawTitle)
+            : request.RawTitle;
+        var title = SanitizeTitle(spanishTitle, spanishTitle);
         var brand = !string.IsNullOrWhiteSpace(request.RawBrand)
             ? request.RawBrand.Trim()
             : "Genérica";
@@ -181,7 +187,7 @@ public sealed class ClaudeProductAiEnricherService : IProductAiEnricherService
                 attributes[req.Id] = request.RawModel.Trim();
         }
 
-        var description = BuildFallbackDescription(request, brand, model);
+        var description = BuildFallbackDescription(request with { RawTitle = title }, brand, model);
 
         return new ProductAiEnrichmentResult(
             title,

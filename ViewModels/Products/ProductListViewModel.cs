@@ -50,6 +50,8 @@ public sealed class ProductListViewModel
     public IReadOnlyList<ProductListRow> Rows { get; init; } = Array.Empty<ProductListRow>();
     public IReadOnlyDictionary<ProductStage, int> Counts { get; init; } = new Dictionary<ProductStage, int>();
     public int TotalCount { get; init; }
+    /// <summary>Productos sin publicar cuyo título sigue en inglés.</summary>
+    public int EnglishTitleCount { get; init; }
     public string? Search { get; init; }
     public ProductStage? Stage { get; init; }
 

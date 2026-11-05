@@ -59,6 +59,11 @@ namespace MarketplaceSync.Web.Services
                 return await ScrapeAliExpressAsync(url, productId);
             }
 
+            if (marketplace.Equals("WALMART", StringComparison.OrdinalIgnoreCase))
+            {
+                return await ScrapeWalmartAsync(url, _detector.ExtractSourceProductId(url));
+            }
+
             // Universal fallback for any unrecognized marketplace
             return await ScrapeUniversalAsync(url, marketplace, productId);
         }
@@ -74,7 +79,7 @@ namespace MarketplaceSync.Web.Services
                 SourceProductId = productId,
                 SourceCurrency = "USD",
                 SourceStock = 1,
-                Title = productId != null ? $"Amazon: {productId}" : "Amazon Product",
+                Title = TitleFromAmazonUrl(url) ?? (productId != null ? $"Amazon: {productId}" : "Amazon Product"),
                 SourceStatus = "ScrapeFailed"
             };
 
@@ -223,6 +228,156 @@ namespace MarketplaceSync.Web.Services
                 return partial;
             }
         }
+
+        // ─── Walmart ──────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Walmart.com casi siempre responde con "Robot or human?" a los servidores. Si la página se puede leer,
+        /// se toman los datos del JSON de la página (nombre, precio, foto, marca, disponibilidad);
+        /// si no, el título sale del link (/ip/Nombre-Del-Producto/123) y el precio se captura a mano.
+        /// </summary>
+        private async Task<ExtractedProductInfo> ScrapeWalmartAsync(string url, string? productId)
+        {
+            var result = new ExtractedProductInfo
+            {
+                SourceUrl = url,
+                SourceMarketplace = "Walmart",
+                SourceProductId = productId,
+                SourceCurrency = "USD",
+                SourceStock = 1,
+                Title = TitleFromWalmartUrl(url) ?? (productId != null ? $"Walmart {productId}" : "Producto de Walmart"),
+                SourceStatus = "Blocked"
+            };
+
+            try
+            {
+                var html = await FetchHtmlAsync(url);
+                if (string.IsNullOrWhiteSpace(html) ||
+                    html.Contains("Robot or human", StringComparison.OrdinalIgnoreCase) ||
+                    html.Contains("px-captcha", StringComparison.OrdinalIgnoreCase) ||
+                    html.Contains("/blocked?", StringComparison.OrdinalIgnoreCase))
+                {
+                    return result;
+                }
+
+                string? name = null, brand = null, image = null, description = null, availability = null, model = null;
+                decimal? price = null;
+
+                var nextData = Regex.Match(html, @"<script[^>]*id=""__NEXT_DATA__""[^>]*>(.*?)</script>", RegexOptions.Singleline);
+                if (nextData.Success)
+                {
+                    using var document = System.Text.Json.JsonDocument.Parse(nextData.Groups[1].Value);
+                    if (TryGetPath(document.RootElement, out var product, "props", "pageProps", "initialData", "data", "product"))
+                    {
+                        name = GetString(product, "name");
+                        brand = GetString(product, "brand");
+                        model = GetString(product, "model");
+                        description = GetString(product, "shortDescription");
+                        availability = GetString(product, "availabilityStatus");
+                        if (TryGetPath(product, out var current, "priceInfo", "currentPrice") &&
+                            current.TryGetProperty("price", out var p) && p.ValueKind == System.Text.Json.JsonValueKind.Number)
+                            price = p.GetDecimal();
+                        if (TryGetPath(product, out var images, "imageInfo", "allImages") &&
+                            images.ValueKind == System.Text.Json.JsonValueKind.Array && images.GetArrayLength() > 0)
+                            image = GetString(images[0], "url");
+                        image ??= TryGetPath(product, out var info, "imageInfo") ? GetString(info, "thumbnailUrl") : null;
+                    }
+                }
+
+                // Respaldo: JSON-LD de tipo Product y metadatos sociales.
+                if (name is null || price is null)
+                {
+                    foreach (Match script in Regex.Matches(html, @"<script\b[^>]*type=""application/ld\+json""[^>]*>(.*?)</script>", RegexOptions.IgnoreCase | RegexOptions.Singleline))
+                    {
+                        try
+                        {
+                            using var ld = System.Text.Json.JsonDocument.Parse(script.Groups[1].Value);
+                            var root = ld.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array && ld.RootElement.GetArrayLength() > 0
+                                ? ld.RootElement[0]
+                                : ld.RootElement;
+                            if (!string.Equals(GetString(root, "@type"), "Product", StringComparison.OrdinalIgnoreCase))
+                                continue;
+                            name ??= GetString(root, "name");
+                            description ??= GetString(root, "description");
+                            if (root.TryGetProperty("brand", out var b))
+                                brand ??= b.ValueKind == System.Text.Json.JsonValueKind.Object ? GetString(b, "name") : b.ValueKind == System.Text.Json.JsonValueKind.String ? b.GetString() : null;
+                            if (root.TryGetProperty("image", out var img))
+                                image ??= img.ValueKind == System.Text.Json.JsonValueKind.Array && img.GetArrayLength() > 0 ? img[0].GetString() : img.ValueKind == System.Text.Json.JsonValueKind.String ? img.GetString() : null;
+                            if (root.TryGetProperty("offers", out var offers))
+                            {
+                                var offer = offers.ValueKind == System.Text.Json.JsonValueKind.Array && offers.GetArrayLength() > 0 ? offers[0] : offers;
+                                price ??= TryParseDecimal(offer.TryGetProperty("price", out var op) ? op.ToString() : null);
+                                availability ??= GetString(offer, "availability");
+                            }
+                        }
+                        catch (System.Text.Json.JsonException)
+                        {
+                        }
+                    }
+                }
+
+                name ??= ExtractMetaContent(html, "property", "og:title");
+                image ??= ExtractBestImage(html, url);
+
+                if (!string.IsNullOrWhiteSpace(name)) result.Title = CleanText(name) ?? result.Title;
+                result.Brand = brand;
+                result.Model = model;
+                result.ImageUrl = string.IsNullOrWhiteSpace(image) ? null : NormalizeImageUrl(image, url);
+                result.Description = CleanText(description) is { } d && d.Length > 1000 ? d[..1000] : CleanText(description);
+                result.SourcePrice = price;
+                if (availability is not null)
+                {
+                    var outOfStock = availability.Contains("OUT_OF_STOCK", StringComparison.OrdinalIgnoreCase) ||
+                                     availability.Contains("OutOfStock", StringComparison.OrdinalIgnoreCase);
+                    result.SourceStock = outOfStock ? 0 : 1;
+                    result.SourceAvailabilityText = outOfStock ? "Agotado en Walmart" : "Disponible en Walmart";
+                }
+                result.SourceStatus = price is > 0 ? "Scraped" : "Blocked";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Walmart scraping failed for URL: {Url}", url);
+            }
+
+            return result;
+        }
+
+        /// <summary>"/ip/Monster-Energy-Ultra-Zero-16-oz-24-Pack/123" → "Monster Energy Ultra Zero 16 oz 24 Pack".</summary>
+        public static string? TitleFromWalmartUrl(string url)
+        {
+            var match = Regex.Match(url, @"/ip/([^/?#]+)/\d+", RegexOptions.IgnoreCase);
+            if (!match.Success)
+                return null;
+            var slug = Uri.UnescapeDataString(match.Groups[1].Value).Replace('-', ' ').Trim();
+            return slug.Length < 3 ? null : Regex.Replace(slug, @"\s+", " ");
+        }
+
+        /// <summary>"/ACDelco-252-1047-Original-Equipment-Water/dp/B000…" → "ACDelco 252-1047 Original Equipment Water".</summary>
+        public static string? TitleFromAmazonUrl(string url)
+        {
+            var match = Regex.Match(url, @"amazon\.[^/]+/([^/?#]+)/(?:dp|gp/product)/", RegexOptions.IgnoreCase);
+            if (!match.Success)
+                return null;
+            var slug = Uri.UnescapeDataString(match.Groups[1].Value).Replace('-', ' ').Trim();
+            return slug.Length < 3 ? null : Regex.Replace(slug, @"\s+", " ");
+        }
+
+        private static bool TryGetPath(System.Text.Json.JsonElement element, out System.Text.Json.JsonElement found, params string[] path)
+        {
+            found = element;
+            foreach (var key in path)
+            {
+                if (found.ValueKind != System.Text.Json.JsonValueKind.Object || !found.TryGetProperty(key, out found))
+                    return false;
+            }
+            return found.ValueKind != System.Text.Json.JsonValueKind.Null;
+        }
+
+        private static string? GetString(System.Text.Json.JsonElement element, string name) =>
+            element.ValueKind == System.Text.Json.JsonValueKind.Object &&
+            element.TryGetProperty(name, out var value) && value.ValueKind == System.Text.Json.JsonValueKind.String
+                ? value.GetString()
+                : null;
 
         // ─── Universal fallback ───────────────────────────────────────────────────
 

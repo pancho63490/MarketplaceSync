@@ -66,8 +66,16 @@ public sealed class PurchasingController : Controller
             .AsNoTracking()
             .AnyAsync(x => x.OrganizationId == organizationId, cancellationToken);
 
+        var kits = new Dictionary<long, KitSuggestion>();
+        foreach (var c in candidates.Where(x => x.LandedCostMxn is > 0 && x.RecommendedListingPriceMxn is > 0 and < 299m))
+        {
+            if (_pricingService.SuggestKit(c.LandedCostMxn!.Value, c.RecommendedListingPriceMxn!.Value, settings) is { } kit)
+                kits[c.Id] = kit;
+        }
+
         var model = new PurchasingIndexViewModel
         {
+            Kits = kits,
             Tab = tab is not null && Tabs.Contains(tab) ? tab.ToLowerInvariant() : "buy",
             ToBuy = toBuy,
             ToReview = candidates
@@ -181,7 +189,7 @@ public sealed class PurchasingController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> MarkReceived(long id, int? quantity, CancellationToken cancellationToken)
+    public async Task<IActionResult> MarkReceived(long id, int? quantity, DateOnly? expiresOn, CancellationToken cancellationToken)
     {
         var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
 
@@ -192,8 +200,11 @@ public sealed class PurchasingController : Controller
                 id,
                 quantity,
                 User.FindFirstValue(ClaimTypes.NameIdentifier),
+                expiresOn,
                 cancellationToken);
-            TempData["Success"] = "Mercancía recibida: el stock ya está disponible en Inventario.";
+            TempData["Success"] = expiresOn.HasValue
+                ? $"Mercancía recibida con caducidad {expiresOn.Value:dd/MM/yyyy}: el stock ya está disponible en Inventario."
+                : "Mercancía recibida: el stock ya está disponible en Inventario.";
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or KeyNotFoundException)
         {

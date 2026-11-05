@@ -869,8 +869,12 @@ public sealed class PurchaseRadarService : IPurchaseRadarService
         long candidateId,
         int? receivedQuantity,
         string? userId,
+        DateOnly? expiresOn = null,
         CancellationToken cancellationToken = default)
     {
+        if (MarketplaceSync.Services.Inventory.InventoryLotService.ValidateExpiry(expiresOn) is { } expiryError)
+            throw new ArgumentException(expiryError);
+
         var candidate = await RequireCandidateAsync(organizationId, candidateId, cancellationToken);
         if (candidate.Status != PurchaseCandidateStatus.Purchased || candidate.ProductId is null)
             throw new InvalidOperationException("Solo puedes recibir compras registradas como \"En camino\".");
@@ -897,6 +901,19 @@ public sealed class PurchaseRadarService : IPurchaseRadarService
 
         variant.Stock += quantity;
         variant.UpdatedAt = DateTime.UtcNow;
+        if (expiresOn.HasValue)
+        {
+            _context.InventoryLots.Add(new InventoryLot
+            {
+                OrganizationId = organizationId,
+                ProductVariantId = variant.Id,
+                ExpiresOn = expiresOn.Value,
+                QuantityReceived = quantity,
+                QuantityRemaining = quantity,
+                Source = "Compra",
+                ReceivedAt = DateTime.UtcNow
+            });
+        }
 
         _context.InventoryMovements.Add(new InventoryMovement
         {

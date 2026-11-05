@@ -19,6 +19,9 @@ namespace MarketplaceSync.Web.Services
             if (url.Contains("aliexpress.", StringComparison.OrdinalIgnoreCase))
                 return "ALIEXPRESS";
 
+            if (url.Contains("walmart.com", StringComparison.OrdinalIgnoreCase))
+                return "WALMART";
+
             return "UNKNOWN";
         }
 
@@ -32,6 +35,7 @@ namespace MarketplaceSync.Web.Services
                 "EBAY" => ExtractEbayItemId(url),
                 "MERCADOLIBRE" => ExtractMercadoLibreItemId(url),
                 "ALIEXPRESS" => ExtractAliExpressItemId(url),
+                "WALMART" => System.Text.RegularExpressions.Regex.Match(url, @"/ip/(?:[^/?#]+/)?(\d{5,})").Groups[1].Value is { Length: > 0 } id ? id : null,
                 _ => null
             };
         }

@@ -7,6 +7,10 @@ public sealed class PurchasingIndexViewModel
 {
     public string Tab { get; init; } = "buy";
 
+    /// <summary>Comparación pieza sola vs. kit para los que se venden bajo $299.</summary>
+    public IReadOnlyDictionary<long, MarketplaceSync.Services.Interfaces.KitSuggestion> Kits { get; init; }
+        = new Dictionary<long, MarketplaceSync.Services.Interfaces.KitSuggestion>();
+
     /// <summary>Validados: hay demanda, fuente y margen.</summary>
     public IReadOnlyList<PurchaseCandidate> ToBuy { get; init; } = Array.Empty<PurchaseCandidate>();
 

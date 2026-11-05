@@ -23,6 +23,7 @@
     var orders30 = (int)(ViewBag.Orders30Days ?? 0);
     var unitsInStock = (int)(ViewBag.UnitsInStock ?? 0);
     var openQuestions = (int)(ViewBag.OpenQuestions ?? 0);
+    var expiringLots = (int)(ViewBag.ExpiringLots ?? 0);
 
     // Lo que hay que hacer, en el orden en que conviene hacerlo.
     var tasks = new List<(int Count, string Title, string Detail, string Action, string Controller, string ActionName, object? Route, string Tone)>();
@@ -32,6 +33,8 @@
         tasks.Add((pendingOrders, pendingOrders == 1 ? "pedido pendiente de pago" : "pedidos pendientes de pago", "Revísalos antes de preparar envíos.", "Ver pedidos", "Orders", "Index", null, "tone-urgent"));
     if (outOfStock > 0)
         tasks.Add((outOfStock, outOfStock == 1 ? "SKU agotado o sobrevendido" : "SKU agotados o sobrevendidos", "Pausa la publicación o resurte para no cancelar ventas.", "Ver inventario", "Inventory", "Index", new { lowStockOnly = true }, "tone-urgent"));
+    if (expiringLots > 0)
+        tasks.Add((expiringLots, expiringLots == 1 ? "lote por caducar" : "lotes por caducar", "Véndelos primero (baja el precio o arma un kit); lo caducado dalo de baja.", "Ver caducidades", "Inventory", "Index", null, "tone-urgent"));
     if (radarInTransit > 0)
         tasks.Add((radarInTransit, radarInTransit == 1 ? "compra en camino" : "compras en camino", "Márcalas como recibidas al llegar a Juárez para sumar el stock.", "Recibir", "Purchasing", "Index", new { tab = "transit" }, "tone-normal"));
     if (readyProducts > 0)

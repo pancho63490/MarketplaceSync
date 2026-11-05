@@ -51,6 +51,7 @@ public sealed class ListingAutopilotService : IListingAutopilotService
     private readonly ICrossBorderPricingService _pricing;
     private readonly IMercadoLibreAuthService _authService;
     private readonly ClaudeClient _claude;
+    private readonly ProductTitleTranslator _titleTranslator;
     private readonly ILogger<ListingAutopilotService> _logger;
 
     public ListingAutopilotService(
@@ -61,8 +62,10 @@ public sealed class ListingAutopilotService : IListingAutopilotService
         ICrossBorderPricingService pricing,
         IMercadoLibreAuthService authService,
         ClaudeClient claude,
+        ProductTitleTranslator titleTranslator,
         ILogger<ListingAutopilotService> logger)
     {
+        _titleTranslator = titleTranslator;
         _context = context;
         _categoryService = categoryService;
         _listingClient = listingClient;
@@ -125,6 +128,13 @@ public sealed class ListingAutopilotService : IListingAutopilotService
         if (existing is null)
             _context.MarketplacePublications.Add(publication);
         publication.MarketplaceAccountId ??= accountId;
+
+        // 0) Título en español: Mercado Libre sugiere mejor la categoría y el comprador busca en español.
+        if (ProductTitleTranslator.LooksEnglish(product.Title))
+        {
+            product.Title = await _titleTranslator.ToSpanishAsync(product.Title, cancellationToken);
+            done.Add("Título traducido al español");
+        }
 
         // 1) Categoría
         string? categoryName = null;

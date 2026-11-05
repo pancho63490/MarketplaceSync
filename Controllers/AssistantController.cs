@@ -98,7 +98,7 @@ public sealed class AssistantController : Controller
             - Productos: /Products  (filtros: ?stage=Draft, ?stage=NeedsReview, ?stage=Ready)
             - Publicados en Mercado Libre con ganancia y stock: /Publications  (filtros: ?filter=loss, ?filter=nocost, ?filter=mismatch)
             - Importar producto con IA: /Products/CreateFromUrl
-            - Inventario: /Inventory
+            - Inventario (incluye caducidades por lote): /Inventory
             - Pedidos: /Orders
             - Preguntas de compradores (con respuesta sugerida por IA): /Questions  (?tab=answered)
             - Cuentas de Mercado Libre: /MercadoLibre/Status
@@ -186,6 +186,22 @@ public sealed class AssistantController : Controller
                       $"{variants.Count(v => v.Stock <= 0)} agotados, {variants.Count(v => v.Stock > 0 && v.Stock <= v.LowStockThreshold)} con stock bajo.");
         foreach (var r in restock.Take(5))
             sb.AppendLine($"  - Resurtir {r.Sku} {Short(r.Title, 60)}: vendió {r.UnitsSold30Days} en 30 días, quedan {r.CurrentStock}, comprar {r.SuggestedQuantity}");
+
+        // Caducidades (lotes)
+        var expiryLimit = MarketplaceSync.Services.Inventory.InventoryLotService.Today.AddDays(30);
+        var lots = await _context.InventoryLots
+            .AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId && x.WrittenOffAt == null && x.QuantityRemaining > 0 && x.ExpiresOn <= expiryLimit)
+            .OrderBy(x => x.ExpiresOn)
+            .Take(5)
+            .Select(x => new { x.ProductVariant.Sku, x.ExpiresOn, x.QuantityRemaining })
+            .ToListAsync(cancellationToken);
+        if (lots.Count > 0)
+        {
+            sb.AppendLine("Lotes que caducan en 30 días o ya caducaron:");
+            foreach (var lot in lots)
+                sb.AppendLine($"  - {lot.Sku}: {lot.QuantityRemaining} pzs, caduca {lot.ExpiresOn:dd/MM/yyyy}");
+        }
 
         // Preguntas de compradores (solo el conteo y la más antigua; el texto puede traer datos personales)
         var openQuestions = await _context.BuyerQuestions

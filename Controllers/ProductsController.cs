@@ -99,6 +99,7 @@ private readonly ProductExtractorService _extractor;
     private readonly IProductAiEnricherService _aiEnricher;
     private readonly MarketplaceSync.Services.Ai.IListingAutopilotService _autopilot;
     private readonly MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient _listingClient;
+    private readonly MarketplaceSync.Services.Ai.ProductTitleTranslator _titleTranslator;
 
 public ProductsController(
     AppDbContext context,
@@ -113,9 +114,11 @@ public ProductsController(
     IProductAiEnricherService aiEnricher,
     MarketplaceSync.Services.Ai.IListingAutopilotService autopilot,
     MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient listingClient,
+    MarketplaceSync.Services.Ai.ProductTitleTranslator titleTranslator,
     ILogger<ProductsController> logger
 )
 {
+    _titleTranslator = titleTranslator;
     _context = context;
     _detector = detector;
     _extractor = extractor;
@@ -1125,6 +1128,8 @@ public async Task<IActionResult> Index(string? q, ProductStage? stage)
     return View(new ProductListViewModel
     {
         Rows = filtered.ToList(),
+        EnglishTitleCount = rows.Count(x => x.Publication?.IsPublished != true &&
+                                            MarketplaceSync.Services.Ai.ProductTitleTranslator.LooksEnglish(x.Product.Title)),
         Counts = counts,
         TotalCount = rows.Count,
         Search = search,
@@ -1520,7 +1525,7 @@ public async Task<IActionResult> CreateFromUrl(CreateProductFromUrlViewModel mod
         SourceMarketplace = extracted.SourceMarketplace ?? "UNKNOWN",
         SourceProductId = extracted.SourceProductId,
 
-        Title = extracted.Title,
+        Title = await _titleTranslator.ToSpanishAsync(extracted.Title),
         Description = extracted.Description,
         SourcePrice = extracted.SourcePrice,
         SourceCurrency = extracted.SourceCurrency,
@@ -1536,13 +1541,24 @@ public async Task<IActionResult> CreateFromUrl(CreateProductFromUrlViewModel mod
         CreatedAt = DateTime.UtcNow,
     };
 
+    if (model.ManualPriceUsd is > 0)
+    {
+        product.SourcePrice = Math.Round(model.ManualPriceUsd.Value, 2);
+        product.SourceCurrency = "USD";
+    }
+
     _context.Products.Add(product);
     await _context.SaveChangesAsync();
 
     if (extracted.SourceStatus is "Blocked" or "ScrapeFailed")
     {
-        TempData["Warning"] = $"{product.SourceMarketplace} no dejó leer la página desde el servidor, así que faltan datos " +
-            "(foto, precio o título). Complétalos en Editar, o importa el mismo producto con su link de eBay.";
+        var missingParts = new List<string>();
+        if (string.IsNullOrWhiteSpace(product.ImageUrl)) missingParts.Add("la foto");
+        if (product.SourcePrice is not > 0) missingParts.Add("el precio");
+        TempData["Warning"] = missingParts.Count == 0
+            ? $"{product.SourceMarketplace} no dejó leer la página; el título se tomó del link. Revísalo antes de publicar."
+            : $"{product.SourceMarketplace} no dejó leer la página desde el servidor. Falta {string.Join(" y ", missingParts)}: " +
+              "complétalo en Editar (puedes copiar la dirección de la foto desde la tienda).";
     }
     else if (string.IsNullOrWhiteSpace(product.ImageUrl))
     {
@@ -1561,6 +1577,37 @@ public async Task<IActionResult> CreateFromUrl(CreateProductFromUrlViewModel mod
 }
 
 /// <summary>Completa el producto con IA y, si se pide y todo está listo, lo publica.</summary>
+/// <summary>Pasa al español los títulos en inglés de los productos que aún no se publican.</summary>
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> TranslateTitles(CancellationToken cancellationToken)
+{
+    var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+    var products = await _context.Products
+        .Where(x => x.OrganizationId == organizationId &&
+                    !x.MarketplacePublications.Any(p => p.Marketplace == "MercadoLibre" && p.IsPublished))
+        .OrderByDescending(x => x.CreatedAt)
+        .Take(300)
+        .ToListAsync(cancellationToken);
+
+    var changed = 0;
+    foreach (var product in products.Where(p => MarketplaceSync.Services.Ai.ProductTitleTranslator.LooksEnglish(p.Title)).Take(50))
+    {
+        var translated = await _titleTranslator.ToSpanishAsync(product.Title, cancellationToken);
+        if (string.IsNullOrWhiteSpace(translated) || translated == product.Title)
+            continue;
+        product.Title = translated;
+        product.UpdatedAt = DateTime.UtcNow;
+        changed++;
+    }
+    await _context.SaveChangesAsync(cancellationToken);
+
+    TempData["Success"] = changed == 0
+        ? "No había títulos en inglés por traducir."
+        : $"{changed} {(changed == 1 ? "título pasado" : "títulos pasados")} al español. Revísalos antes de publicar.";
+    return RedirectToAction(nameof(Index));
+}
+
 [HttpPost]
 [ValidateAntiForgeryToken]
 public async Task<IActionResult> CompleteWithAi(int id, bool publish = false)

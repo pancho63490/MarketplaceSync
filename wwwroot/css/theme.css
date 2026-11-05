@@ -1000,3 +1000,7 @@ img { color: transparent; }
     .q-card { padding: .85rem; }
     .q-answer .ms-auto { margin-left: 0 !important; width: 100%; }
 }
+
+/* Aviso de piezas bajo $299 */
+.pub-kit { margin-top: .3rem; font-size: var(--fs-xs); color: var(--muted); line-height: 1.35; }
+.pub-kit.is-better { color: var(--ink); background: var(--warn-soft); border-radius: 6px; padding: .2rem .45rem; display: inline-block; }

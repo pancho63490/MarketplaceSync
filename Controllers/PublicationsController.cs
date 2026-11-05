@@ -86,6 +86,7 @@ public sealed class PublicationsController : Controller
                 CostCurrency = product.SourceCurrency,
                 LandedCostMxn = landed,
                 Profit = profit,
+                Kit = landed.HasValue && p.Price is > 0 ? _pricing.SuggestKit(landed.Value, p.Price.Value, settings) : null,
                 FeeIsReal = p.SaleFeeForPrice == p.Price && p.SaleFeeMxn.HasValue,
                 LastSyncedAt = p.LastSyncedAt,
                 LastStockPushError = p.LastStockPushError,

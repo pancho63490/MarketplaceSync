@@ -221,6 +221,15 @@
                                 <div><span>Ganas / pieza</span><strong class="radar-profit">@Mxn(c.EstimatedNetProfitMxn)</strong></div>
                             </div>
                             <div class="radar-meta text-center">Margen neto @(c.EstimatedMarginPercent?.ToString("0.#") ?? "—")% al precio actual del mercado</div>
+                            @if (Model.Kits.TryGetValue(c.Id, out var kit))
+                            {
+                                <div class="pub-kit @(kit.KitIsBetter ? "is-better" : "") text-center">
+                                    Se vende bajo $299 (cargo fijo de Mercado Libre).
+                                    @(kit.KitIsBetter
+                                        ? $"Conviene un kit de {kit.Quantity} a {Mxn(kit.KitPriceMxn)}: {Mxn(kit.KitProfitPerUnitMxn)} por pieza."
+                                        : $"Un kit de {kit.Quantity} dejaría {Mxn(kit.KitProfitPerUnitMxn)} por pieza; mejor venderla sola.")
+                                </div>
+                            }
 
                             <div class="radar-actions">
                                 <form asp-action="MarkPurchased" method="post" class="d-flex gap-2 align-items-end">
@@ -425,7 +434,7 @@
             <div class="table-responsive">
                 <table class="table radar-table mb-0">
                     <thead>
-                        <tr><th>Producto</th><th class="text-center">Compradas</th><th class="text-end">Costo unitario</th><th>Comprado</th><th>Recibir</th><th></th></tr>
+                        <tr><th>Producto</th><th class="text-center">Compradas</th><th class="text-end">Costo unitario</th><th>Comprado</th><th>Recibir <span class="fw-normal">(caducidad solo si aplica)</span></th><th></th></tr>
                     </thead>
                     <tbody>
                         @if (Model.InTransit.Count == 0)
@@ -450,6 +459,7 @@
                                         @Html.AntiForgeryToken()
                                         <input type="hidden" name="id" value="@c.Id" />
                                         <input type="number" name="quantity" value="@c.PurchasedQuantity" min="1" max="500" class="form-control form-control-sm" style="width: 80px;" aria-label="Piezas recibidas" />
+                                        <input type="date" name="expiresOn" class="form-control form-control-sm" style="width: 150px;" title="Caducidad (solo si el producto caduca)" aria-label="Caducidad, opcional" />
                                         <button type="submit" class="btn btn-sm btn-success text-nowrap">Recibido</button>
                                     </form>
                                 </td>

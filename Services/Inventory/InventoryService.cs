@@ -14,12 +14,15 @@ public sealed class InventoryService : IInventoryService
     private readonly ILogger<InventoryService> _logger;
 
     private readonly MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler _stockSync;
+    private readonly InventoryLotService _lots;
 
     public InventoryService(
         AppDbContext dbContext,
         ILogger<InventoryService> logger,
-        MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler stockSync)
+        MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler stockSync,
+        InventoryLotService lots)
     {
+        _lots = lots;
         _stockSync = stockSync;
         _dbContext = dbContext;
         _logger = logger;
@@ -90,6 +93,8 @@ public sealed class InventoryService : IInventoryService
 
             variant.Stock += adjustment;
             variant.UpdatedAt = DateTime.UtcNow;
+            // Venta: sale primero lo que caduca antes. Cancelación: regresa a ese mismo lote.
+            await _lots.ApplyAsync(order.OrganizationId, variant.Id, adjustment, null, null, "Venta", cancellationToken);
             var movementType = adjustment < 0 ? "OrderSale" : "OrderReversal";
             var referenceKey = string.Join(':',
                 "order",

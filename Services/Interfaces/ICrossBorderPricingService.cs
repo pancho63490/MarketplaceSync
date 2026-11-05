@@ -76,4 +76,19 @@ public interface ICrossBorderPricingService
 
     /// <summary>Costo puesto en Juárez (MXN) a partir del costo de compra y su moneda.</summary>
     decimal LandedCostMxn(decimal sourceCost, string? currency, CrossBorderSettings settings);
+
+    /// <summary>
+    /// Para piezas de menos de $299: compara venderla sola (cargo fijo de Mercado Libre) contra un kit que pase de $299
+    /// (envío gratis que paga el vendedor). Null si el precio ya es de $299 o más.
+    /// </summary>
+    KitSuggestion? SuggestKit(decimal landedCostMxn, decimal unitPriceMxn, CrossBorderSettings settings);
 }
+
+/// <summary>Comparación pieza sola vs. kit para precios bajo $299.</summary>
+public sealed record KitSuggestion(
+    int Quantity,
+    decimal KitPriceMxn,
+    decimal UnitProfitMxn,
+    decimal KitProfitMxn,
+    decimal KitProfitPerUnitMxn,
+    bool KitIsBetter);

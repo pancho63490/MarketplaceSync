@@ -78,6 +78,9 @@ namespace MarketplaceSync.Web.Controllers
             ViewBag.Orders30Days = await organizationOrders
                 .CountAsync(x => x.DateCreated >= since30 && x.Status != "cancelled" && x.Status != "invalid");
             ViewBag.UnitsInStock = await organizationVariants.SumAsync(x => (int?)(x.Stock > 0 ? x.Stock : 0)) ?? 0;
+            var expiryLimit = MarketplaceSync.Services.Inventory.InventoryLotService.Today.AddDays(MarketplaceSync.Services.Inventory.InventoryLotService.WarningDays);
+            ViewBag.ExpiringLots = await _context.InventoryLots.CountAsync(x =>
+                x.OrganizationId == organizationId && x.WrittenOffAt == null && x.QuantityRemaining > 0 && x.ExpiresOn <= expiryLimit);
             ViewBag.OpenQuestions = await _context.BuyerQuestions.CountAsync(x =>
                 x.OrganizationId == organizationId && x.Status == MarketplaceSync.Web.Models.Questions.BuyerQuestionStatus.Unanswered);
             ViewBag.ReadyProducts = await organizationProducts.CountAsync(x =>

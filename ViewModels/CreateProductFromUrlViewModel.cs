@@ -8,5 +8,10 @@ namespace MarketplaceSync.Web.ViewModels
         [Url(ErrorMessage = "Ingresa una URL válida.")]
         [Display(Name = "URL del producto")]
         public string SourceUrl { get; set; } = string.Empty;
+
+        /// <summary>Precio que ves en la tienda (USD). Walmart, RockAuto y a veces Amazon no dejan leerlo desde el servidor.</summary>
+        [Range(0.01, 100000, ErrorMessage = "Escribe el precio en dólares, por ejemplo 38.50.")]
+        [Display(Name = "Precio en la tienda (USD)")]
+        public decimal? ManualPriceUsd { get; set; }
     }
 }

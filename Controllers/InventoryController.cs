@@ -15,12 +15,15 @@ public sealed class InventoryController : Controller
     private readonly AppDbContext _dbContext;
     private readonly IOrganizationContext _organizationContext;
     private readonly MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler _stockSync;
+    private readonly MarketplaceSync.Services.Inventory.InventoryLotService _lots;
 
     public InventoryController(
         AppDbContext dbContext,
         IOrganizationContext organizationContext,
-        MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler stockSync)
+        MarketplaceSync.Services.MercadoLibre.IStockSyncScheduler stockSync,
+        MarketplaceSync.Services.Inventory.InventoryLotService lots)
     {
+        _lots = lots;
         _dbContext = dbContext;
         _organizationContext = organizationContext;
         _stockSync = stockSync;
@@ -86,8 +89,13 @@ public sealed class InventoryController : Controller
             .Take(30)
             .ToListAsync(cancellationToken);
 
+        var expiring = await _lots.GetExpiringAsync(organizationId, MarketplaceSync.Services.Inventory.InventoryLotService.WarningDays, 100, cancellationToken);
+        var nextExpiry = await _lots.GetNextExpiryByVariantAsync(organizationId, variants.Select(v => v.Variant.Id).ToList(), cancellationToken);
+
         return View(new InventoryIndexViewModel
         {
+            ExpiringLots = expiring,
+            NextExpiryByVariant = nextExpiry,
             Variants = variants,
             RecentMovements = recentMovements,
             Search = search,
@@ -105,8 +113,16 @@ public sealed class InventoryController : Controller
         int variantId,
         int newStock,
         string? notes,
+        DateOnly? expiresOn,
+        string? lotCode,
         CancellationToken cancellationToken)
     {
+        if (MarketplaceSync.Services.Inventory.InventoryLotService.ValidateExpiry(expiresOn) is { } expiryError)
+        {
+            TempData["Error"] = expiryError;
+            return RedirectToAction(nameof(Index));
+        }
+
         if (newStock is < 0 or > 1_000_000)
         {
             TempData["Error"] = "El stock debe estar entre 0 y 1,000,000 unidades.";
@@ -132,6 +148,7 @@ public sealed class InventoryController : Controller
 
         variant.Stock = newStock;
         variant.UpdatedAt = DateTime.UtcNow;
+        await _lots.ApplyAsync(organizationId, variant.Id, adjustment, adjustment > 0 ? expiresOn : null, lotCode, "Ajuste", cancellationToken);
         _dbContext.InventoryMovements.Add(new InventoryMovement
         {
             OrganizationId = organizationId,
@@ -148,7 +165,54 @@ public sealed class InventoryController : Controller
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _stockSync.RequestPush(new[] { variant.ProductId });
-        TempData["Success"] = $"Stock de {variant.Sku} actualizado a {newStock} unidades. Se enviará a Mercado Libre en unos segundos.";
+        TempData["Success"] = $"Stock de {variant.Sku} actualizado a {newStock} unidades" +
+            (adjustment > 0 && expiresOn.HasValue ? $" (lote que caduca el {expiresOn.Value:dd/MM/yyyy})" : "") +
+            ". Se enviará a Mercado Libre en unos segundos.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>Da de baja las piezas que quedan de un lote (caducado o dañado): baja el stock y lo manda a Mercado Libre.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> WriteOffLot(long lotId, CancellationToken cancellationToken)
+    {
+        var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var lot = await _dbContext.InventoryLots
+            .Include(x => x.ProductVariant)
+            .SingleOrDefaultAsync(x => x.Id == lotId && x.OrganizationId == organizationId && x.WrittenOffAt == null, cancellationToken);
+        if (lot is null)
+            return NotFound();
+
+        var variant = lot.ProductVariant;
+        var units = Math.Min(lot.QuantityRemaining, Math.Max(0, variant.Stock));
+        lot.QuantityRemaining = 0;
+        lot.WrittenOffAt = DateTime.UtcNow;
+
+        if (units > 0)
+        {
+            variant.Stock -= units;
+            variant.UpdatedAt = DateTime.UtcNow;
+            _dbContext.InventoryMovements.Add(new InventoryMovement
+            {
+                OrganizationId = organizationId,
+                ProductVariantId = variant.Id,
+                Type = "ExpiredWriteOff",
+                QuantityDelta = -units,
+                StockAfter = variant.Stock,
+                ReferenceKey = $"lot-writeoff:{lot.Id}",
+                Notes = $"Baja de lote{(lot.LotCode is null ? "" : " " + lot.LotCode)} que caduca el {lot.ExpiresOn:dd/MM/yyyy}",
+                CreatedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier),
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (units > 0)
+            _stockSync.RequestPush(new[] { variant.ProductId });
+
+        TempData["Success"] = units > 0
+            ? $"Se dieron de baja {units} piezas de {variant.Sku}. El stock nuevo se enviará a Mercado Libre."
+            : $"Lote de {variant.Sku} cerrado (ya no tenía piezas).";
         return RedirectToAction(nameof(Index));
     }
 

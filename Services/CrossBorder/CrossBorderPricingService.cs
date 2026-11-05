@@ -136,6 +136,31 @@ public sealed class CrossBorderPricingService : ICrossBorderPricingService
             netProfitMxn >= settings.MinProfitAmountMxn);
     }
 
+    public KitSuggestion? SuggestKit(decimal landedCostMxn, decimal unitPriceMxn, CrossBorderSettings settings)
+    {
+        const decimal threshold = 299m;
+        if (unitPriceMxn <= 0 || unitPriceMxn >= threshold || landedCostMxn <= 0)
+            return null;
+
+        var quantity = (int)Math.Ceiling(threshold / unitPriceMxn);
+        if (quantity > 6)
+            return null; // un kit de más de 6 piezas ya no es razonable
+
+        // El kit se ofrece con un pequeño descuento (5%) para que sea atractivo, redondeado a pesos.
+        var kitPrice = Math.Max(threshold, Math.Ceiling(unitPriceMxn * quantity * 0.95m));
+        var single = CalculateProfitFromLandedCost(landedCostMxn, unitPriceMxn, settings);
+        var kit = CalculateProfitFromLandedCost(landedCostMxn * quantity, kitPrice, settings);
+        var kitPerUnit = Math.Round(kit.NetProfitMxn / quantity, 2);
+
+        return new KitSuggestion(
+            quantity,
+            kitPrice,
+            single.NetProfitMxn,
+            kit.NetProfitMxn,
+            kitPerUnit,
+            kit.NetProfitMxn > single.NetProfitMxn * quantity);
+    }
+
     public decimal LandedCostMxn(decimal sourceCost, string? currency, CrossBorderSettings settings)
     {
         if (string.Equals(currency, "MXN", StringComparison.OrdinalIgnoreCase))

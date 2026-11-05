@@ -106,6 +106,14 @@ else
                         @if (r.Status != "active") { <span class="text-danger">@(r.Status == "paused" ? "Pausada" : r.Status)</span> }
                         @if (!string.IsNullOrWhiteSpace(r.Permalink)) { <span><a href="@r.Permalink" target="_blank" rel="noopener noreferrer">Ver en ML ↗</a></span> }
                     </div>
+                    @if (r.Kit is { } kit)
+                    {
+                        <div class="pub-kit @(kit.KitIsBetter ? "is-better" : "")">
+                            Bajo $299: Mercado Libre cobra cargo fijo. Sola gana @Mxn(kit.UnitProfitMxn)/pza;
+                            en kit de @kit.Quantity a @Mxn(kit.KitPriceMxn) ganaría @Mxn(kit.KitProfitPerUnitMxn)/pza
+                            @(kit.KitIsBetter ? "— conviene el kit." : "— conviene venderla sola.")
+                        </div>
+                    }
                 </div>
 
                 <div class="text-end">

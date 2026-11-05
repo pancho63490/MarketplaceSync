@@ -71,6 +71,53 @@ namespace MarketplaceSync.Web.Migrations
                     b.ToTable("CrossBorderSettings");
                 });
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Inventory.InventoryLot", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateOnly>("ExpiresOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("LotCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ProductVariantId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("QuantityReceived")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("QuantityRemaining")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("WrittenOffAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "ExpiresOn");
+
+                    b.HasIndex("ProductVariantId", "ExpiresOn");
+
+                    b.ToTable("InventoryLots");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.Inventory.InventoryMovement", b =>
                 {
                     b.Property<long>("Id")
@@ -1298,6 +1345,25 @@ namespace MarketplaceSync.Web.Migrations
                         .IsRequired();
 
                     b.Navigation("Organization");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Inventory.InventoryLot", b =>
+                {
+                    b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MarketplaceSync.Web.Models.ProductVariant", "ProductVariant")
+                        .WithMany()
+                        .HasForeignKey("ProductVariantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Organization");
+
+                    b.Navigation("ProductVariant");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.Inventory.InventoryMovement", b =>
