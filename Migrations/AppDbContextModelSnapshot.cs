@@ -1197,6 +1197,9 @@ namespace MarketplaceSync.Web.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
 
+                    b.Property<bool>("HasReturn")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
 
@@ -1228,6 +1231,9 @@ namespace MarketplaceSync.Web.Migrations
 
                     b.Property<DateTime?>("ReturnRestockedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ReturnUnits")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("SalesOrderId")
                         .HasColumnType("integer");

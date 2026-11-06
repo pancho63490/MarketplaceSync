@@ -139,6 +139,8 @@ builder.Services.AddScoped<MarketplaceSync.Services.Metrics.MetricsService>();
 builder.Services.AddScoped<MarketplaceSync.Services.Navigation.NavBadgeService>();
 builder.Services.AddScoped<MarketplaceSync.Services.Agents.ImportAgentService>();
 builder.Services.AddScoped<MarketplaceSync.Services.PostSale.PostSaleService>();
+builder.Services.AddScoped<MarketplaceSync.Services.PostSale.BuyerBlacklistService>();
+builder.Services.AddScoped<MarketplaceSync.Services.PostSale.ReturnRestockService>();
 builder.Services.AddScoped<MarketplaceSync.Services.MarketInsights.CompetitorService>();
 builder.Services.AddScoped<MarketplaceSync.Services.Shipping.ShippingLabelService>();
 builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.IMercadoLibreListingSyncService, MarketplaceSync.Services.MercadoLibre.MercadoLibreListingSyncService>();

@@ -1,0 +1,51 @@
+@model MarketplaceSync.Web.ViewModels.Orders.BlockBuyerPartial
+@using MarketplaceSync.Services.PostSale
+@{
+    var who = Model.Nickname ?? "este comprador";
+}
+
+<section class="panel bb-panel" aria-labelledby="bb-title">
+    <div class="panel-head"><h2 id="bb-title">@Html.Icon("ban") Lista negra</h2></div>
+    <div class="panel-body">
+        @if (Model.Blocked is { } b)
+        {
+            <p class="mb-1"><strong>@who</strong> está bloqueado@(b.BlocksOrders && b.BlocksQuestions ? " para comprarte y preguntarte" : b.BlocksOrders ? " para comprarte" : " para preguntarte").</p>
+            @if (!string.IsNullOrWhiteSpace(b.Reason)) { <p class="small text-muted mb-2">Motivo: @b.Reason · desde el @b.CreatedAt.AddHours(-7).ToString("dd/MM/yyyy")</p> }
+            <form asp-controller="PostSale" asp-action="Unblock" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@b.Id" />
+                @if (Model.ClaimId is null) { <input type="hidden" name="orderId" value="@Model.OrderId" /> }
+                <button type="submit" class="btn btn-outline-secondary btn-sm">Desbloquear</button>
+            </form>
+        }
+        else
+        {
+            <p class="small text-muted mb-2">
+                ¿Problemas con @who? Bloquéalo para que no vuelva a comprarte ni a preguntarte. Este pedido no se cancela.
+                @if (Model.Orders > 1) { <span>Te ha comprado @Model.Orders veces.</span> }
+            </p>
+            <details class="bb-details">
+                <summary class="btn btn-outline-danger btn-sm">Bloquear comprador</summary>
+                <form asp-controller="PostSale" asp-action="Block" method="post" class="bb-form">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="orderId" value="@Model.OrderId" />
+                    @if (Model.ClaimId is { } cid) { <input type="hidden" name="claimId" value="@cid" /> }
+                    <label for="bbReason" class="form-label small mb-1">Motivo (solo lo ves tú)</label>
+                    <input id="bbReason" name="reason" class="form-control form-control-sm" list="bbReasons" maxlength="300" placeholder="Ej. reclamo injusto" />
+                    <datalist id="bbReasons">
+                        @foreach (var r in BuyerBlacklistService.Reasons) { <option value="@r"></option> }
+                    </datalist>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" id="bbOrders" name="orders" value="true" checked />
+                        <label class="form-check-label small" for="bbOrders">Que no pueda comprarme</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="bbQuestions" name="questions" value="true" checked />
+                        <label class="form-check-label small" for="bbQuestions">Que no pueda preguntarme</label>
+                    </div>
+                    <button type="submit" class="btn btn-danger btn-sm mt-2">Bloquear a @who</button>
+                </form>
+            </details>
+        }
+    </div>
+</section>

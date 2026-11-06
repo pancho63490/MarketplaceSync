@@ -231,6 +231,9 @@ public sealed class PostSaleService
         claim.ReasonId = Str(c, "reason_id") ?? claim.ReasonId;
         claim.DateCreated = Date(c, "date_created") ?? (claim.DateCreated == default ? DateTime.UtcNow : claim.DateCreated);
         claim.LastUpdated = Date(c, "last_updated") ?? DateTime.UtcNow;
+        if (c.TryGetProperty("related_entities", out var rel) && rel.ValueKind == JsonValueKind.Array &&
+            rel.EnumerateArray().Any(x => x.ValueKind == JsonValueKind.String && x.GetString() == "return"))
+            claim.HasReturn = true;
         if (c.TryGetProperty("resolution", out var res) && res.ValueKind == JsonValueKind.Object)
             claim.Resolution = Str(res, "reason") ?? Str(res, "benefited");
 

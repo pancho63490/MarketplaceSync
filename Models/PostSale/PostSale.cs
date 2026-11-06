@@ -83,6 +83,12 @@ public sealed class OrderClaim
     [MaxLength(30)]
     public string? ReturnCondition { get; set; }
 
+    /// <summary>Mercado Libre indica que el reclamo trae devolución física (related_entities contiene "return").</summary>
+    public bool HasReturn { get; set; }
+
+    /// <summary>Piezas que regresaron al stock (0 si llegó dañada).</summary>
+    public int ReturnUnits { get; set; }
+
     public bool IsOpen => Status == "opened";
 
     /// <summary>Motivo en palabras simples, por el prefijo del reason_id de Mercado Libre.</summary>

@@ -153,7 +153,7 @@
             <div class="panel-body">
                 <dl class="facts od-facts">
                     <div><dt>Cobrado</dt><dd>@o.PaidAmount.ToString("C0", mx)</dd></div>
-                    <div><dt>Comprador</dt><dd>@(o.BuyerNickname ?? "—")</dd></div>
+                    <div><dt>Comprador</dt><dd>@(o.BuyerNickname ?? "—")@if (Model.Blocked is not null) { <span class="pill pill-bad ms-1">Bloqueado</span> }</dd></div>
                     @if (o.Items.Any(i => i.SaleFee.HasValue))
                     {
                         <div><dt>Comisión de ML</dt><dd>@o.Items.Sum(i => (i.SaleFee ?? 0) * i.Quantity).ToString("C0", mx)</dd></div>
@@ -162,6 +162,10 @@
                 </dl>
             </div>
         </section>
+        @if (!string.IsNullOrWhiteSpace(o.BuyerId))
+        {
+            <partial name="_BlockBuyer" model="@(new MarketplaceSync.Web.ViewModels.Orders.BlockBuyerPartial(o.Id, o.BuyerNickname, Model.Blocked, Model.BuyerOrders, null))" />
+        }
         @if (Model.Claims.Any(c => !c.IsOpen))
         {
             <section class="panel" aria-labelledby="od-claims">

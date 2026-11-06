@@ -205,7 +205,11 @@ public sealed class OrdersController : Controller
             Order = order,
             Messages = messages,
             MessagesError = messagesError,
-            Claims = claims
+            Claims = claims,
+            Blocked = await HttpContext.RequestServices.GetRequiredService<MarketplaceSync.Services.PostSale.BuyerBlacklistService>()
+                .FindAsync(organizationId, order.MarketplaceAccountId, order.BuyerId, cancellationToken),
+            BuyerOrders = string.IsNullOrWhiteSpace(order.BuyerId) ? 0 : await _dbContext.SalesOrders.CountAsync(
+                x => x.OrganizationId == organizationId && x.MarketplaceAccountId == order.MarketplaceAccountId && x.BuyerId == order.BuyerId, cancellationToken)
         });
     }
 

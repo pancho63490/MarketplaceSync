@@ -50,7 +50,15 @@ public sealed class InventoryService : IInventoryService
         var currentDeltasByVariant = await _dbContext.InventoryMovements
             .AsNoTracking()
             .Where(x => x.SalesOrderId == order.Id &&
-                        (x.Type == "OrderSale" || x.Type == "OrderReversal"))
+                        (x.Type == "OrderSale" || x.Type == "OrderReversal" || x.Type == "ReturnRestock"))
+            .GroupBy(x => x.ProductVariantId)
+            .Select(group => new { VariantId = group.Key, Delta = group.Sum(x => x.QuantityDelta) })
+            .ToDictionaryAsync(x => x.VariantId, x => x.Delta, cancellationToken);
+        // Devoluciones ya registradas (la pieza regresó): un pedido pagado con devolución queda en -cantidad + devuelto,
+        // y si después se cancela solo se regresa lo que faltaba.
+        var returnedByVariant = await _dbContext.InventoryMovements
+            .AsNoTracking()
+            .Where(x => x.SalesOrderId == order.Id && x.Type == "ReturnRestock")
             .GroupBy(x => x.ProductVariantId)
             .Select(group => new { VariantId = group.Key, Delta = group.Sum(x => x.QuantityDelta) })
             .ToDictionaryAsync(x => x.VariantId, x => x.Delta, cancellationToken);
@@ -75,7 +83,7 @@ public sealed class InventoryService : IInventoryService
                 continue;
             }
 
-            targetDeltasByVariant[variant.Id] = paid ? -orderedQuantity : 0;
+            targetDeltasByVariant[variant.Id] = paid ? -orderedQuantity + returnedByVariant.GetValueOrDefault(variant.Id) : 0;
         }
 
         foreach (var existingVariantId in existingVariantIds)

@@ -1593,3 +1593,20 @@ a.cp-item-title:hover { color: var(--denim); }
 .order-cards li.has-pick .order-card { padding-left: 2.6rem; }
 .order-pick { width: 20px; height: 20px; }
 .order-cards .order-pick { position: absolute; left: .9rem; top: 1rem; z-index: 1; }
+
+/* ── Lista negra ── */
+.bb-details > summary { list-style: none; display: inline-block; }
+.bb-details > summary::-webkit-details-marker { display: none; }
+.bb-details[open] > summary { display: none; }
+.bb-form { margin-top: .25rem; }
+.ps-list li.bb-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: .85rem 1rem; }
+.bb-row .ps-row-side { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.bb-row .ps-row-main { flex: 1 1 240px; }
+.bb-row .ps-row-title { white-space: normal; }
+@media (max-width: 575.98px) { .bb-row .ps-row-side { width: 100%; } .bb-row .ps-row-side form { margin-left: auto; } }
+
+/* ── Devoluciones ── */
+.rt-panel.is-pending { border-left: 4px solid var(--warn); }
+.rt-lines { list-style: none; padding: 0; margin: 0 0 .75rem; display: grid; gap: .4rem; }
+.rt-lines li { display: grid; gap: .1rem; padding: .5rem .65rem; background: var(--paper); border-radius: 8px; }
+.rt-form fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: .35rem; }

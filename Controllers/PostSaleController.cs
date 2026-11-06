@@ -16,6 +16,8 @@ public sealed class PostSaleIndexViewModel
     public IReadOnlyList<OrderClaim> ClosedClaims { get; init; } = Array.Empty<OrderClaim>();
     public IReadOnlyDictionary<int, string> OrderTitles { get; init; } = new Dictionary<int, string>();
     public bool HasAccounts { get; init; }
+    public IReadOnlyList<BlockedBuyerRow> Blocked { get; init; } = Array.Empty<BlockedBuyerRow>();
+    public IReadOnlyList<OrderClaim> PendingReturns { get; init; } = Array.Empty<OrderClaim>();
 }
 
 public sealed class ClaimDetailViewModel
@@ -24,6 +26,9 @@ public sealed class ClaimDetailViewModel
     public IReadOnlyList<ClaimMessage> Messages { get; init; } = Array.Empty<ClaimMessage>();
     public string? Error { get; init; }
     public string? OrderTitle { get; init; }
+    public BlockedBuyer? Blocked { get; init; }
+    public string? BuyerNickname { get; init; }
+    public IReadOnlyList<ReturnLine> ReturnLines { get; init; } = Array.Empty<ReturnLine>();
 }
 
 /// <summary>Postventa: mensajes sin responder y reclamos, sin entrar a Mercado Libre.</summary>
@@ -34,9 +39,14 @@ public sealed class PostSaleController : Controller
     private readonly AppDbContext _context;
     private readonly IOrganizationContext _organizationContext;
     private readonly ILogger<PostSaleController> _logger;
+    private readonly BuyerBlacklistService _blacklist;
+    private readonly ReturnRestockService _returns;
 
-    public PostSaleController(PostSaleService postSale, AppDbContext context, IOrganizationContext organizationContext, ILogger<PostSaleController> logger)
+    public PostSaleController(PostSaleService postSale, AppDbContext context, IOrganizationContext organizationContext, ILogger<PostSaleController> logger,
+        BuyerBlacklistService blacklist, ReturnRestockService returns)
     {
+        _returns = returns;
+        _blacklist = blacklist;
         _postSale = postSale;
         _context = context;
         _organizationContext = organizationContext;
@@ -65,7 +75,11 @@ public sealed class PostSaleController : Controller
 
         return View(new PostSaleIndexViewModel
         {
-            Tab = tab == "claims" || (tab is null && pending.Count == 0 && open.Count > 0) ? "claims" : "messages",
+            Tab = tab == "blocked" ? "blocked" : tab == "claims" || (tab is null && pending.Count == 0 && open.Count > 0) ? "claims" : "messages",
+            Blocked = await _blacklist.ListAsync(org, cancellationToken),
+            PendingReturns = await _context.OrderClaims.AsNoTracking()
+                .Where(c => c.OrganizationId == org && c.HasReturn && c.ReturnRestockedAt == null)
+                .OrderByDescending(c => c.LastUpdated).Take(30).ToListAsync(cancellationToken),
             Pending = pending,
             OpenClaims = open,
             ClosedClaims = closed,
@@ -137,7 +151,15 @@ public sealed class PostSaleController : Controller
         var title = claim.SalesOrderId is { } orderId
             ? await _context.SalesOrderItems.AsNoTracking().Where(i => i.SalesOrderId == orderId).Select(i => i.Title).FirstOrDefaultAsync(cancellationToken)
             : null;
-        return View(new ClaimDetailViewModel { Claim = claim, Messages = messages, Error = error, OrderTitle = title });
+        var order = claim.SalesOrderId is { } oid2
+            ? await _context.SalesOrders.AsNoTracking().Where(o => o.Id == oid2).Select(o => new { o.BuyerId, o.BuyerNickname, o.MarketplaceAccountId }).FirstOrDefaultAsync(cancellationToken)
+            : null;
+        return View(new ClaimDetailViewModel
+        {
+            Claim = claim, Messages = messages, Error = error, OrderTitle = title, BuyerNickname = order?.BuyerNickname,
+            Blocked = order is null ? null : await _blacklist.FindAsync(org, order.MarketplaceAccountId, order.BuyerId, cancellationToken),
+            ReturnLines = await _returns.GetLinesAsync(org, claim, cancellationToken)
+        });
     }
 
     [HttpPost]
@@ -165,6 +187,89 @@ public sealed class PostSaleController : Controller
             _logger.LogWarning(exception, "Sending claim message failed for claim {Claim}.", id);
             TempData["Error"] = "Mercado Libre no respondió; tu mensaje no se envió. Intenta de nuevo.";
             TempData["DraftMessage"] = text;
+        }
+        return RedirectToAction(nameof(Claim), new { id });
+    }
+
+    // ── Lista negra ──
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Block(int orderId, string? reason, bool orders, bool questions, long? claimId, CancellationToken cancellationToken)
+    {
+        var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        try
+        {
+            var error = await _blacklist.BlockOrderBuyerAsync(org, orderId, reason, orders, questions, cancellationToken);
+            if (error is null)
+                TempData["Success"] = orders && questions ? "Comprador bloqueado: ya no puede comprarte ni preguntarte."
+                    : orders ? "Comprador bloqueado: ya no puede comprarte." : "Comprador bloqueado: ya no puede preguntarte.";
+            else
+                TempData["Error"] = error;
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(exception, "Blocking buyer failed for order {Order}.", orderId);
+            TempData["Error"] = "Mercado Libre no respondió; el comprador no se bloqueó. Intenta de nuevo.";
+        }
+        return claimId is { } c ? RedirectToAction(nameof(Claim), new { id = c }) : RedirectToAction("Details", "Orders", new { id = orderId });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Unblock(long id, int? orderId, CancellationToken cancellationToken)
+    {
+        var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        try
+        {
+            var error = await _blacklist.UnblockAsync(org, id, cancellationToken);
+            if (error is null) TempData["Success"] = "Desbloqueado: ya puede comprarte y preguntarte otra vez.";
+            else TempData["Error"] = error;
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(exception, "Unblocking failed {Id}.", id);
+            TempData["Error"] = "Mercado Libre no respondió; sigue bloqueado. Intenta de nuevo.";
+        }
+        return orderId is { } o ? RedirectToAction("Details", "Orders", new { id = o }) : RedirectToAction(nameof(Index), new { tab = "blocked" });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ImportBlocked(CancellationToken cancellationToken)
+    {
+        var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var added = await _blacklist.ImportFromMercadoLibreAsync(org, cancellationToken);
+        TempData["Success"] = added == 0 ? "No encontré bloqueados nuevos en Mercado Libre."
+            : $"Traje {added} {(added == 1 ? "bloqueado" : "bloqueados")} de Mercado Libre.";
+        return RedirectToAction(nameof(Index), new { tab = "blocked" });
+    }
+
+    // ── Devoluciones ──
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Restock(long id, string? condition, CancellationToken cancellationToken)
+    {
+        var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        try
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var (message, error) = await _returns.RestockAsync(org, id, condition ?? string.Empty, userId, cancellationToken);
+            if (error is null) TempData["Success"] = message;
+            else TempData["Error"] = error;
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
         }
         return RedirectToAction(nameof(Claim), new { id });
     }

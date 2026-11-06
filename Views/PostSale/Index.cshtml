@@ -42,6 +42,7 @@
 <nav class="pl-chips mb-3" aria-label="Ver">
     <a class="pub-chip @(Model.Tab == "messages" ? "active" : "")" asp-action="Index" asp-route-tab="messages">Mensajes sin responder <span>@Model.Pending.Count</span></a>
     <a class="pub-chip @(Model.OpenClaims.Count > 0 ? "is-bad" : "") @(Model.Tab == "claims" ? "active" : "")" asp-action="Index" asp-route-tab="claims">Reclamos abiertos <span>@Model.OpenClaims.Count</span></a>
+    <a class="pub-chip @(Model.Tab == "blocked" ? "active" : "")" asp-action="Index" asp-route-tab="blocked">Bloqueados <span>@Model.Blocked.Count</span></a>
 </nav>
 
 @if (Model.Tab == "messages")
@@ -77,7 +78,7 @@
         </ul>
     }
 }
-else
+else if (Model.Tab == "claims")
 {
     if (Model.OpenClaims.Count == 0)
     {
@@ -112,6 +113,26 @@ else
         </ul>
     }
 
+    if (Model.PendingReturns.Count > 0)
+    {
+        <h2 class="today-section-title mt-4">@Html.Icon("package-open") Devoluciones por recibir</h2>
+        <p class="small text-muted mb-2">Cuando te llegue la pieza, ábrela y pulsa “Registrar devolución” para que vuelva a tu stock.</p>
+        <ul class="ps-list panel">
+            @foreach (var c in Model.PendingReturns)
+            {
+                <li>
+                    <a class="ps-row" asp-action="Claim" asp-route-id="@c.Id">
+                        <span class="ps-row-main">
+                            <span class="ps-row-title">@c.ReasonLabel</span>
+                            <span class="ps-row-text">Pedido @c.ResourceId · @(c.IsOpen ? "reclamo abierto" : "reclamo cerrado") · @Local(c.LastUpdated, "dd/MM")</span>
+                        </span>
+                        <span class="ps-row-side"><span class="ps-row-action">Registrar @Html.Icon("chevron-right", "icon-xs")</span></span>
+                    </a>
+                </li>
+            }
+        </ul>
+    }
+
     if (Model.ClosedClaims.Count > 0)
     {
         <h2 class="today-section-title mt-4">Cerrados recientemente</h2>
@@ -125,6 +146,54 @@ else
                             <span class="ps-row-text">Pedido @c.ResourceId · @(c.Resolution ?? "cerrado") · @Local(c.LastUpdated, "dd/MM")</span>
                         </span>
                     </a>
+                </li>
+            }
+        </ul>
+    }
+}
+else
+{
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+        <p class="text-muted small mb-0">Compradores que no pueden comprarte ni preguntarte. Se bloquean desde el pedido o el reclamo.</p>
+        <form asp-action="ImportBlocked" method="post">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-outline-secondary btn-sm" disabled="@(!Model.HasAccounts)">@Html.Icon("download") Traer los que bloqueé en Mercado Libre</button>
+        </form>
+    </div>
+    if (Model.Blocked.Count == 0)
+    {
+        <div class="today-clear">
+            <span class="today-clear-mark" aria-hidden="true">✓</span>
+            <div>
+                <div class="fw-bold">No tienes compradores bloqueados</div>
+                <div class="text-muted small">Si alguien abusa (reclamos injustos, compra y cancela, pide pagos por fuera), ábrelo en Pedidos y pulsa “Bloquear comprador”.</div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <ul class="ps-list panel">
+            @foreach (var row in Model.Blocked)
+            {
+                var b = row.Buyer;
+                <li class="bb-row">
+                    <span class="ps-row-main">
+                        <span class="ps-row-title">@(b.Nickname ?? "Comprador " + b.BuyerId)</span>
+                        <span class="ps-row-text">
+                            @(b.Reason ?? "Sin motivo") · desde el @Local(b.CreatedAt, "dd/MM/yyyy")
+                            @if (row.Orders > 0) { <text> · @row.Orders @(row.Orders == 1 ? "pedido" : "pedidos")</text> }
+                            @if (row.Claims > 0) { <text> · @row.Claims @(row.Claims == 1 ? "reclamo" : "reclamos")</text> }
+                        </span>
+                    </span>
+                    <span class="ps-row-side">
+                        @if (b.BlocksOrders) { <span class="pill pill-bad">No compra</span> }
+                        @if (b.BlocksQuestions) { <span class="pill pill-warn">No pregunta</span> }
+                        <form asp-action="Unblock" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@b.Id" />
+                            <button type="submit" class="btn btn-link btn-sm px-0">Desbloquear</button>
+                        </form>
+                    </span>
                 </li>
             }
         </ul>

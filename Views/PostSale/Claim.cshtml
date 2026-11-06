@@ -109,6 +109,54 @@
                 }
             </div>
         </section>
+        @if (c.SalesOrderId is not null && Model.ReturnLines.Count > 0)
+        {
+            <section class="panel rt-panel @(c.HasReturn && c.ReturnRestockedAt is null ? "is-pending" : "")" aria-labelledby="rt-title">
+                <div class="panel-head"><h2 id="rt-title">@Html.Icon("package-open") Devolución</h2></div>
+                <div class="panel-body">
+                    @if (c.ReturnRestockedAt is { } back)
+                    {
+                        <p class="mb-1"><span class="pill @(c.ReturnCondition == "good" ? "pill-ok" : "pill-warn")">@Html.Icon("check", "icon-xs") Recibida el @Local(back, "dd/MM")</span></p>
+                        <p class="small text-muted mb-0">La pieza @ReturnRestockService.ConditionLabel(c.ReturnCondition)@(c.ReturnUnits > 0 ? $" ({c.ReturnUnits} {(c.ReturnUnits == 1 ? "pieza" : "piezas")})" : "").</p>
+                    }
+                    else
+                    {
+                        <p class="small text-muted mb-2">@(c.HasReturn ? "El comprador va a regresar la pieza." : "¿Te regresaron la pieza?") Cuando la tengas en la mano, regístrala para que vuelva a tu stock.</p>
+                        <ul class="rt-lines">
+                            @foreach (var line in Model.ReturnLines)
+                            {
+                                <li>
+                                    <span><strong>@line.Quantity×</strong> @(line.Title ?? "Pieza")</span>
+                                    <span class="small text-muted">
+                                        @if (line.VariantId is null) { <text>Sin SKU en tu inventario: súmala a mano</text> }
+                                        else if (line.AlreadyBack) { <text>Ya regresó al stock (pedido cancelado)</text> }
+                                        else { <text>SKU @line.Sku · stock actual @line.Stock</text> }
+                                    </span>
+                                </li>
+                            }
+                        </ul>
+                        <form asp-action="Restock" asp-route-id="@c.Id" method="post" class="rt-form">
+                            @Html.AntiForgeryToken()
+                            <fieldset>
+                                <legend class="small fw-bold mb-1">¿Cómo llegó?</legend>
+                                @foreach (var (id, label, help) in ReturnRestockService.Conditions)
+                                {
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="condition" id="rt-@id" value="@id" required checked="@(id == "good")" />
+                                        <label class="form-check-label small" for="rt-@id"><strong>@label</strong><span class="d-block text-muted">@help</span></label>
+                                    </div>
+                                }
+                            </fieldset>
+                            <button type="submit" class="btn btn-primary btn-sm mt-2">@Html.Icon("undo-2") Registrar devolución</button>
+                        </form>
+                    }
+                </div>
+            </section>
+        }
+        @if (c.SalesOrderId is { } blockOrderId)
+        {
+            <partial name="~/Views/Orders/_BlockBuyer.cshtml" model="@(new MarketplaceSync.Web.ViewModels.Orders.BlockBuyerPartial(blockOrderId, Model.BuyerNickname, Model.Blocked, 0, c.Id))" />
+        }
     </aside>
 </div>
 
