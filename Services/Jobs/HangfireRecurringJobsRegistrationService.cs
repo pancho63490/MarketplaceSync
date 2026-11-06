@@ -58,7 +58,7 @@ public sealed class HangfireRecurringJobsRegistrationService : BackgroundService
                     job => job.DiscoverCategories(),
                     "20 12 * * *");
 
-                // Preparar con IA los mejores del Radar, ya recalculado
+                // Agente de importación: revisa con IA el Radar ya recalculado e importa lo que vale la pena (6:15 en Juárez)
                 _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
                     "prepare-top-candidates",
                     job => job.PrepareTopCandidates(),

@@ -412,4 +412,20 @@ public sealed partial class TelegramNotificationService
             await LogAsync(org, key, NotificationKind.Reputation, null, settings.TelegramChatId, messageId, cancellationToken);
         }
     }
+
+    /// <summary>Escapa texto para mensajes HTML de Telegram (solo &amp; &lt; &gt;, conserva acentos).</summary>
+    public static string Escape(string? text) => E(text);
+
+    /// <summary>Manda un reporte (agente, tareas automáticas) al chat vinculado, con un botón a la app si hay URL pública.</summary>
+    public async Task SendReportAsync(Guid organizationId, string html, string buttonText, string path, CancellationToken cancellationToken = default)
+    {
+        var settings = await _context.NotificationSettings.AsNoTracking().FirstOrDefaultAsync(x => x.OrganizationId == organizationId, cancellationToken);
+        var token = settings is null ? null : TokenFor(settings);
+        if (settings?.TelegramChatId is not { } chatId || token is null)
+            return;
+        var buttons = settings.PublicBaseUrl is null
+            ? null
+            : new List<IReadOnlyList<TelegramButton>> { new[] { new TelegramButton(buttonText, Url: AppUrl(settings, path)) } };
+        await _telegram.SendMessageAsync(token, chatId, html, buttons, cancellationToken: cancellationToken);
+    }
 }

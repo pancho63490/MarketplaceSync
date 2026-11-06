@@ -1478,3 +1478,21 @@ a.mt-prod-title:hover { color: var(--denim); }
 .today-sales-vs.is-up { color: var(--ok); font-weight: 600; }
 .today-sales-vs.is-down { color: var(--bad); font-weight: 600; }
 .today-sales-link { margin-left: auto; color: var(--denim); font-weight: 600; display: inline-flex; align-items: center; gap: .15rem; }
+
+/* ── Agente de importación ── */
+.ag-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.ag-runs { list-style: none; margin: 0; padding: 0; }
+.ag-run { padding: 1rem 1.25rem; border-top: 1px solid var(--line); }
+.ag-run:first-child { border-top: 0; }
+.ag-run-head { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .65rem; }
+.ag-run-counts { margin-left: auto; display: inline-flex; gap: .75rem; font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: var(--num); }
+.ag-summary { margin: .5rem 0 .6rem; color: var(--ink-2); }
+.ag-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.ag-step { display: flex; gap: .6rem; align-items: flex-start; font-size: var(--fs-sm); }
+.ag-step-mark { flex: 0 0 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; background: var(--paper-2); color: var(--muted); }
+.ag-step.is-imported .ag-step-mark { background: var(--ok-soft); color: var(--ok); }
+.ag-step.is-discarded .ag-step-mark { background: var(--bad-soft); color: var(--bad); }
+.ag-step-title { display: block; font-weight: 600; color: var(--ink); }
+.ag-step-reason { display: block; color: var(--muted); }
+.ag-rules { padding-left: 1.1rem; font-size: var(--fs-sm); color: var(--ink-2); display: grid; gap: .3rem; }
+@media (max-width: 991.98px) { .ag-grid { grid-template-columns: minmax(0, 1fr); } }

@@ -77,5 +77,11 @@ public class CrossBorderSettings
     /// <summary>Al marcar una compra como recibida, publicar el producto si ya está completo.</summary>
     public bool PublishOnReceipt { get; set; } = true;
 
+    /// <summary>
+    /// El agente de importación revisa cada día los candidatos del Radar con IA (que coincida la pieza,
+    /// que no esté repetida, que el margen aguante) e importa los que valen la pena, hasta AutoPrepareWeekly por semana.
+    /// </summary>
+    public bool ImportAgentEnabled { get; set; } = true;
+
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

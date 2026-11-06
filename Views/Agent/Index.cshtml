@@ -1,0 +1,160 @@
+@model MarketplaceSync.Web.Controllers.AgentIndexViewModel
+@using MarketplaceSync.Web.Models.Agents
+
+@{
+    ViewData["Title"] = "Agente de importación";
+    var left = Math.Max(0, Model.Weekly - Model.ImportedThisWeek);
+    string When(DateTime utc)
+    {
+        var local = utc.AddHours(-7);
+        var today = DateTime.UtcNow.AddHours(-7).Date;
+        return (local.Date == today ? "Hoy" : local.Date == today.AddDays(-1) ? "Ayer" : local.ToString("dd/MM")) + " " + local.ToString("HH:mm");
+    }
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Agente de importación</h1>
+        <p>Cada mañana revisa lo que conviene comprar, comprueba que la oferta de la tienda sea la misma pieza que se vende en Mercado Libre y que no la tengas ya, e importa lo que vale la pena. Tú solo compras.</p>
+    </div>
+    <div class="page-head-actions">
+        <form asp-action="RunNow" method="post" id="runForm">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-primary" id="runButton" disabled="@(Model.Running || Model.Candidates == 0)">@Html.Icon("bot") @(Model.Running ? "Trabajando…" : "Ejecutar ahora")</button>
+        </form>
+    </div>
+</header>
+
+@if (!Model.AiConfigured)
+{
+    <div class="alert alert-warning d-flex gap-2 align-items-start">
+        @Html.Icon("triangle-alert")
+        <span>La IA no está configurada: sin ella el agente solo toma los de más demanda y ganancia, sin revisar que la pieza coincida. Agrega <code>Anthropic__ApiKey</code> en Render.</span>
+    </div>
+}
+
+<dl class="stats">
+    <div class="stat"><dt>Por revisar en el Radar</dt><dd>@Model.Candidates</dd></div>
+    <div class="stat"><dt>Importados esta semana</dt><dd>@Model.ImportedThisWeek <small>de @Model.Weekly</small></dd></div>
+    <div class="stat @(Model.Enabled ? "is-ok" : "")"><dt>Estado</dt><dd>@(Model.Enabled ? "Encendido" : "Apagado")</dd></div>
+    <div class="stat"><dt>Próxima vuelta</dt><dd>@(Model.Enabled ? "6:15 a. m." : "—")</dd></div>
+</dl>
+
+<div class="ag-grid">
+    <section class="panel" aria-labelledby="ag-runs">
+        <div class="panel-head">
+            <h2 id="ag-runs">Lo que hizo</h2>
+            <p>Cada decisión con su razón. Lo importado queda preparado en Productos y se publica solo al recibir la mercancía.</p>
+        </div>
+        @if (Model.Runs.Count == 0)
+        {
+            <div class="panel-body">
+                <div class="today-clear">
+                    @Html.Icon("bot", "icon-lg")
+                    <div>
+                        <div class="fw-bold">Todavía no ha trabajado</div>
+                        <div class="text-muted small">
+                            @(Model.Candidates == 0
+                                ? "Primero necesita candidatos: elige categorías en Categorías a vigilar y deja que el Radar busque."
+                                : "Pulsa “Ejecutar ahora” o espera a mañana a las 6:15.")
+                        </div>
+                    </div>
+                    @if (Model.Candidates == 0)
+                    {
+                        <a asp-controller="WatchedCategories" asp-action="Index" class="btn btn-outline-secondary btn-sm ms-auto">Elegir categorías</a>
+                    }
+                </div>
+            </div>
+        }
+        <ol class="ag-runs">
+            @foreach (var run in Model.Runs)
+            {
+                var (label, tone) = run.Status switch
+                {
+                    AgentRunStatus.Running => ("Trabajando", "pill-info"),
+                    AgentRunStatus.Done => ("Terminó", "pill-ok"),
+                    AgentRunStatus.Skipped => ("No hizo nada", ""),
+                    _ => ("Se detuvo", "pill-bad")
+                };
+                <li class="ag-run">
+                    <div class="ag-run-head">
+                        <strong>@When(run.StartedAt)</strong>
+                        <span class="pill @tone">@label</span>
+                        <span class="text-muted small">@(run.Trigger == "manual" ? "a mano" : "automático")@(run.Engine == "rules" ? " · sin IA" : "")</span>
+                        <span class="ag-run-counts">
+                            @if (run.Reviewed > 0) { <span>@run.Reviewed revisados</span> }
+                            <span class="text-success">@run.Imported importados</span>
+                            <span>@run.Discarded descartados</span>
+                        </span>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(run.Summary)) { <p class="ag-summary">@run.Summary</p> }
+                    @if (!string.IsNullOrWhiteSpace(run.Error)) { <p class="small text-danger mb-2">@run.Error</p> }
+                    @if (run.Steps.Count > 0)
+                    {
+                        <ul class="ag-steps">
+                            @foreach (var step in run.Steps.OrderBy(s => s.Id))
+                            {
+                                <li class="ag-step is-@step.Action">
+                                    <span class="ag-step-mark" aria-hidden="true">@(step.Action == "imported" ? "✓" : "✕")</span>
+                                    <span class="min-w-0">
+                                        @if (step.ProductId is { } pid)
+                                        {
+                                            <a asp-controller="Products" asp-action="Details" asp-route-id="@pid" class="ag-step-title">@step.Title</a>
+                                        }
+                                        else
+                                        {
+                                            <span class="ag-step-title">@step.Title</span>
+                                        }
+                                        <span class="ag-step-reason"><span class="visually-hidden">@(step.Action == "imported" ? "Importado: " : "Descartado: ")</span>@step.Reason</span>
+                                    </span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </li>
+            }
+        </ol>
+    </section>
+
+    <aside class="panel" aria-labelledby="ag-config">
+        <div class="panel-head"><h2 id="ag-config">Configuración</h2></div>
+        <div class="panel-body">
+            <form asp-action="SaveSettings" method="post" class="d-grid gap-3">
+                @Html.AntiForgeryToken()
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="enabled" name="enabled" value="true" checked="@Model.Enabled" />
+                    <input type="hidden" name="enabled" value="false" />
+                    <label class="form-check-label" for="enabled"><strong>Trabajar cada mañana</strong><span class="d-block text-muted small">A las 6:15, después de que el Radar busca precios.</span></label>
+                </div>
+                <div>
+                    <label for="weekly" class="form-label">Máximo de productos por semana</label>
+                    <input id="weekly" name="weekly" type="number" min="0" max="50" value="@Model.Weekly" class="form-control" style="max-width: 120px" />
+                    <div class="form-text">Te quedan @left esta semana. Cada uno usa IA para prepararse; pon los que de verdad vas a comprar.</div>
+                </div>
+                <button type="submit" class="btn btn-outline-secondary align-self-start">Guardar</button>
+            </form>
+            <hr />
+            <h3 class="h6 fw-bold">Qué revisa antes de importar</h3>
+            <ul class="ag-rules">
+                <li>Que la oferta de la tienda sea la misma pieza: número de parte, marca, cantidad y condición nueva.</li>
+                <li>Que la compatibilidad (modelo, años, motor, lado) no se contradiga.</li>
+                <li>Que no la tengas ya en tu catálogo.</li>
+                <li>Que deje al menos tu ganancia mínima de <a asp-controller="CrossBorder" asp-action="Index">Costos de cruce</a>.</li>
+                <li>Que no sea réplica ni algo que no se puede cruzar (baterías de litio sueltas, inflamables, medicinas).</li>
+            </ul>
+            <p class="small text-muted mb-0">Lo que duda, lo deja en <a asp-controller="Purchasing" asp-action="Index">Qué comprar</a> para que tú decidas. Nunca publica sin que tengas la mercancía.</p>
+        </div>
+    </aside>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('runForm')?.addEventListener('submit', function () {
+            var b = document.getElementById('runButton'); setTimeout(function () { b.disabled = true; b.textContent = 'Enviando al agente…'; }, 0);
+        });
+        @if (Model.Running)
+        {
+            <text>setTimeout(function () { location.reload(); }, 15000);</text>
+        }
+    </script>
+}

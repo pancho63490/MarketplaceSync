@@ -22,6 +22,102 @@ namespace MarketplaceSync.Web.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Agents.AgentRun", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Discarded")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Engine")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Imported")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Reviewed")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Summary")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "StartedAt");
+
+                    b.ToTable("AgentRuns");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Agents.AgentStep", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<long>("AgentRunId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("CandidateId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentRunId");
+
+                    b.ToTable("AgentSteps");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.CrossBorder.CrossBorderSettings", b =>
                 {
                     b.Property<int>("Id")
@@ -44,6 +140,9 @@ namespace MarketplaceSync.Web.Migrations
 
                     b.Property<decimal>("EstimatedShippingMxn")
                         .HasColumnType("numeric(10,2)");
+
+                    b.Property<bool>("ImportAgentEnabled")
+                        .HasColumnType("boolean");
 
                     b.Property<decimal>("ImportFeePercent")
                         .HasColumnType("numeric(6,2)");
@@ -1562,6 +1661,17 @@ namespace MarketplaceSync.Web.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Agents.AgentStep", b =>
+                {
+                    b.HasOne("MarketplaceSync.Web.Models.Agents.AgentRun", "AgentRun")
+                        .WithMany("Steps")
+                        .HasForeignKey("AgentRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AgentRun");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.CrossBorder.CrossBorderSettings", b =>
                 {
                     b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
@@ -1933,6 +2043,11 @@ namespace MarketplaceSync.Web.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Agents.AgentRun", b =>
+                {
+                    b.Navigation("Steps");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.MarketInsights.MarketRankingSnapshot", b =>

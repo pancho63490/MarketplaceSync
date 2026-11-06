@@ -155,6 +155,64 @@ public sealed class ClaudeClient
     }
 
     /// <summary>
+    /// Llamada con herramientas (tool use) para agentes: envía los mensajes tal cual
+    /// (pueden traer bloques tool_use / tool_result) y devuelve la respuesta completa, o null si falla.
+    /// El modelo sale de Anthropic:AgentModel (predeterminado claude-sonnet-5-5: mejor criterio que Haiku para decidir).
+    /// </summary>
+    public async Task<JsonDocument?> SendWithToolsAsync(
+        string system,
+        JsonArray messages,
+        JsonArray tools,
+        int maxTokens,
+        CancellationToken cancellationToken = default)
+    {
+        var apiKey = ApiKey;
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return null;
+
+        var version = _configuration["Anthropic:Version"];
+        if (string.IsNullOrWhiteSpace(version))
+            version = DefaultApiVersion;
+        var model = _configuration["Anthropic:AgentModel"];
+
+        var payload = new JsonObject
+        {
+            ["model"] = string.IsNullOrWhiteSpace(model) ? "claude-sonnet-5-5" : model.Trim(),
+            ["max_tokens"] = maxTokens,
+            ["system"] = system,
+            ["tools"] = JsonNode.Parse(tools.ToJsonString()),
+            ["messages"] = JsonNode.Parse(messages.ToJsonString())
+        };
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient(HttpClientName);
+            var baseUrl = _configuration["Anthropic:BaseUrl"];
+            var endpoint = string.IsNullOrWhiteSpace(baseUrl) ? Endpoint : baseUrl.TrimEnd('/') + "/v1/messages";
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+            request.Headers.Add("x-api-key", apiKey);
+            request.Headers.Add("anthropic-version", version);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            request.Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
+
+            using var response = await client.SendAsync(request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Claude tools call returned HTTP {StatusCode}: {Body}",
+                    (int)response.StatusCode, body.Length > 800 ? body[..800] : body);
+                return null;
+            }
+            return JsonDocument.Parse(body);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(exception, "Claude tools call failed.");
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Pide una respuesta JSON y la deserializa. Tolera texto alrededor del objeto o bloques ```json.
     /// </summary>
     public async Task<T?> CompleteJsonAsync<T>(

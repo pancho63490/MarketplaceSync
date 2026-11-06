@@ -14,6 +14,7 @@ namespace MarketplaceSync.Services.Jobs
         private readonly MarketplaceSync.Services.MercadoLibre.IMercadoLibreQuestionService _questions;
         private readonly MarketplaceSync.Services.MarketInsights.CategoryDiscoveryService _discovery;
         private readonly MarketplaceSync.Services.Purchasing.RadarAutoPrepareService _autoPrepare;
+        private readonly MarketplaceSync.Services.Agents.ImportAgentService _agent;
         private readonly MarketplaceSync.Services.Ai.IListingAutopilotService _autopilot;
         private readonly MarketplaceSync.Services.Notifications.TelegramNotificationService _telegram;
         private readonly ILogger<MarketplaceJobsService> _logger;
@@ -28,6 +29,7 @@ namespace MarketplaceSync.Services.Jobs
             MarketplaceSync.Services.MercadoLibre.IMercadoLibreQuestionService questions,
             MarketplaceSync.Services.MarketInsights.CategoryDiscoveryService discovery,
             MarketplaceSync.Services.Purchasing.RadarAutoPrepareService autoPrepare,
+            MarketplaceSync.Services.Agents.ImportAgentService agent,
             MarketplaceSync.Services.Ai.IListingAutopilotService autopilot,
             MarketplaceSync.Services.Notifications.TelegramNotificationService telegram,
             ILogger<MarketplaceJobsService> logger)
@@ -41,6 +43,7 @@ namespace MarketplaceSync.Services.Jobs
             _questions = questions;
             _discovery = discovery;
             _autoPrepare = autoPrepare;
+            _agent = agent;
             _autopilot = autopilot;
             _telegram = telegram;
             _logger = logger;
@@ -149,15 +152,18 @@ namespace MarketplaceSync.Services.Jobs
             }
         }
 
-        /// <summary>Deja preparados con IA los mejores del Radar (máximo semanal de la configuración).</summary>
+        /// <summary>
+        /// Agente de importación diario: revisa con IA los candidatos del Radar e importa los que valen la pena
+        /// (máximo semanal de la configuración). Sin IA usa la regla de más demanda y ganancia.
+        /// </summary>
         [DisableConcurrentExecution(timeoutInSeconds: 3600)]
         public async Task PrepareTopCandidates()
         {
-            foreach (var organizationId in await _discovery.GetOrganizationsWithCategoriesAsync())
+            foreach (var organizationId in await _agent.GetOrganizationsAsync())
             {
                 try
                 {
-                    await _autoPrepare.PrepareTopAsync(organizationId);
+                    await _agent.RunAsync(organizationId, "schedule");
                 }
                 catch (Exception exception)
                 {
@@ -173,7 +179,15 @@ namespace MarketplaceSync.Services.Jobs
         {
             await _discovery.ScanOrganizationAsync(organizationId, 30);
             await _purchaseRadarService.RefreshAsync(organizationId);
-            await _autoPrepare.PrepareTopAsync(organizationId);
+            await _agent.RunAsync(organizationId, "manual");
+        }
+
+        /// <summary>Botón "Ejecutar ahora" del agente: solo revisa e importa (no vuelve a explorar).</summary>
+        [AutomaticRetry(Attempts = 0)]
+        [DisableConcurrentExecution(timeoutInSeconds: 1800)]
+        public async Task RunImportAgent(Guid organizationId)
+        {
+            await _agent.RunAsync(organizationId, "manual");
         }
 
         /// <summary>Al recibir una compra: publica el producto si ya quedó completo.</summary>
