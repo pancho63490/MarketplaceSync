@@ -90,4 +90,13 @@ public sealed class AgentController : Controller
         TempData["Success"] = "El agente está revisando el Radar. Tarda unos minutos; te aviso por Telegram al terminar (o recarga esta pantalla).";
         return RedirectToAction(nameof(Index));
     }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> TestAi(CancellationToken cancellationToken)
+    {
+        var (ok, message) = await _claude.TestAsync(cancellationToken);
+        TempData[ok ? "Success" : "Error"] = message;
+        return RedirectToAction(nameof(Index));
+    }
 }

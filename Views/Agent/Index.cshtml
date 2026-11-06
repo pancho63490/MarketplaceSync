@@ -134,6 +134,12 @@
                 <button type="submit" class="btn btn-outline-secondary align-self-start">Guardar</button>
             </form>
             <hr />
+            <form asp-action="TestAi" method="post" class="d-flex flex-wrap align-items-center gap-2">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-outline-secondary btn-sm">@Html.Icon("sparkles") Probar la IA</button>
+                <span class="small text-muted">@(Model.AiConfigured ? "Hay una clave guardada; pruébala." : "Sin clave en Render.")</span>
+            </form>
+            <hr />
             <h3 class="h6 fw-bold">Qué revisa antes de importar</h3>
             <ul class="ag-rules">
                 <li>Que la oferta de la tienda sea la misma pieza: número de parte, marca, cantidad y condición nueva.</li>

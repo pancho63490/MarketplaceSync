@@ -155,6 +155,79 @@ public sealed class ClaudeClient
     }
 
     /// <summary>
+    /// Prueba la clave con una llamada mínima y devuelve un mensaje claro para el vendedor
+    /// (clave inválida, sin saldo, modelo no disponible, sin conexión).
+    /// </summary>
+    public async Task<(bool Ok, string Message)> TestAsync(CancellationToken cancellationToken = default)
+    {
+        var apiKey = ApiKey;
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return (false, "No hay clave: agrega Anthropic__ApiKey en Render (Environment) y vuelve a desplegar.");
+
+        var version = _configuration["Anthropic:Version"];
+        if (string.IsNullOrWhiteSpace(version))
+            version = DefaultApiVersion;
+        var agentModel = _configuration["Anthropic:AgentModel"];
+        var models = new[] { Model, string.IsNullOrWhiteSpace(agentModel) ? "claude-sonnet-5-5" : agentModel.Trim() }.Distinct().ToList();
+
+        foreach (var model in models)
+        {
+            var payload = new JsonObject
+            {
+                ["model"] = model,
+                ["max_tokens"] = 5,
+                ["messages"] = new JsonArray { new JsonObject { ["role"] = "user", ["content"] = "Responde: ok" } }
+            };
+            try
+            {
+                var client = _httpClientFactory.CreateClient(HttpClientName);
+                var baseUrl = _configuration["Anthropic:BaseUrl"];
+                var endpoint = string.IsNullOrWhiteSpace(baseUrl) ? Endpoint : baseUrl.TrimEnd('/') + "/v1/messages";
+                using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+                request.Headers.Add("x-api-key", apiKey);
+                request.Headers.Add("anthropic-version", version);
+                request.Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
+                using var response = await client.SendAsync(request, cancellationToken);
+                if (response.IsSuccessStatusCode)
+                    continue;
+
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                string? type = null, message = null;
+                try
+                {
+                    using var doc = JsonDocument.Parse(body);
+                    if (doc.RootElement.TryGetProperty("error", out var error))
+                    {
+                        type = error.TryGetProperty("type", out var t) ? t.GetString() : null;
+                        message = error.TryGetProperty("message", out var m) ? m.GetString() : null;
+                    }
+                }
+                catch (JsonException) { }
+
+                var status = (int)response.StatusCode;
+                if (status == 401 || type == "authentication_error")
+                    return (false, "La clave no es válida. Crea una en platform.claude.com → Settings → API Keys (empieza con sk-ant-api) y ponla en Render.");
+                if (message is not null && message.Contains("credit", StringComparison.OrdinalIgnoreCase))
+                    return (false, "La clave sirve, pero tu cuenta no tiene saldo. Carga créditos en la Consola (Billing).");
+                if (status == 403 || type == "permission_error")
+                    return (false, "La clave no tiene permiso para usar la API. Revisa la organización de la clave en la Consola.");
+                if (status == 404 || type == "not_found_error")
+                    return (false, $"La clave sirve, pero el modelo {model} no está disponible para tu cuenta. Cambia Anthropic__Model o Anthropic__AgentModel en Render.");
+                if (status == 429)
+                    return (false, "La clave sirve, pero llegaste al límite de uso. Revisa los límites en la Consola o espera unos minutos.");
+                return (false, $"Claude respondió con un error ({status}). Intenta de nuevo en unos minutos.");
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(exception, "Claude test failed.");
+                return (false, "No se pudo conectar con Claude desde el servidor. Intenta de nuevo en unos minutos.");
+            }
+        }
+
+        return (true, $"Funciona: la IA respondió con {string.Join(" y ", models)}. El agente, las preguntas y los títulos ya usan IA.");
+    }
+
+    /// <summary>
     /// Llamada con herramientas (tool use) para agentes: envía los mensajes tal cual
     /// (pueden traer bloques tool_use / tool_result) y devuelve la respuesta completa, o null si falla.
     /// El modelo sale de Anthropic:AgentModel (predeterminado claude-sonnet-5-5: mejor criterio que Haiku para decidir).
