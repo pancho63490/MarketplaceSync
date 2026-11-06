@@ -125,6 +125,14 @@ namespace MarketplaceSync.Services.Jobs
         public async Task SyncOrdersForOrganization(Guid organizationId)
         {
             await _orderSyncService.SyncAllAccountsAsync(organizationId);
+            try
+            {
+                await _serviceProvider.GetRequiredService<MarketplaceSync.Services.PostSale.PostSaleService>().SendThankYousAsync(organizationId);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogInformation(exception, "Thank-you after order sync failed for {Org}.", organizationId);
+            }
             await _telegram.SweepAsync(organizationId);
         }
 

@@ -85,5 +85,6 @@ public static class NotificationKind
     public const string Reputation = "reputation";
     public const string BuyerMessage = "buyer_msg";
     public const string Claim = "claim";
+    public const string AutoAnswer = "auto_answer";
     public const string Test = "test";
 }

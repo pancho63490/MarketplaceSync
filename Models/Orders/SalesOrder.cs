@@ -68,6 +68,12 @@ public class SalesOrder
     /// <summary>Cuándo se imprimió la etiqueta desde la app (lote).</summary>
     public DateTime? LabelPrintedAt { get; set; }
 
+    /// <summary>Mensaje de gracias automático: cuándo se intentó y cómo salió (sent, failed).</summary>
+    public DateTime? ThankYouSentAt { get; set; }
+
+    [System.ComponentModel.DataAnnotations.MaxLength(20)]
+    public string? ThankYouStatus { get; set; }
+
     /// <summary>Pagado, con envío por Mercado Envíos que falta despachar (no Full).</summary>
     public bool NeedsShipping =>
         Status == "paid" && ShippingLogistic != "fulfillment" &&

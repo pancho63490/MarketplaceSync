@@ -1,0 +1,119 @@
+@model MarketplaceSync.Web.Controllers.AutomationViewModel
+@using MarketplaceSync.Services.Automation
+@{
+    ViewData["Title"] = "Automático";
+    var s = Model.Settings;
+    string Local(DateTime? utc) => utc?.AddHours(-7).ToString("dd/MM HH:mm") ?? "";
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Automático</h1>
+        <p>Lo que la app hace sola, sin que entres. Lo que gasta dinero o puede salir mal (comprar, compatibilidad, reclamos) siempre pasa por ti.</p>
+    </div>
+</header>
+
+@if (!Model.AiConfigured)
+{
+    <div class="alert alert-warning">Las respuestas automáticas usan la IA: agrega <code>Anthropic__ApiKey</code> en Render.</div>
+}
+
+<div class="au-grid">
+    <section class="panel" aria-labelledby="au-q">
+        <div class="panel-head">
+            <h2 id="au-q">@Html.Icon("message-circle-question") Responder preguntas fáciles</h2>
+            <p>La IA contesta sola cuando la pregunta es de un tema elegido y la respuesta sale completa de los datos del producto. Si duda, te llega como siempre.</p>
+        </div>
+        <form asp-action="SaveQuestions" method="post" class="panel-body au-form">
+            @Html.AntiForgeryToken()
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="qEnabled" name="enabled" value="true" checked="@s.AutoAnswerEnabled" />
+                <input type="hidden" name="enabled" value="false" />
+                <label class="form-check-label fw-bold" for="qEnabled">Responder solas</label>
+            </div>
+            <fieldset>
+                <legend class="small fw-bold mb-1">Qué temas</legend>
+                @foreach (var t in AutomationService.Topics)
+                {
+                    <div class="form-check au-topic @(t.CanAuto ? "" : "is-off")">
+                        <input class="form-check-input" type="checkbox" id="t-@t.Id" name="topics" value="@t.Id" checked="@(t.CanAuto && Model.Topics.Contains(t.Id))" disabled="@(!t.CanAuto)" />
+                        <label class="form-check-label small" for="t-@t.Id">
+                            <strong>@t.Label</strong> <span class="text-muted">— «@t.Example»</span>
+                            @if (!t.CanAuto) { <span class="d-block text-muted">Nunca sola: @t.WhyNot</span> }
+                        </label>
+                    </div>
+                }
+            </fieldset>
+            <fieldset>
+                <legend class="small fw-bold mb-1">¿Das factura?</legend>
+                <div class="d-flex flex-wrap gap-3">
+                    @foreach (var (val, label) in new[] { ("yes", "Sí"), ("no", "No"), ("", "No contestar sola") })
+                    {
+                        var on = val == "yes" ? s.OffersInvoice == true : val == "no" ? s.OffersInvoice == false : s.OffersInvoice is null;
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="invoice" id="inv-@(val == "" ? "none" : val)" value="@val" checked="@on" />
+                            <label class="form-check-label small" for="inv-@(val == "" ? "none" : val)">@label</label>
+                        </div>
+                    }
+                </div>
+            </fieldset>
+            <p class="small text-muted mb-0">Nunca se responde sola una pregunta que menciona año, motor o vehículo, ni las de antes de prender esto. Las que sí, te llegan a Telegram como aviso.</p>
+            <button type="submit" class="btn btn-primary btn-sm align-self-start">Guardar</button>
+        </form>
+        <div class="panel-body au-stats">
+            <span><strong>@Model.AutoAnsweredWeek</strong> respondidas solas esta semana</span>
+            <span><strong>@Model.ToSellerWeek</strong> pasaron por ti</span>
+            @if (Model.RecentAuto.Count > 0)
+            {
+                <ul class="au-recent">
+                    @foreach (var q in Model.RecentAuto)
+                    {
+                        <li><span class="small text-muted">@Local(q.AnsweredAt) · @AutomationService.TopicLabel(q.Topic)</span><span>«@q.Text»</span><span class="small">→ @q.AnswerText</span></li>
+                    }
+                </ul>
+            }
+        </div>
+    </section>
+
+    <section class="panel" aria-labelledby="au-t">
+        <div class="panel-head">
+            <h2 id="au-t">@Html.Icon("message-circle") Mensaje de gracias</h2>
+            <p>Cada venta pagada nueva recibe este mensaje en Mercado Libre. Le das confianza al comprador y abres el chat por si necesita algo.</p>
+        </div>
+        <form asp-action="SaveThanks" method="post" class="panel-body au-form">
+            @Html.AntiForgeryToken()
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="tEnabled" name="enabled" value="true" checked="@s.ThankYouEnabled" />
+                <input type="hidden" name="enabled" value="false" />
+                <label class="form-check-label fw-bold" for="tEnabled">Mandar mensaje de gracias</label>
+            </div>
+            <label for="tMessage" class="form-label small mb-0">Mensaje</label>
+            <textarea id="tMessage" name="message" class="form-control" rows="4" maxlength="350">@s.ThankYouMessage</textarea>
+            <div class="form-text m-0"><span id="tCount">@s.ThankYouMessage.Length</span>/350 · sin teléfonos, correos ni links. Si el comprador ya te escribió, no se manda.</div>
+            <button type="submit" class="btn btn-primary btn-sm align-self-start">Guardar</button>
+        </form>
+        <div class="panel-body au-stats">
+            <span><strong>@Model.ThanksSentWeek</strong> enviados esta semana</span>
+            @if (Model.ThanksFailedWeek > 0) { <span class="text-danger"><strong>@Model.ThanksFailedWeek</strong> Mercado Libre no los dejó mandar</span> }
+        </div>
+    </section>
+
+    <section class="panel au-next" aria-labelledby="au-n">
+        <div class="panel-head"><h2 id="au-n">@Html.Icon("bot") Ya corre solo</h2></div>
+        <ul class="panel-body au-list">
+            <li>Buscar productos en tus categorías cada día y preparar los mejores (<a asp-controller="Agent" asp-action="Index">Agente de importación</a>).</li>
+            <li>Bajar el stock al vender y mandarlo a Mercado Libre.</li>
+            <li>Publicar al marcar "Recibido" una compra.</li>
+            <li>Avisos a Telegram de ventas, preguntas, atrasos y reclamos.</li>
+        </ul>
+    </section>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var t = document.getElementById('tMessage'), c = document.getElementById('tCount');
+            t?.addEventListener('input', function () { c.textContent = t.value.length; });
+        })();
+    </script>
+}

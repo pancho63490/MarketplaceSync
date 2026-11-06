@@ -25,6 +25,7 @@ public interface IMercadoLibreQuestionService
 
     /// <summary>Vuelve a pedir una respuesta a la IA.</summary>
     Task<string?> SuggestAsync(Guid organizationId, long questionId, CancellationToken cancellationToken = default);
+    Task<bool> TryAutoAnswerAsync(Guid organizationId, long questionId, CancellationToken cancellationToken = default);
 
     /// <summary>Envía la respuesta a Mercado Libre.</summary>
     Task AnswerAsync(Guid organizationId, long questionId, string text, CancellationToken cancellationToken = default);
@@ -147,7 +148,10 @@ public sealed class MercadoLibreQuestionService : IMercadoLibreQuestionService
                 .Select(q => q.Id)
                 .ToListAsync(cancellationToken);
             foreach (var id in pending)
+            {
                 await SuggestAsync(organizationId, id, cancellationToken);
+                await TryAutoAnswerAsync(organizationId, id, cancellationToken);
+            }
         }
 
         var unanswered = await _context.BuyerQuestions.CountAsync(
@@ -199,7 +203,10 @@ public sealed class MercadoLibreQuestionService : IMercadoLibreQuestionService
         var question = await _context.BuyerQuestions.AsNoTracking()
             .FirstOrDefaultAsync(q => q.MarketplaceAccountId == account.Id && q.ExternalQuestionId == questionId, cancellationToken);
         if (question is { Status: BuyerQuestionStatus.Unanswered, SuggestedAnswer: null } && _claude.IsConfigured)
+        {
             await SuggestAsync(account.OrganizationId, question.Id, cancellationToken);
+            await TryAutoAnswerAsync(account.OrganizationId, question.Id, cancellationToken);
+        }
     }
 
     private async Task<bool> UpsertAsync(Guid organizationId, int accountId, JsonElement json, CancellationToken cancellationToken)
@@ -297,6 +304,11 @@ public sealed class MercadoLibreQuestionService : IMercadoLibreQuestionService
             facts.AppendLine($"{attribute.Id}: {attribute.ValueName}");
         foreach (var item in previous)
             facts.AppendLine($"Pregunta anterior: {item.Text} → Respuesta: {item.AnswerText}");
+        var automation = await _context.AutomationSettings.AsNoTracking().FirstOrDefaultAsync(a => a.OrganizationId == organizationId, cancellationToken);
+        facts.AppendLine("Envío: por Mercado Envíos desde Ciudad Juárez; el tiempo de entrega exacto lo muestra la publicación al poner el código postal.");
+        facts.AppendLine("Entregas: solo por Mercado Libre (no se acuerdan entregas en persona ni pagos por fuera).");
+        if (automation?.OffersInvoice is { } invoice)
+            facts.AppendLine(invoice ? "Factura: sí se da factura; el comprador la pide por mensajes después de comprar." : "Factura: no se emite factura.");
 
         var system = """
             Eres quien atiende las preguntas de una tienda de autopartes y productos importados en Mercado Libre México.
@@ -305,23 +317,122 @@ public sealed class MercadoLibreQuestionService : IMercadoLibreQuestionService
             Usa solo los datos dados. Si la respuesta depende de un dato que no está (por ejemplo compatibilidad con un vehículo no mencionado),
             pide al comprador el dato que falta (año, motor, versión o VIN) en lugar de inventar.
             No prometas tiempos de entrega exactos: di que el envío es por Mercado Envíos y el tiempo aparece en la publicación.
-            Empieza con "Hola" y termina con "¡Saludos!". Responde solo con el texto de la respuesta.
+            Empieza con "Hola" y termina con "¡Saludos!".
+            Devuelve SOLO un JSON, sin texto alrededor:
+            {"tema":"disponibilidad|envio|factura|garantia|condicion|recoger|compatibilidad|precio|otro","seguro":true|false,"respuesta":"..."}
+            tema: de qué trata la pregunta (si pregunta si le queda a un vehículo, año, motor o número de parte, es "compatibilidad").
+            seguro: true SOLO si la respuesta sale completa de los datos dados, no inventa nada, no promete nada y no hace falta que el vendedor la revise.
             """;
-        var suggestion = await _claude.CompleteAsync(
+        var raw = await _claude.CompleteAsync(
             system,
             $"DATOS DEL PRODUCTO:\n{facts}\nPREGUNTA DEL COMPRADOR:\n{question.Text}",
-            400,
-            0.3,
+            500,
+            0.2,
             cancellationToken);
 
+        if (string.IsNullOrWhiteSpace(raw))
+            return null;
+
+        var (suggestion, topic, safe) = ParseSuggestion(raw);
         if (string.IsNullOrWhiteSpace(suggestion))
             return null;
 
         var clean = RemoveContactSentences(suggestion);
         question.SuggestedAnswer = Truncate(clean, MaxAnswerLength);
         question.SuggestedAt = DateTime.UtcNow;
+        question.Topic = topic;
+        var topicInfo = MarketplaceSync.Services.Automation.AutomationService.Topics.FirstOrDefault(t => t.Id == topic);
+        question.AutoNote = topicInfo is { CanAuto: false } ? $"es de {topicInfo.Label.ToLowerInvariant()}, y esas siempre pasan por ti."
+            : safe ? null : "a la IA le faltaron datos para contestar sin que la revises.";
         await _context.SaveChangesAsync(cancellationToken);
         return question.SuggestedAnswer;
+    }
+
+    private static (string? Text, string? Topic, bool Safe) ParseSuggestion(string raw)
+    {
+        var text = raw.Trim();
+        var start = text.IndexOf('{');
+        var end = text.LastIndexOf('}');
+        if (start >= 0 && end > start)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(text[start..(end + 1)]);
+                var root = doc.RootElement;
+                var answer = root.TryGetProperty("respuesta", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null;
+                var topic = root.TryGetProperty("tema", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString()?.Trim().ToLowerInvariant() : null;
+                var safe = root.TryGetProperty("seguro", out var g) && g.ValueKind == JsonValueKind.True;
+                if (!string.IsNullOrWhiteSpace(answer))
+                    return (answer.Replace("**", "").Trim(), Truncate(topic, 20), safe);
+            }
+            catch (JsonException)
+            {
+            }
+        }
+        // Sin JSON: se usa como texto y nunca se responde sola.
+        return (text.Trim('"'), null, false);
+    }
+
+    private static readonly Regex CompatibilityHints = new(
+        @"\b(19[5-9]\d|20[0-4]\d)\b|\bvin\b|le\s+queda|le\s+sirve|sirve\s+para|compatible|queda\s+(a|al|en|para)|motor\s+\d|\d\.\d\s*l\b|cilindr",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Responde sola la pregunta si: está prendido, el tema está elegido, la IA la marcó segura, no huele a compatibilidad,
+    /// llegó después de prenderlo y hace menos de 3 días. Si no, deja la razón en <c>AutoNote</c> y pasa por el vendedor.
+    /// </summary>
+    public async Task<bool> TryAutoAnswerAsync(Guid organizationId, long questionId, CancellationToken cancellationToken = default)
+    {
+        var settings = await _context.AutomationSettings.AsNoTracking().FirstOrDefaultAsync(a => a.OrganizationId == organizationId, cancellationToken);
+        if (settings is not { AutoAnswerEnabled: true })
+            return false;
+        var question = await _context.BuyerQuestions.FirstOrDefaultAsync(q => q.Id == questionId && q.OrganizationId == organizationId, cancellationToken);
+        if (question is null || question.Status != BuyerQuestionStatus.Unanswered || string.IsNullOrWhiteSpace(question.SuggestedAnswer))
+            return false;
+        if (settings.AutoAnswerSince is { } since && question.DateCreated < since)
+            return false;
+        if (question.DateCreated < DateTime.UtcNow.AddDays(-3))
+            return false;
+
+        string? why = null;
+        var topics = MarketplaceSync.Services.Automation.AutomationService.EnabledTopics(settings);
+        if (question.AutoNote is not null)
+            why = question.AutoNote;
+        else if (question.Topic is null || !topics.Contains(question.Topic))
+            why = $"el tema «{MarketplaceSync.Services.Automation.AutomationService.TopicLabel(question.Topic)}» no está prendido en Automático.";
+        else if (question.Topic == "factura" && settings.OffersInvoice is null)
+            why = "falta decir en Automático si das factura.";
+        else if (CompatibilityHints.IsMatch(question.Text))
+            why = "parece de compatibilidad (menciona año, motor o vehículo).";
+        else if (question.ProductId is null && question.Topic == "disponibilidad")
+            why = "la publicación no está ligada a un producto de la app y no sé cuántas piezas hay.";
+        else if (question.SuggestedAnswer.Length > 350 || Sanitize(question.SuggestedAnswer).Removed)
+            why = "la respuesta sugerida no pasó la revisión (largo o datos de contacto).";
+
+        if (why is not null)
+        {
+            question.AutoNote = Truncate(why, 200);
+            await _context.SaveChangesAsync(cancellationToken);
+            return false;
+        }
+
+        try
+        {
+            await AnswerAsync(organizationId, questionId, question.SuggestedAnswer, cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(exception, "Auto answer failed for question {Question}.", questionId);
+            var fresh = await _context.BuyerQuestions.FirstAsync(q => q.Id == questionId, cancellationToken);
+            fresh.AutoNote = "Mercado Libre no aceptó la respuesta automática.";
+            await _context.SaveChangesAsync(cancellationToken);
+            return false;
+        }
+        var answered = await _context.BuyerQuestions.FirstAsync(q => q.Id == questionId, cancellationToken);
+        answered.AutoAnswered = true;
+        answered.AutoNote = null;
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     // ─────────────────────────────────────────────────────────────

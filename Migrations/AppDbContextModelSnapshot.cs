@@ -122,6 +122,53 @@ namespace MarketplaceSync.Web.Migrations
                     b.ToTable("AgentSteps");
                 });
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Automation.AutomationSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AutoAnswerEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("AutoAnswerSince")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AutoAnswerTopics")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool?>("OffersInvoice")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("ThankYouEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ThankYouMessage")
+                        .IsRequired()
+                        .HasMaxLength(350)
+                        .HasColumnType("character varying(350)");
+
+                    b.Property<DateTime?>("ThankYouSince")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId")
+                        .IsUnique();
+
+                    b.ToTable("AutomationSettings");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.CrossBorder.CrossBorderSettings", b =>
                 {
                     b.Property<int>("Id")
@@ -1081,6 +1128,13 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<DateTime>("SyncedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("ThankYouSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ThankYouStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<decimal>("TotalAmount")
                         .HasColumnType("numeric(18,2)");
 
@@ -1754,6 +1808,13 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<DateTime?>("AnsweredAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("AutoAnswered")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("AutoNote")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<DateTime>("DateCreated")
                         .HasColumnType("timestamp with time zone");
 
@@ -1799,6 +1860,10 @@ namespace MarketplaceSync.Web.Migrations
                         .IsRequired()
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Topic")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.HasKey("Id");
 

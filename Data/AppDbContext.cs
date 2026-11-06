@@ -43,6 +43,7 @@ namespace MarketplaceSync.Web.Data
         public DbSet<MarketplaceSync.Web.Models.MarketInsights.CompetitorStore> CompetitorStores { get; set; }
         public DbSet<MarketplaceSync.Web.Models.PostSale.BlockedBuyer> BlockedBuyers { get; set; }
         public DbSet<MarketplaceSync.Web.Models.MarketInsights.CompetitorListing> CompetitorListings { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Automation.AutomationSettings> AutomationSettings { get; set; }
         public DbSet<MarketplaceSync.Web.Models.PostSale.OrderClaim> OrderClaims { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Agents.AgentStep> AgentSteps { get; set; }
 
@@ -363,6 +364,10 @@ namespace MarketplaceSync.Web.Data
             builder.Entity<MarketplaceSync.Web.Models.MarketInsights.CompetitorStore>(entity =>
             {
                 entity.HasIndex(x => new { x.OrganizationId, x.SellerId }).IsUnique();
+            });
+            builder.Entity<MarketplaceSync.Web.Models.Automation.AutomationSettings>(entity =>
+            {
+                entity.HasIndex(x => x.OrganizationId).IsUnique();
             });
             builder.Entity<MarketplaceSync.Web.Models.MarketInsights.CompetitorListing>(entity =>
             {

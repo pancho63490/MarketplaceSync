@@ -25,6 +25,7 @@ public sealed class QuestionsIndexViewModel
     public int AnsweredCount { get; init; }
     public bool AiConfigured { get; init; }
     public bool HasAccounts { get; init; }
+    public bool AutoAnswerEnabled { get; init; }
 }
 
 /// <summary>Preguntas de compradores en Mercado Libre, con respuesta sugerida por IA.</summary>
@@ -85,6 +86,7 @@ public sealed class QuestionsController : Controller
             AnsweredCount = answeredCount,
             AiConfigured = _claude.IsConfigured,
             HasAccounts = hasAccounts,
+            AutoAnswerEnabled = await _context.AutomationSettings.AnyAsync(a => a.OrganizationId == organizationId && a.AutoAnswerEnabled, cancellationToken),
             Rows = questions.Select(q =>
             {
                 byItem.TryGetValue(q.ItemId, out var publication);

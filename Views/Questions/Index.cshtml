@@ -38,6 +38,10 @@ else if (!Model.AiConfigured)
     </div>
 }
 
+<p class="small mb-2">
+    @if (Model.AutoAnswerEnabled) { <span class="pill pill-ok">@Html.Icon("bot", "icon-xs") Respuestas automáticas prendidas</span> <a asp-controller="Automation" asp-action="Index" class="ms-1">Cambiar</a> }
+    else { <span class="text-muted">Las preguntas fáciles (stock, envío, garantía…) se pueden responder solas.</span> <a asp-controller="Automation" asp-action="Index">Prender en Automático</a> }
+</p>
 <div class="pl-chips mb-3">
     <a class="pub-chip @(Model.Tab == "pending" ? "active" : "")" asp-action="Index">Sin responder <span>@Model.PendingCount</span></a>
     <a class="pub-chip @(Model.Tab == "answered" ? "active" : "")" asp-action="Index" asp-route-tab="answered">Respondidas <span>@Model.AnsweredCount</span></a>
@@ -87,6 +91,10 @@ else
 
                 @if (Model.Tab == "pending")
                 {
+                    @if (!string.IsNullOrWhiteSpace(q.AutoNote) && Model.AutoAnswerEnabled)
+                    {
+                        <p class="small text-muted mb-2">@Html.Icon("info", "icon-xs") No se respondió sola: @q.AutoNote</p>
+                    }
                     <form asp-action="Answer" method="post" class="q-answer">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="id" value="@q.Id" />
@@ -115,7 +123,7 @@ else
                 else
                 {
                     <div class="q-reply">
-                        <div class="small text-muted mb-1">Respondida @(q.AnsweredAt.HasValue ? Ago(q.AnsweredAt.Value) : "")</div>
+                        <div class="small text-muted mb-1">@if (q.AutoAnswered) { <span class="pill pill-info me-1">@Html.Icon("bot", "icon-xs") Respondida sola</span> }Respondida @(q.AnsweredAt.HasValue ? Ago(q.AnsweredAt.Value) : "")</div>
                         @q.AnswerText
                     </div>
                 }

@@ -137,7 +137,87 @@ public sealed class PostSaleService
             }
         }
 
+        try
+        {
+            await SendThankYousAsync(organizationId, cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(exception, "Thank-you messages failed for {Org}.", organizationId);
+        }
         return new PostSaleSyncResult(messages, claims, errors);
+    }
+
+    /// <summary>
+    /// Mensaje de gracias a cada venta pagada nueva (después de prenderlo, de las últimas 48 h, uno por carrito).
+    /// Primero como mensaje normal; si Mercado Libre no deja iniciar la conversación, con "mensajes con opciones"
+    /// (<c>/messages/action_guide/packs/{pack}/option</c>, opción OTHER). Devuelve cuántos salieron.
+    /// </summary>
+    public async Task<int> SendThankYousAsync(Guid org, CancellationToken cancellationToken = default)
+    {
+        var settings = await _context.AutomationSettings.AsNoTracking().FirstOrDefaultAsync(a => a.OrganizationId == org, cancellationToken);
+        if (settings is not { ThankYouEnabled: true } || string.IsNullOrWhiteSpace(settings.ThankYouMessage))
+            return 0;
+        var since = new[] { settings.ThankYouSince ?? DateTime.UtcNow, DateTime.UtcNow.AddHours(-48) }.Max();
+        var orders = await _context.SalesOrders.Include(o => o.MarketplaceAccount)
+            .Where(o => o.OrganizationId == org && o.Status == "paid" && o.ThankYouSentAt == null && o.DateCreated >= since && o.BuyerId != null)
+            .OrderBy(o => o.DateCreated).Take(20)
+            .ToListAsync(cancellationToken);
+        var (text, _) = CleanContact(settings.ThankYouMessage);
+        text = text.Trim();
+        if (text.Length == 0 || text.Length > MaxMessageLength)
+            return 0;
+
+        var done = new HashSet<string>();
+        var sent = 0;
+        foreach (var order in orders)
+        {
+            var pack = PackOf(order);
+            if (!done.Add(order.MarketplaceAccountId + ":" + pack))
+            {
+                order.ThankYouSentAt = DateTime.UtcNow;
+                order.ThankYouStatus = "same_pack";
+                continue;
+            }
+            // Si ya hay mensajes en el paquete (el comprador escribió o ya se le escribió), no se manda.
+            if (await _context.OrderMessages.AnyAsync(m => m.OrganizationId == org && m.PackId == pack, cancellationToken))
+            {
+                order.ThankYouSentAt = DateTime.UtcNow;
+                order.ThankYouStatus = "skipped";
+                continue;
+            }
+            var ok = false;
+            try
+            {
+                var token = await _auth.GetValidAccessTokenAsync(org, order.MarketplaceAccountId);
+                var seller = order.MarketplaceAccount.ExternalAccountId;
+                var (normal, content) = await SendJsonAsync(token, HttpMethod.Post,
+                    $"/messages/packs/{Uri.EscapeDataString(pack)}/sellers/{Uri.EscapeDataString(seller)}?tag=post_sale",
+                    new { from = new { user_id = seller }, to = new { user_id = order.BuyerId }, text }, cancellationToken);
+                ok = normal;
+                if (!ok)
+                    (ok, _) = await SendJsonAsync(token, HttpMethod.Post,
+                        $"/messages/action_guide/packs/{Uri.EscapeDataString(pack)}/option",
+                        new { option_id = "OTHER", text }, cancellationToken);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogInformation(exception, "Thank-you failed for order {Order}.", order.Id);
+            }
+            order.ThankYouSentAt = DateTime.UtcNow;
+            order.ThankYouStatus = ok ? "sent" : "failed";
+            if (ok)
+            {
+                sent++;
+                _context.OrderMessages.Add(new OrderMessage
+                {
+                    OrganizationId = org, MarketplaceAccountId = order.MarketplaceAccountId, PackId = pack, SalesOrderId = order.Id,
+                    ExternalId = "thanks-" + Guid.NewGuid().ToString("N"), FromSeller = true, Text = text, SentAt = DateTime.UtcNow, Status = "available"
+                });
+            }
+        }
+        await _context.SaveChangesAsync(cancellationToken);
+        return sent;
     }
 
     /// <summary>Trae los mensajes de un paquete y guarda los nuevos. Devuelve cuántos eran nuevos.</summary>

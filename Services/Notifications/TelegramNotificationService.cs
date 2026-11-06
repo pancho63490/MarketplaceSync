@@ -548,7 +548,10 @@ public sealed partial class TelegramNotificationService
         try
         {
             if (settings.NotifyQuestions)
+            {
                 await NotifyQuestionsAsync(token, settings, since, cancellationToken);
+                await NotifyAutoAnswersAsync(token, settings, since, cancellationToken);
+            }
             if (settings.NotifyOrders)
                 await NotifyOrdersAsync(token, settings, since, cancellationToken);
             if (settings.NotifyStock)
@@ -588,6 +591,27 @@ public sealed partial class TelegramNotificationService
             var (html, buttons) = QuestionCard(settings, card.Value.Question, card.Value.Title, null);
             var messageId = await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, html, buttons, cancellationToken: cancellationToken);
             await LogAsync(org, "question:" + question.Id, NotificationKind.Question, question.Id.ToString(CultureInfo.InvariantCulture), settings.TelegramChatId, messageId, cancellationToken);
+        }
+    }
+
+    /// <summary>Aviso corto de cada pregunta que la app respondió sola (para que sepas qué se dijo).</summary>
+    private async Task NotifyAutoAnswersAsync(string token, NotificationSettings settings, DateTime since, CancellationToken cancellationToken)
+    {
+        var org = settings.OrganizationId;
+        var sent = _context.NotificationLogs.Where(l => l.OrganizationId == org && l.Kind == NotificationKind.AutoAnswer).Select(l => l.Key);
+        var answered = await _context.BuyerQuestions.AsNoTracking()
+            .Where(q => q.OrganizationId == org && q.AutoAnswered && q.AnsweredAt >= since && !sent.Contains("auto:" + q.Id))
+            .OrderBy(q => q.AnsweredAt).Take(10)
+            .ToListAsync(cancellationToken);
+        foreach (var question in answered)
+        {
+            var card = await LoadQuestionCardAsync(org, question.Id, cancellationToken);
+            var html = new StringBuilder();
+            html.Append("🤖 <b>Respondí sola</b>");
+            if (card?.Title is { Length: > 0 } title) html.Append(" · ").Append(E(title));
+            html.Append("\n«").Append(E(question.Text)).Append("»\n→ ").Append(E(question.AnswerText ?? ""));
+            var messageId = await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, html.ToString(), cancellationToken: cancellationToken);
+            await LogAsync(org, "auto:" + question.Id, NotificationKind.AutoAnswer, question.Id.ToString(CultureInfo.InvariantCulture), settings.TelegramChatId, messageId, cancellationToken);
         }
     }
 

@@ -30,6 +30,17 @@ public sealed class BuyerQuestion
     public DateTime? AnsweredAt { get; set; }
     public string? LastError { get; set; }
 
+    /// <summary>Tema que detectó la IA: disponibilidad, envio, factura, garantia, condicion, recoger, compatibilidad, precio, otro.</summary>
+    [System.ComponentModel.DataAnnotations.MaxLength(20)]
+    public string? Topic { get; set; }
+
+    /// <summary>La app la respondió sola.</summary>
+    public bool AutoAnswered { get; set; }
+
+    /// <summary>Por qué no se respondió sola (para mostrarlo).</summary>
+    [System.ComponentModel.DataAnnotations.MaxLength(200)]
+    public string? AutoNote { get; set; }
+
     public DateTime SyncedAt { get; set; } = DateTime.UtcNow;
 }
 
