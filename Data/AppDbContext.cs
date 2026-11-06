@@ -40,6 +40,8 @@ namespace MarketplaceSync.Web.Data
         public DbSet<MarketplaceSync.Web.Models.Notifications.NotificationLog> NotificationLogs { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Agents.AgentRun> AgentRuns { get; set; }
         public DbSet<MarketplaceSync.Web.Models.PostSale.OrderMessage> OrderMessages { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.MarketInsights.CompetitorStore> CompetitorStores { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.PostSale.BlockedBuyer> BlockedBuyers { get; set; }
         public DbSet<MarketplaceSync.Web.Models.PostSale.OrderClaim> OrderClaims { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Agents.AgentStep> AgentSteps { get; set; }
 
@@ -353,6 +355,14 @@ namespace MarketplaceSync.Web.Data
                 entity.Property(x => x.LastError).HasMaxLength(500);
             });
 
+            builder.Entity<MarketplaceSync.Web.Models.PostSale.BlockedBuyer>(entity =>
+            {
+                entity.HasIndex(x => new { x.OrganizationId, x.MarketplaceAccountId, x.BuyerId }).IsUnique();
+            });
+            builder.Entity<MarketplaceSync.Web.Models.MarketInsights.CompetitorStore>(entity =>
+            {
+                entity.HasIndex(x => new { x.OrganizationId, x.SellerId }).IsUnique();
+            });
             builder.Entity<MarketplaceSync.Web.Models.PostSale.OrderMessage>(entity =>
             {
                 entity.HasIndex(x => new { x.OrganizationId, x.ExternalId }).IsUnique();

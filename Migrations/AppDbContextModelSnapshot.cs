@@ -285,6 +285,71 @@ namespace MarketplaceSync.Web.Migrations
                     b.ToTable("InventoryMovements");
                 });
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.MarketInsights.CompetitorStore", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int?>("BestPosition")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Categories")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Followed")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("Hidden")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastScannedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Nickname")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Permalink")
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)");
+
+                    b.Property<string>("PowerSeller")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int?>("ReputationLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SellerId")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<int>("TopAppearances")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TotalSales")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "SellerId")
+                        .IsUnique();
+
+                    b.ToTable("CompetitorStores");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.MarketInsights.MarketRankingSnapshot", b =>
                 {
                     b.Property<long>("Id")
@@ -889,6 +954,9 @@ namespace MarketplaceSync.Web.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<DateTime?>("LabelPrintedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
 
@@ -902,6 +970,9 @@ namespace MarketplaceSync.Web.Migrations
 
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("PackedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal>("PaidAmount")
                         .HasColumnType("numeric(18,2)");
@@ -1063,6 +1134,50 @@ namespace MarketplaceSync.Web.Migrations
                     b.ToTable("OrganizationMemberships");
                 });
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.PostSale.BlockedBuyer", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("BlocksOrders")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("BlocksQuestions")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("BuyerId")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MarketplaceAccountId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Nickname")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "MarketplaceAccountId", "BuyerId")
+                        .IsUnique();
+
+                    b.ToTable("BlockedBuyers");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.PostSale.OrderClaim", b =>
                 {
                     b.Property<long>("Id")
@@ -1106,6 +1221,13 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<string>("ResourceId")
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
+
+                    b.Property<string>("ReturnCondition")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("ReturnRestockedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int?>("SalesOrderId")
                         .HasColumnType("integer");

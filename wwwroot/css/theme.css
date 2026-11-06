@@ -1550,3 +1550,23 @@ a.mt-prod-title:hover { color: var(--denim); }
 @media (max-width: 991.98px) { .od-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 575.98px) { .ps-row { flex-direction: column; align-items: stretch; } .ps-row-side { flex-direction: row; justify-content: space-between; align-items: center; } .od-msg { max-width: 92%; } }
 @media (max-width: 767.98px) { .od-total { text-align: left; display: flex; align-items: baseline; gap: .5rem; } .od-total span { display: inline; } }
+
+/* ── Competencia ── */
+.cp-list, .cp-items { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+.cp-card, .cp-item { display: flex; align-items: center; gap: 1rem; padding: .85rem 1.1rem; }
+.cp-rank { flex: 0 0 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--paper-2); font-weight: 800; font-variant-numeric: var(--num); }
+.cp-main, .cp-item-main { flex: 1; min-width: 0; display: grid; gap: .2rem; }
+.cp-name { font-weight: 800; color: var(--ink); text-decoration: none; font-size: var(--fs-md); }
+.cp-name:hover { color: var(--denim); }
+.cp-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .7rem; font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: var(--num); }
+.cp-meta strong { color: var(--ink); }
+.cp-cats { font-size: var(--fs-xs); color: var(--muted-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-actions { display: flex; align-items: center; gap: .25rem; flex: 0 0 auto; }
+.cp-item .recent-thumb { width: 56px; height: 56px; flex: 0 0 56px; }
+.cp-item-title { font-weight: 600; color: var(--ink); text-decoration: none; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+a.cp-item-title:hover { color: var(--denim); }
+.cp-item-action { flex: 0 0 auto; }
+@media (max-width: 575.98px) {
+  .cp-card, .cp-item { flex-wrap: wrap; }
+  .cp-actions, .cp-item-action { width: 100%; justify-content: flex-end; display: flex; }
+}

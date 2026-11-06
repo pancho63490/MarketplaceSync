@@ -77,6 +77,12 @@ public sealed class OrderClaim
     public DateTime LastUpdated { get; set; }
     public DateTime SyncedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Cuándo la pieza devuelta regresó al inventario (con su condición).</summary>
+    public DateTime? ReturnRestockedAt { get; set; }
+
+    [MaxLength(30)]
+    public string? ReturnCondition { get; set; }
+
     public bool IsOpen => Status == "opened";
 
     /// <summary>Motivo en palabras simples, por el prefijo del reason_id de Mercado Libre.</summary>

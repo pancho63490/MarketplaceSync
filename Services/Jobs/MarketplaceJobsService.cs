@@ -225,6 +225,15 @@ namespace MarketplaceSync.Services.Jobs
             await _telegram.SweepAllAsync();
         }
 
+        /// <summary>Competencia: cuenta qué tiendas aparecen más en los más vendidos de las categorías vigiladas.</summary>
+        [AutomaticRetry(Attempts = 0)]
+        [DisableConcurrentExecution(timeoutInSeconds: 900)]
+        public async Task ScanCompetitors(Guid organizationId)
+        {
+            var competitors = _serviceProvider.GetRequiredService<MarketplaceSync.Services.MarketInsights.CompetitorService>();
+            await competitors.ScanLeadersAsync(organizationId);
+        }
+
         /// <summary>Mensajes de compradores y reclamos (cada 10 min y al llegar una notificación de Mercado Libre).</summary>
         [DisableConcurrentExecution(timeoutInSeconds: 900)]
         public async Task SyncPostSale()

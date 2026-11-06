@@ -38,6 +38,7 @@ public sealed class ImportAgentService
     private readonly IMercadoLibreAuthService _mlAuth;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
+    private readonly MarketplaceSync.Services.MarketInsights.CompetitorService _competitors;
 
     public ImportAgentService(
         AppDbContext context,
@@ -53,8 +54,10 @@ public sealed class ImportAgentService
         ProductTitleTranslator titleTranslator,
         IMercadoLibreAuthService mlAuth,
         IHttpClientFactory httpClientFactory,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        MarketplaceSync.Services.MarketInsights.CompetitorService competitors)
     {
+        _competitors = competitors;
         _ebay = ebay;
         _extractor = extractor;
         _titleTranslator = titleTranslator;
@@ -103,6 +106,8 @@ public sealed class ImportAgentService
         2. Para cada uno, busca la MISMA pieza en eBay (buscar_en_ebay) con marca + número de parte o modelo exacto.
         3. Calcula la ganancia (calcular_ganancia) con el costo + envío de eBay y el precio al que se vende en Mercado Libre.
         4. Si coincide y deja al menos la ganancia mínima, impórtalo con importar_link (link de eBay, costo y precio de referencia).
+        Si el encargo es copiar a una tienda (trae su vendedor_id), usa ver_productos_de_tienda y empieza por lo que más vende;
+        busca la misma pieza en eBay y solo importa lo que deje ganancia con el precio al que ellos lo venden.
         No importes genéricos sin marca, réplicas, ni cosas que no se pueden cruzar. Si no encuentras nada que convenga, dilo claro
         en el resumen y sugiere qué buscar en su lugar.
         """;
@@ -110,6 +115,7 @@ public sealed class ImportAgentService
     private static readonly JsonArray RequestTools = JsonNode.Parse("""
         [
           {"name":"buscar_en_mercado_libre","description":"Busca en Mercado Libre México: títulos, precios y vendidos de lo que se vende para esa búsqueda, y la categoría.","input_schema":{"type":"object","properties":{"busqueda":{"type":"string"}},"required":["busqueda"]}},
+          {"name":"ver_productos_de_tienda","description":"Productos de una tienda de la competencia en Mercado Libre (ordenados por vendidos): título, precio, vendidos. Úsalo cuando el encargo pida copiar a una tienda.","input_schema":{"type":"object","properties":{"vendedor_id":{"type":"string"},"busqueda":{"type":"string","description":"Opcional: filtrar sus productos."}},"required":["vendedor_id"]}},
           {"name":"buscar_en_ebay","description":"Busca en eBay US artículos nuevos de precio fijo enviados a El Paso: título, precio, envío, marca, condición y link.","input_schema":{"type":"object","properties":{"busqueda":{"type":"string","description":"En inglés, con marca y número de parte o modelo."},"limite":{"type":"integer"}},"required":["busqueda"]}},
           {"name":"calcular_ganancia","description":"Ganancia por pieza en Mercado Libre con tus costos de cruce: costo en dólares (más envío) contra el precio de venta en pesos.","input_schema":{"type":"object","properties":{"costo_usd":{"type":"number"},"envio_usd":{"type":"number"},"precio_ml_mxn":{"type":"number"}},"required":["costo_usd","precio_ml_mxn"]}},
           {"name":"importar_link","description":"Importa al catálogo el producto de ese link (eBay u otra tienda) y lo prepara con IA, sin publicar.","input_schema":{"type":"object","properties":{"link":{"type":"string"},"costo_usd":{"type":"number"},"precio_ml_mxn":{"type":"number","description":"Precio al que se vende en Mercado Libre (referencia)."},"titulo_ml":{"type":"string","description":"Cómo se llama en Mercado Libre (referencia para no repetir)."},"motivo":{"type":"string"}},"required":["link","motivo"]}}
@@ -284,6 +290,9 @@ public sealed class ImportAgentService
                             break;
                         case "buscar_en_mercado_libre":
                             output = await SearchMercadoLibreAsync(org, Str(input, "busqueda"), cancellationToken);
+                            break;
+                        case "ver_productos_de_tienda":
+                            output = await StoreItemsAsync(org, Str(input, "vendedor_id"), Str(input, "busqueda"), cancellationToken);
                             break;
                         case "buscar_en_ebay":
                             output = await SearchEbayAsync(Str(input, "busqueda"), Int(input, "limite") ?? 10, cancellationToken);
@@ -523,6 +532,20 @@ public sealed class ImportAgentService
             items.Add(new { titulo = Str(item.RootElement, "title"), precio_mxn = Dec(item.RootElement, "price"), link = Str(item.RootElement, "permalink") });
         }
         return JsonSerializer.Serialize(new { busqueda = query, categoria = categoryName, mas_vendidos_de_la_categoria = items });
+    }
+
+    private async Task<string> StoreItemsAsync(Guid org, string? sellerId, string? query, CancellationToken cancellationToken)
+    {
+        var store = await _context.CompetitorStores.AsNoTracking().FirstOrDefaultAsync(c => c.OrganizationId == org && c.SellerId == sellerId, cancellationToken)
+                    ?? new Web.Models.MarketInsights.CompetitorStore { OrganizationId = org, SellerId = sellerId ?? "" };
+        var (items, total, error) = await _competitors.GetItemsAsync(org, store, query, 0, cancellationToken);
+        if (error is not null) return error;
+        return JsonSerializer.Serialize(new
+        {
+            tienda = store.Nickname,
+            total_publicaciones = total,
+            productos = items.Take(30).Select(i => new { titulo = i.Title, precio_mxn = i.Price, vendidos = i.Sold, condicion = i.Condition, envio_gratis = i.FreeShipping })
+        });
     }
 
     private async Task<string> SearchEbayAsync(string? query, int limit, CancellationToken cancellationToken)

@@ -62,6 +62,12 @@ public class SalesOrder
 
     public DateTime? ShippingCheckedAt { get; set; }
 
+    /// <summary>Cuándo se confirmó con el escáner que el paquete lleva las piezas correctas.</summary>
+    public DateTime? PackedAt { get; set; }
+
+    /// <summary>Cuándo se imprimió la etiqueta desde la app (lote).</summary>
+    public DateTime? LabelPrintedAt { get; set; }
+
     /// <summary>Pagado, con envío por Mercado Envíos que falta despachar (no Full).</summary>
     public bool NeedsShipping =>
         Status == "paid" && ShippingLogistic != "fulfillment" &&

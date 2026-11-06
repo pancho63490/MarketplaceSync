@@ -1,0 +1,98 @@
+@model MarketplaceSync.Web.Controllers.CompetitorsIndexViewModel
+@using System.Globalization
+
+@{
+    ViewData["Title"] = "Competencia";
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    string Leader(string? p) => p switch { "platinum" => "MercadoLíder Platinum", "gold" => "MercadoLíder Gold", "silver" => "MercadoLíder", _ => "" };
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Competencia</h1>
+        <p>Las tiendas que más venden en tus categorías y lo que venden. Elige una y el agente busca esas mismas piezas en EE.UU. para que las vendas importadas.</p>
+        @if (Model.LastScan is { } last) { <span class="page-head-meta">Revisado el @last.AddHours(-7).ToString("dd/MM HH:mm")</span> }
+    </div>
+    <div class="page-head-actions">
+        @if (Model.WatchedCategories == 0)
+        {
+            <a asp-controller="WatchedCategories" asp-action="Index" class="btn btn-primary">@Html.Icon("radar") Elegir categorías</a>
+        }
+        else
+        {
+            <form asp-action="Scan" method="post">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-primary">@Html.Icon("search") Buscar líderes en mis categorías</button>
+            </form>
+        }
+    </div>
+</header>
+
+<section class="panel ag-request" aria-labelledby="cp-follow">
+    <form asp-action="Follow" method="post" class="panel-body">
+        @Html.AntiForgeryToken()
+        <label id="cp-follow" for="store" class="ag-request-label">@Html.Icon("store") Seguir una tienda que ya conoces</label>
+        <div class="ag-request-row">
+            <input id="store" name="store" class="form-control" autocomplete="off" placeholder="Link de una de sus publicaciones (articulo.mercadolibre.com.mx/MLM-…) o su usuario" required />
+            <button type="submit" class="btn btn-outline-secondary">Seguir</button>
+        </div>
+        <div class="form-text">En Mercado Libre abre cualquier producto de esa tienda y copia el link de la barra del navegador.</div>
+    </form>
+</section>
+
+@if (Model.Leaders.Count == 0 && Model.Followed.Count == 0)
+{
+    <div class="today-clear">
+        @Html.Icon("store", "icon-lg")
+        <div>
+            <div class="fw-bold">Todavía no hay tiendas</div>
+            <div class="text-muted small">@(Model.WatchedCategories == 0 ? "Elige categorías a vigilar (por ejemplo Refacciones Autos y Camionetas) y luego busca a los líderes." : "Pulsa “Buscar líderes en mis categorías” o sigue una tienda con su link.")</div>
+        </div>
+    </div>
+}
+
+@if (Model.Leaders.Count > 0)
+{
+    <h2 class="today-section-title">Los que más aparecen en los más vendidos</h2>
+    <ol class="cp-list">
+        @foreach (var s in Model.Leaders)
+        {
+            <li class="panel cp-card">
+                <span class="cp-rank" aria-hidden="true">@(Model.Leaders.ToList().IndexOf(s) + 1)</span>
+                <span class="cp-main">
+                    <a asp-action="Store" asp-route-id="@s.Id" class="cp-name">@s.Nickname</a>
+                    <span class="cp-meta">
+                        @if (!string.IsNullOrEmpty(Leader(s.PowerSeller))) { <span class="pill pill-signal">@Leader(s.PowerSeller)</span> }
+                        @if (s.TotalSales is { } sales) { <span>@sales.ToString("N0", mx) ventas</span> }
+                        <span>en @s.TopAppearances @(s.TopAppearances == 1 ? "ranking" : "lugares de los rankings")@(s.BestPosition is { } bp ? $" · mejor posición #{bp}" : "")</span>
+                    </span>
+                    @if (!string.IsNullOrWhiteSpace(s.Categories)) { <span class="cp-cats">@s.Categories</span> }
+                </span>
+                <span class="cp-actions">
+                    <a asp-action="Store" asp-route-id="@s.Id" class="btn btn-outline-secondary btn-sm">Ver lo que vende</a>
+                    <form asp-action="Hide" asp-route-id="@s.Id" method="post">@Html.AntiForgeryToken()<button type="submit" class="btn btn-link btn-sm text-muted" title="No mostrar">Ocultar</button></form>
+                </span>
+            </li>
+        }
+    </ol>
+}
+
+@if (Model.Followed.Count > 0)
+{
+    <h2 class="today-section-title mt-4">Tiendas que sigues</h2>
+    <ol class="cp-list">
+        @foreach (var s in Model.Followed)
+        {
+            <li class="panel cp-card">
+                <span class="cp-main">
+                    <a asp-action="Store" asp-route-id="@s.Id" class="cp-name">@s.Nickname</a>
+                    <span class="cp-meta">
+                        @if (!string.IsNullOrEmpty(Leader(s.PowerSeller))) { <span class="pill pill-signal">@Leader(s.PowerSeller)</span> }
+                        @if (s.TotalSales is { } sales) { <span>@sales.ToString("N0", mx) ventas</span> }
+                    </span>
+                </span>
+                <span class="cp-actions"><a asp-action="Store" asp-route-id="@s.Id" class="btn btn-outline-secondary btn-sm">Ver lo que vende</a></span>
+            </li>
+        }
+    </ol>
+}

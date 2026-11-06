@@ -1,0 +1,72 @@
+@model MarketplaceSync.Web.Controllers.CompetitorStoreViewModel
+@using System.Globalization
+
+@{
+    var s = Model.Store;
+    ViewData["Title"] = s.Nickname;
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <a asp-action="Index" class="pe-back">← Competencia</a>
+        <h1 class="page-title">@s.Nickname</h1>
+        <p>Lo que vende ordenado por vendidos. Pide al agente que busque en eBay las mismas piezas y te importe las que dejan ganancia al precio de esta tienda.</p>
+        <span class="page-head-meta">
+            @if (s.TotalSales is { } sales) { <span>@sales.ToString("N0", mx) ventas · </span> }
+            @Model.Total.ToString("N0", mx) publicaciones activas
+            @if (!string.IsNullOrWhiteSpace(s.Permalink)) { <span> · <a href="@s.Permalink" target="_blank" rel="noopener noreferrer">Ver su perfil</a></span> }
+        </span>
+    </div>
+    <div class="page-head-actions">
+        <form asp-action="Copy" asp-route-id="@s.Id" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="q" value="@Model.Query" />
+            <button type="submit" class="btn btn-primary" disabled="@(!Model.AiConfigured || Model.Items.Count == 0)">@Html.Icon("bot") Copiar con el agente</button>
+        </form>
+    </div>
+</header>
+
+@if (!Model.AiConfigured) { <div class="alert alert-warning">Copiar con el agente necesita IA: agrega <code>Anthropic__ApiKey</code> en Render.</div> }
+@if (!string.IsNullOrWhiteSpace(Model.Error)) { <div class="alert alert-warning">@Model.Error</div> }
+
+<form method="get" class="d-flex gap-2 mb-3 pub-search" role="search">
+    <input type="hidden" name="id" value="@s.Id" />
+    <input type="search" name="q" value="@Model.Query" class="form-control" placeholder="Filtrar sus productos (ej. faros, Ranger, bomba)" aria-label="Filtrar productos" />
+    <button type="submit" class="btn btn-outline-secondary">@Html.Icon("search") Filtrar</button>
+</form>
+
+@if (Model.Items.Count == 0 && Model.Error is null)
+{
+    <div class="today-clear"><div><div class="fw-bold">Sin productos para mostrar</div><div class="text-muted small">Prueba sin filtro o con otra palabra.</div></div></div>
+}
+else
+{
+    <ul class="cp-items" id="items">
+        @foreach (var i in Model.Items)
+        {
+            <li class="panel cp-item">
+                <span class="recent-thumb">@if (!string.IsNullOrWhiteSpace(i.Thumbnail)) { <img src="@i.Thumbnail" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" /> }</span>
+                <span class="cp-item-main">
+                    @if (i.Permalink is not null) { <a href="@i.Permalink" target="_blank" rel="noopener noreferrer" class="cp-item-title">@i.Title</a> } else { <span class="cp-item-title">@i.Title</span> }
+                    <span class="cp-meta">
+                        <strong>@(i.Price?.ToString("C0", mx) ?? "—")</strong>
+                        @if (i.Sold is > 0) { <span>@i.Sold.Value.ToString("N0", mx) vendidos</span> }
+                        @if (i.FreeShipping) { <span>envío gratis</span> }
+                        @if (i.Condition == "used") { <span class="pill">Usado</span> }
+                    </span>
+                </span>
+                <form asp-action="CopyItem" asp-route-id="@s.Id" method="post" class="cp-item-action">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="title" value="@i.Title" />
+                    <input type="hidden" name="price" value="@(i.Price?.ToString(CultureInfo.InvariantCulture))" />
+                    <button type="submit" class="btn btn-outline-secondary btn-sm" disabled="@(!Model.AiConfigured)">@Html.Icon("search") Buscar en EE.UU.</button>
+                </form>
+            </li>
+        }
+    </ul>
+    @if (Model.Total > Model.Offset + 50)
+    {
+        <div class="mt-3"><a asp-action="Store" asp-route-id="@s.Id" asp-route-q="@Model.Query" asp-route-offset="@(Model.Offset + 50)" class="btn btn-outline-secondary btn-sm">Ver más</a></div>
+    }
+}
