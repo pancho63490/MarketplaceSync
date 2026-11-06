@@ -54,6 +54,18 @@ namespace MarketplaceSync.Web.Models
         [MaxLength(1000)]
         public string? ImageUrl { get; set; }
 
+        /// <summary>Foto original antes de ponerle fondo blanco (para deshacer).</summary>
+        [MaxLength(1000)]
+        public string? OriginalImageUrl { get; set; }
+
+        /// <summary>Revisión de la portada: ok, fill, plain, busy, small, error (ver PhotoStudioService).</summary>
+        [MaxLength(20)]
+        public string? PhotoCheck { get; set; }
+
+        public int? PhotoWidth { get; set; }
+        public int? PhotoHeight { get; set; }
+        public DateTime? PhotoCheckedAt { get; set; }
+
         [MaxLength(200)]
         public string? Brand { get; set; }
 

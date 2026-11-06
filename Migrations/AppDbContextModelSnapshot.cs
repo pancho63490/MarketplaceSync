@@ -1361,6 +1361,23 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("OriginalImageUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("PhotoCheck")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("PhotoCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("PhotoHeight")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PhotoWidth")
+                        .HasColumnType("integer");
+
                     b.Property<string>("SourceAvailabilityText")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");

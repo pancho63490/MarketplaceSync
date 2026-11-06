@@ -137,30 +137,54 @@ public sealed class CompetitorService
         if (token is null)
             return (null, "Conecta tu cuenta de Mercado Libre primero.");
         input = input.Trim();
+        // Los links de Mercado Libre traen todo codificado (seller_id%3A123, wid%3DMLM…): se decodifica dos veces.
+        var text = input;
+        for (var i = 0; i < 2; i++)
+        {
+            try { text = Uri.UnescapeDataString(text); } catch (UriFormatException) { break; }
+        }
         string? sellerId = null;
 
-        var itemMatch = Regex.Match(input, @"MLM-?(\d{6,})", RegexOptions.IgnoreCase);
-        if (itemMatch.Success)
+        // 1) El link ya dice de qué vendedor es (pdp_filters=seller_id:…, seller_id=…, _CustId_…).
+        var sellerMatch = Regex.Match(text, @"(?:seller_id|sellerId|_CustId_)[=:_]?(\d{4,})", RegexOptions.IgnoreCase);
+        if (sellerMatch.Success)
+            sellerId = sellerMatch.Groups[1].Value;
+
+        // 2) Publicación: MLM-123…, MLM123… (también wid=MLM… de los links de catálogo).
+        if (sellerId is null)
         {
-            using var item = await GetAsync(token, $"/items/MLM{itemMatch.Groups[1].Value}", cancellationToken);
-            sellerId = item is not null && item.RootElement.TryGetProperty("seller_id", out var s) ? s.ToString() : null;
-            if (sellerId is null)
-                return (null, "No encontré esa publicación en Mercado Libre.");
+            foreach (Match m in Regex.Matches(text, @"\bMLM-?(\d{6,})", RegexOptions.IgnoreCase))
+            {
+                sellerId = await SellerOfItemAsync(token, "MLM" + m.Groups[1].Value, cancellationToken);
+                if (sellerId is not null) break;
+            }
         }
-        else
+
+        // 3) Producto de catálogo del vendedor (/up/MLMU…).
+        if (sellerId is null && Regex.Match(text, @"\bMLMU(\d{6,})", RegexOptions.IgnoreCase) is { Success: true } up)
         {
-            var nickname = Regex.Match(input, @"perfil/([^/?#\s]+)", RegexOptions.IgnoreCase) is { Success: true } m
-                ? Uri.UnescapeDataString(m.Groups[1].Value)
-                : input.TrimStart('@');
+            using var product = await GetAsync(token, $"/user-products/MLMU{up.Groups[1].Value}", cancellationToken);
+            sellerId = product is not null && product.RootElement.TryGetProperty("user_id", out var u) ? u.ToString() : null;
+        }
+
+        // 4) Usuario o link del perfil.
+        if (sellerId is null && !Regex.IsMatch(text, @"\bMLMU?-?\d{6,}", RegexOptions.IgnoreCase))
+        {
+            var nickname = Regex.Match(text, @"perfil/([^/?#\s]+)", RegexOptions.IgnoreCase) is { Success: true } m
+                ? m.Groups[1].Value
+                : text.TrimStart('@');
             using var search = await GetAsync(token, $"/sites/MLM/search?nickname={Uri.EscapeDataString(nickname)}&limit=1", cancellationToken);
             if (search is not null && search.RootElement.TryGetProperty("seller", out var seller) && seller.TryGetProperty("id", out var sid))
                 sellerId = sid.ToString();
             else if (search is not null && search.RootElement.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array && results.GetArrayLength() > 0
                      && results[0].TryGetProperty("seller", out var s2) && s2.TryGetProperty("id", out var sid2))
                 sellerId = sid2.ToString();
-            if (sellerId is null)
-                return (null, "No encontré esa tienda. Pega el link de una de sus publicaciones (el que empieza con articulo.mercadolibre.com.mx).");
         }
+
+        if (sellerId is null)
+            return (null, Regex.IsMatch(text, @"MLMU?-?\d{6,}", RegexOptions.IgnoreCase)
+                ? "Mercado Libre no me dijo de quién es esa publicación. Prueba con el link del perfil de la tienda (toca el nombre del vendedor en la publicación) o escribe su nombre de usuario."
+                : "No encontré esa tienda. Pega el link de una de sus publicaciones o de su perfil.");
 
         var store = await _context.CompetitorStores.FirstOrDefaultAsync(c => c.OrganizationId == org && c.SellerId == sellerId, cancellationToken);
         if (store is null)
@@ -173,6 +197,33 @@ public sealed class CompetitorService
         await FillSellerAsync(store, token, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         return (store, null);
+    }
+
+    /// <summary>Vendedor de una publicación; si /items/{id} no responde, prueba el multiget.</summary>
+    private async Task<string?> SellerOfItemAsync(string token, string itemId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var item = await GetAsync(token, $"/items/{itemId}", cancellationToken);
+            if (item is not null && item.RootElement.TryGetProperty("seller_id", out var s))
+                return s.ToString();
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(exception, "Item {Item} lookup failed.", itemId);
+        }
+        try
+        {
+            using var multi = await GetAsync(token, $"/items?ids={itemId}&attributes=id,seller_id", cancellationToken);
+            if (multi is not null && multi.RootElement.ValueKind == JsonValueKind.Array && multi.RootElement.GetArrayLength() > 0
+                && multi.RootElement[0].TryGetProperty("body", out var body) && body.TryGetProperty("seller_id", out var s2))
+                return s2.ToString();
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(exception, "Item {Item} multiget failed.", itemId);
+        }
+        return null;
     }
 
     /// <summary>Productos activos de la tienda (los que Mercado Libre devuelve en su búsqueda), con filtro de texto.</summary>

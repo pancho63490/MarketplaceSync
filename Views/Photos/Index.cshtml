@@ -1,0 +1,116 @@
+@model MarketplaceSync.Web.Controllers.PhotosIndexViewModel
+@using MarketplaceSync.Services.Photos
+@{
+    ViewData["Title"] = "Fotos";
+    var c = Model.Counts;
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Fotos</h1>
+        <p>Mercado Libre pide la portada con fondo blanco, el producto centrado y grande. Las que no cumplen salen menos en la búsqueda.</p>
+    </div>
+    <div class="page-head-actions">
+        <form asp-action="CheckAll" method="post">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-outline-secondary" disabled="@(!Model.ToolAvailable || Model.Unchecked == 0)">@Html.Icon("search") Revisar fotos@(Model.Unchecked > 0 ? $" ({Model.Unchecked})" : "")</button>
+        </form>
+    </div>
+</header>
+
+@if (!Model.ToolAvailable)
+{
+    <div class="alert alert-warning">Falta la herramienta de imágenes en el servidor. Vuelve a desplegar en Render: el Dockerfile ya instala ImageMagick.</div>
+}
+
+@if (Model.Rows.Any(r => r.Check is "fill" or "plain" or "busy" or "small") && Model.ToolAvailable && Model.Filter == "arreglar")
+{
+    <form asp-action="FixAll" method="post" class="panel ph-bar" data-busy="Mandando a arreglar…">
+        @Html.AntiForgeryToken()
+        <span><strong>@c["arreglar"]</strong> @(c["arreglar"] == 1 ? "foto se puede mejorar" : "fotos se pueden mejorar")@(Model.AiConfigured ? "" : " (las de fondo con cosas necesitan remove.bg)")</span>
+        <span class="d-flex flex-wrap align-items-center gap-3">
+            <span class="form-check m-0">
+                <input class="form-check-input" type="checkbox" id="updateAll" name="updateListings" value="true" checked />
+                <label class="form-check-label small" for="updateAll">Cambiarla también en Mercado Libre</label>
+            </span>
+            <button type="submit" class="btn btn-primary btn-sm">@Html.Icon("sparkles") Poner fondo blanco a todas</button>
+        </span>
+    </form>
+}
+
+<nav class="pl-chips mb-3" aria-label="Ver">
+    @foreach (var (key, label) in new[] { ("arreglar", "Por mejorar"), ("arregladas", "Arregladas"), ("listas", "Listas"), ("todo", "Todas") })
+    {
+        <a class="pub-chip @(Model.Filter == key ? "active" : "") @(key == "arreglar" && c[key] > 0 ? "is-bad" : "")" asp-action="Index" asp-route-filter="@key">@label <span>@c[key]</span></a>
+    }
+</nav>
+
+@if (Model.Rows.Count == 0)
+{
+    <div class="today-clear">
+        <span class="today-clear-mark" aria-hidden="true">✓</span>
+        <div>
+            <div class="fw-bold">@(Model.Filter == "arreglar" ? "No hay fotos por mejorar" : "Nada por aquí")</div>
+            <div class="text-muted small">@(Model.Unchecked > 0 ? $"Tienes {Model.Unchecked} fotos sin revisar: pulsa “Revisar fotos”." : "Las fotos de productos nuevos se revisan cuando pulsas “Revisar fotos”.")</div>
+        </div>
+    </div>
+}
+else
+{
+    <ul class="ph-grid">
+        @foreach (var r in Model.Rows)
+        {
+            var st = PhotoStudioService.Describe(r.Check);
+            var before = r.OriginalImageUrl;
+            <li class="panel ph-card">
+                <div class="ph-imgs @(before is null ? "" : "has-before")">
+                    @if (before is not null)
+                    {
+                        <img src="@before" alt="Foto original" loading="lazy" referrerpolicy="no-referrer" />
+                        <span class="ph-tag is-before">Antes</span>
+                        <span class="ph-tag is-after">Ahora</span>
+                    }
+                    <img src="@r.ImageUrl" alt="" loading="lazy" referrerpolicy="no-referrer" />
+                </div>
+                <div class="ph-body">
+                    <a asp-controller="Products" asp-action="Details" asp-route-id="@r.ProductId" class="ph-title">@r.Title</a>
+                    <div class="d-flex flex-wrap gap-1">
+                        <span class="pill @st.Tone">@st.Label</span>
+                        @if (r.Published) { <span class="pill">Publicado</span> }
+                        @if (r.Width is { } w && r.Height is { } h) { <span class="small text-muted align-self-center">@w×@h</span> }
+                    </div>
+                    @if (r.Check is not null and not "ok") { <p class="ph-help">@st.Help</p> }
+                    <div class="ph-actions">
+                        @if (r.Check is null)
+                        {
+                            <form asp-action="Recheck" asp-route-id="@r.ProductId" asp-route-filter="@Model.Filter" method="post" data-busy="Revisando…">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-outline-secondary btn-sm">Revisar</button>
+                            </form>
+                        }
+                        else if (st.Fixable && Model.ToolAvailable)
+                        {
+                            <form asp-action="Fix" asp-route-id="@r.ProductId" asp-route-filter="@Model.Filter" method="post" data-busy="Poniendo fondo blanco…">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="updateListings" value="true" />
+                                <button type="submit" class="btn btn-primary btn-sm" disabled="@(r.Check == "busy" && !Model.AiConfigured)">@Html.Icon("sparkles") Poner fondo blanco</button>
+                            </form>
+                        }
+                        @if (before is not null)
+                        {
+                            <form asp-action="Undo" asp-route-id="@r.ProductId" asp-route-filter="@Model.Filter" method="post">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="updateListings" value="true" />
+                                <button type="submit" class="btn btn-link btn-sm px-0">Regresar la original</button>
+                            </form>
+                        }
+                    </div>
+                    @if (r.Check == "busy" && !Model.AiConfigured)
+                    {
+                        <p class="ph-help">Para quitar fondos con cosas agrega en Render <code>RemoveBg__ApiKey</code> (de remove.bg), o cambia la foto en el producto.</p>
+                    }
+                </div>
+            </li>
+        }
+    </ul>
+}

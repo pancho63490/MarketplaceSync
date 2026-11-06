@@ -56,6 +56,7 @@
 <a asp-action="Index" class="back-link">@Html.Icon("chevron-right", "icon-xs pd-back-icon") Productos</a>
 
 <header class="pd-head">
+    <div class="pd-media-col">
     <div class="pd-media">
         @if (!string.IsNullOrWhiteSpace(Model.ImageUrl))
         {
@@ -64,6 +65,35 @@
         else
         {
             <span class="pd-media-empty">@Html.Icon("image", "icon-lg")<span>Sin foto</span></span>
+        }
+    </div>
+        @if (!string.IsNullOrWhiteSpace(Model.ImageUrl))
+        {
+            var photo = MarketplaceSync.Services.Photos.PhotoStudioService.Describe(Model.PhotoCheck);
+            <div class="pd-photo">
+                <span class="pill @photo.Tone" title="@photo.Help">@(Model.PhotoCheck is null ? "Foto sin revisar" : photo.Label)</span>
+                @if (Model.PhotoCheck is null)
+                {
+                    <form asp-controller="Photos" asp-action="Recheck" asp-route-id="@Model.Id" method="post">
+                        @Html.AntiForgeryToken()<input type="hidden" name="returnTo" value="product" />
+                        <button type="submit" class="btn btn-link btn-sm p-0">Revisar foto</button>
+                    </form>
+                }
+                else if (photo.Fixable)
+                {
+                    <form asp-controller="Photos" asp-action="Fix" asp-route-id="@Model.Id" method="post" data-busy="Poniendo fondo blanco…">
+                        @Html.AntiForgeryToken()<input type="hidden" name="returnTo" value="product" /><input type="hidden" name="updateListings" value="true" />
+                        <button type="submit" class="btn btn-outline-secondary btn-sm">@Html.Icon("sparkles") Poner fondo blanco</button>
+                    </form>
+                }
+                @if (!string.IsNullOrWhiteSpace(Model.OriginalImageUrl))
+                {
+                    <form asp-controller="Photos" asp-action="Undo" asp-route-id="@Model.Id" method="post">
+                        @Html.AntiForgeryToken()<input type="hidden" name="returnTo" value="product" /><input type="hidden" name="updateListings" value="true" />
+                        <button type="submit" class="btn btn-link btn-sm p-0">Regresar la original</button>
+                    </form>
+                }
+            </div>
         }
     </div>
     <div class="pd-summary">

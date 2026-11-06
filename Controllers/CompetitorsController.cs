@@ -92,7 +92,7 @@ public sealed class CompetitorsController : Controller
             TempData["Error"] = error;
             return RedirectToAction(nameof(Index));
         }
-        TempData["Success"] = $"Siguiendo a {found.Nickname}.";
+        TempData["Success"] = $"Siguiendo a {(string.IsNullOrEmpty(found.Nickname) ? "la tienda " + found.SellerId : found.Nickname)}.";
         return RedirectToAction(nameof(Store), new { id = found.Id });
     }
 

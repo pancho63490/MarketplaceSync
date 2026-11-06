@@ -225,6 +225,24 @@ namespace MarketplaceSync.Services.Jobs
             await _telegram.SweepAllAsync();
         }
 
+        /// <summary>Fotos: revisa las portadas sin revisar.</summary>
+        [AutomaticRetry(Attempts = 0)]
+        [DisableConcurrentExecution(timeoutInSeconds: 1800)]
+        public async Task CheckPhotos(Guid organizationId)
+        {
+            var photos = _serviceProvider.GetRequiredService<MarketplaceSync.Services.Photos.PhotoStudioService>();
+            await photos.CheckPendingAsync(organizationId, 300);
+        }
+
+        /// <summary>Fotos: pone fondo blanco a las que se pueden arreglar (hasta 40).</summary>
+        [AutomaticRetry(Attempts = 0)]
+        [DisableConcurrentExecution(timeoutInSeconds: 1800)]
+        public async Task FixPhotos(Guid organizationId, bool updateListings)
+        {
+            var photos = _serviceProvider.GetRequiredService<MarketplaceSync.Services.Photos.PhotoStudioService>();
+            await photos.FixAllAsync(organizationId, updateListings);
+        }
+
         /// <summary>Competencia: cuenta qué tiendas aparecen más en los más vendidos de las categorías vigiladas.</summary>
         [AutomaticRetry(Attempts = 0)]
         [DisableConcurrentExecution(timeoutInSeconds: 900)]
