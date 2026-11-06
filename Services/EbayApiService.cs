@@ -19,7 +19,16 @@ namespace MarketplaceSync.Web.Services
         {
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
+            var configured = configuration["Ebay:ApiBaseUrl"];
+            _apiBase = string.IsNullOrWhiteSpace(configured) ? "https://api.ebay.com" : configured.TrimEnd('/');
         }
+
+        /// <summary>Base de la API de eBay; Ebay:ApiBaseUrl solo para pruebas.</summary>
+        private readonly string _apiBase;
+
+        /// <summary>true si hay credenciales de eBay (Ebay:ClientId y Ebay:ClientSecret).</summary>
+        public bool IsConfigured =>
+            !string.IsNullOrWhiteSpace(_configuration["Ebay:ClientId"]) && !string.IsNullOrWhiteSpace(_configuration["Ebay:ClientSecret"]);
 
         public async Task<ExtractedProductInfo> ExtractFromUrlOrSearchAsync(string input)
         {
@@ -48,7 +57,7 @@ namespace MarketplaceSync.Web.Services
             var query = Uri.EscapeDataString(searchText.Trim());
 
             var url =
-                $"https://api.ebay.com/buy/browse/v1/item_summary/search" +
+                $"{_apiBase}/buy/browse/v1/item_summary/search" +
                 $"?q={query}" +
                 $"&limit=1" +
                 $"&filter=buyingOptions:%7BFIXED_PRICE%7D";
@@ -85,7 +94,7 @@ namespace MarketplaceSync.Web.Services
             var client = _httpClientFactory.CreateClient();
 
             var url =
-                $"https://api.ebay.com/buy/browse/v1/item/get_item_by_legacy_id" +
+                $"{_apiBase}/buy/browse/v1/item/get_item_by_legacy_id" +
                 $"?legacy_item_id={Uri.EscapeDataString(legacyItemId)}";
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -128,7 +137,7 @@ namespace MarketplaceSync.Web.Services
                 "buyingOptions:{FIXED_PRICE},conditions:{NEW},itemLocationCountry:US,deliveryCountry:US");
 
             var url =
-                $"https://api.ebay.com/buy/browse/v1/item_summary/search" +
+                $"{_apiBase}/buy/browse/v1/item_summary/search" +
                 $"?q={query}" +
                 $"&limit={Math.Clamp(limit, 1, 50)}" +
                 $"&filter={filter}";
@@ -192,7 +201,7 @@ namespace MarketplaceSync.Web.Services
 
             using var request = new HttpRequestMessage(
                 HttpMethod.Post,
-                "https://api.ebay.com/identity/v1/oauth2/token"
+                $"{_apiBase}/identity/v1/oauth2/token"
             );
 
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic", credentials);

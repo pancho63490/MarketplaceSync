@@ -1,3 +1,4 @@
+using Hangfire;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -377,6 +378,22 @@ public sealed partial class TelegramNotificationService
 
         switch (text.Split(' ', 2)[0].Split('@')[0].ToLowerInvariant())
         {
+            case "/encargo":
+                var request = text.Split(' ', 2) is { Length: 2 } parts && parts[1].Trim().Length >= 3 ? parts[1].Trim() : null;
+                if (request is null)
+                {
+                    await _telegram.SendMessageAsync(token, update.ChatId,
+                        "Dime qué busco, por ejemplo:\n<code>/encargo faros para Ford Ranger 2019</code>\n<code>/encargo Monster Energy en lata</code>",
+                        cancellationToken: cancellationToken);
+                    break;
+                }
+                if (request.Length > 500) request = request[..500];
+                var org2 = settings.OrganizationId;
+                _jobs.Enqueue<MarketplaceSync.Services.Jobs.MarketplaceJobsService>(job => job.RunImportAgentRequest(org2, request));
+                await _telegram.SendMessageAsync(token, update.ChatId,
+                    $"🤖 Va: busco «{E(request)}» en Mercado Libre y eBay, calculo tu ganancia e importo lo que convenga. Te aviso aquí en unos minutos.",
+                    replyToMessageId: update.MessageId, cancellationToken: cancellationToken);
+                break;
             case "/ventas":
                 await SendSalesAsync(token, settings, cancellationToken);
                 break;
@@ -391,6 +408,7 @@ public sealed partial class TelegramNotificationService
                 await _telegram.SendMessageAsync(token, update.ChatId,
                     "<b>Lo que puedo hacer</b>\n" +
                     "/ventas — ventas de hoy, ayer, la semana y el mes, con lo más vendido\n" +
+                    "/encargo … — el agente busca eso en Mercado Libre y eBay e importa lo que convenga (ej. <code>/encargo Ford Ranger 2019</code>)\n" +
                     "/pendientes — preguntas sin responder, con su respuesta sugerida\n" +
                     "/resumen — ventas de ayer y lo pendiente de hoy\n\n" +
                     "📥 <b>Mándame un link</b> de Amazon, eBay, Walmart o AliExpress y lo importo como producto. " +

@@ -32,6 +32,12 @@ public sealed class ImportAgentService
     private readonly RadarAutoPrepareService _rules;
     private readonly TelegramNotificationService _telegram;
     private readonly ILogger<ImportAgentService> _logger;
+    private readonly MarketplaceSync.Web.Services.EbayApiService _ebay;
+    private readonly MarketplaceSync.Web.Services.ProductExtractorService _extractor;
+    private readonly ProductTitleTranslator _titleTranslator;
+    private readonly IMercadoLibreAuthService _mlAuth;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _configuration;
 
     public ImportAgentService(
         AppDbContext context,
@@ -41,8 +47,20 @@ public sealed class ImportAgentService
         ICrossBorderPricingService pricing,
         RadarAutoPrepareService rules,
         TelegramNotificationService telegram,
-        ILogger<ImportAgentService> logger)
+        ILogger<ImportAgentService> logger,
+        MarketplaceSync.Web.Services.EbayApiService ebay,
+        MarketplaceSync.Web.Services.ProductExtractorService extractor,
+        ProductTitleTranslator titleTranslator,
+        IMercadoLibreAuthService mlAuth,
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration)
     {
+        _ebay = ebay;
+        _extractor = extractor;
+        _titleTranslator = titleTranslator;
+        _mlAuth = mlAuth;
+        _httpClientFactory = httpClientFactory;
+        _configuration = configuration;
         _context = context;
         _claude = claude;
         _radar = radar;
@@ -77,6 +95,27 @@ public sealed class ImportAgentService
         Escribe las razones en español de México, cortas y en lenguaje de negocio (ej. "La oferta de eBay es el par; en ML se vende la pieza sola").
         """;
 
+    private const string RequestPrompt = """
+
+        ENCARGO DEL VENDEDOR: además del Radar, el vendedor te pidió buscar algo concreto. Para eso:
+        1. Busca en Mercado Libre (buscar_en_mercado_libre) qué se vende de eso y a qué precio: es la demanda.
+           Elige productos concretos que se venden bien (con marca y número de parte o presentación clara).
+        2. Para cada uno, busca la MISMA pieza en eBay (buscar_en_ebay) con marca + número de parte o modelo exacto.
+        3. Calcula la ganancia (calcular_ganancia) con el costo + envío de eBay y el precio al que se vende en Mercado Libre.
+        4. Si coincide y deja al menos la ganancia mínima, impórtalo con importar_link (link de eBay, costo y precio de referencia).
+        No importes genéricos sin marca, réplicas, ni cosas que no se pueden cruzar. Si no encuentras nada que convenga, dilo claro
+        en el resumen y sugiere qué buscar en su lugar.
+        """;
+
+    private static readonly JsonArray RequestTools = JsonNode.Parse("""
+        [
+          {"name":"buscar_en_mercado_libre","description":"Busca en Mercado Libre México: títulos, precios y vendidos de lo que se vende para esa búsqueda, y la categoría.","input_schema":{"type":"object","properties":{"busqueda":{"type":"string"}},"required":["busqueda"]}},
+          {"name":"buscar_en_ebay","description":"Busca en eBay US artículos nuevos de precio fijo enviados a El Paso: título, precio, envío, marca, condición y link.","input_schema":{"type":"object","properties":{"busqueda":{"type":"string","description":"En inglés, con marca y número de parte o modelo."},"limite":{"type":"integer"}},"required":["busqueda"]}},
+          {"name":"calcular_ganancia","description":"Ganancia por pieza en Mercado Libre con tus costos de cruce: costo en dólares (más envío) contra el precio de venta en pesos.","input_schema":{"type":"object","properties":{"costo_usd":{"type":"number"},"envio_usd":{"type":"number"},"precio_ml_mxn":{"type":"number"}},"required":["costo_usd","precio_ml_mxn"]}},
+          {"name":"importar_link","description":"Importa al catálogo el producto de ese link (eBay u otra tienda) y lo prepara con IA, sin publicar.","input_schema":{"type":"object","properties":{"link":{"type":"string"},"costo_usd":{"type":"number"},"precio_ml_mxn":{"type":"number","description":"Precio al que se vende en Mercado Libre (referencia)."},"titulo_ml":{"type":"string","description":"Cómo se llama en Mercado Libre (referencia para no repetir)."},"motivo":{"type":"string"}},"required":["link","motivo"]}}
+        ]
+        """)!.AsArray();
+
     private static readonly JsonArray Tools = JsonNode.Parse("""
         [
           {"name":"ver_reglas","description":"Cuántos productos puedes importar hoy, ganancia mínima por pieza, margen objetivo y tipo de cambio.","input_schema":{"type":"object","properties":{}}},
@@ -94,15 +133,36 @@ public sealed class ImportAgentService
             .Select(x => x.OrganizationId).Distinct().ToListAsync(cancellationToken);
 
     /// <summary>Corre el agente para una organización y devuelve la corrida guardada.</summary>
-    public async Task<AgentRun> RunAsync(Guid organizationId, string trigger, CancellationToken cancellationToken = default)
+    public Task<AgentRun> RunAsync(Guid organizationId, string trigger, CancellationToken cancellationToken = default) =>
+        RunAsync(organizationId, trigger, null, cancellationToken);
+
+    /// <summary>Máximo de productos que importa un encargo (aparte del límite semanal del Radar).</summary>
+    public const int MaxPerRequest = 10;
+
+    public async Task<AgentRun> RunAsync(Guid organizationId, string trigger, string? request, CancellationToken cancellationToken = default)
     {
         var settings = await _pricing.GetOrCreateSettingsAsync(organizationId, cancellationToken);
-        var run = new AgentRun { OrganizationId = organizationId, Trigger = trigger, Engine = _claude.IsConfigured ? "ai" : "rules" };
+        request = string.IsNullOrWhiteSpace(request) ? null : request.Trim();
+        if (request?.Length > 500) request = request[..500];
+        var run = new AgentRun { OrganizationId = organizationId, Trigger = trigger, Request = request, Engine = _claude.IsConfigured ? "ai" : "rules" };
         _context.AgentRuns.Add(run);
         await _context.SaveChangesAsync(cancellationToken);
 
         try
         {
+            if (request is not null)
+            {
+                if (!_claude.IsConfigured)
+                {
+                    await FinishAsync(run, AgentRunStatus.Skipped, "Los encargos necesitan IA: agrega Anthropic__ApiKey en Render.", cancellationToken);
+                    return run;
+                }
+                await RunAgentLoopAsync(run, settings, MaxPerRequest, cancellationToken);
+                await FinishAsync(run, AgentRunStatus.Done, run.Summary, cancellationToken);
+                await ReportAsync(run, cancellationToken);
+                return run;
+            }
+
             var budget = await RemainingBudgetAsync(organizationId, settings.AutoPrepareWeekly, cancellationToken);
             if (!settings.ImportAgentEnabled && trigger == "schedule")
             {
@@ -156,17 +216,21 @@ public sealed class ImportAgentService
             new JsonObject
             {
                 ["role"] = "user",
-                ["content"] = $"Hoy es {DateTime.UtcNow.AddHours(-7):dd/MM/yyyy}. Revisa el Radar e importa lo que valga la pena (máximo {budget})."
+                ["content"] = run.Request is null
+                    ? $"Hoy es {DateTime.UtcNow.AddHours(-7):dd/MM/yyyy}. Revisa el Radar e importa lo que valga la pena (máximo {budget})."
+                    : $"Hoy es {DateTime.UtcNow.AddHours(-7):dd/MM/yyyy}. Encargo del vendedor: «{run.Request}». Busca en Mercado Libre y en eBay e importa lo que valga la pena (máximo {budget})."
             }
         };
+        var system = run.Request is null ? SystemPrompt : SystemPrompt + RequestPrompt;
+        var tools = run.Request is null ? Tools : new JsonArray(Tools.Concat(RequestTools).Select(t => JsonNode.Parse(t!.ToJsonString())).ToArray());
         var imported = 0;
         var reviewed = new HashSet<long>();
 
         for (var turn = 0; turn < MaxTurns; turn++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            using var response = await _claude.SendWithToolsAsync(SystemPrompt, messages, Tools, 2000, cancellationToken)
-                                 ?? throw new InvalidOperationException("Claude no respondió.");
+            using var response = await _claude.SendWithToolsAsync(system, messages, tools, 2000, cancellationToken)
+                                 ?? throw new InvalidOperationException("La IA no respondió (puede ser falta de saldo o una falla momentánea). Pulsa “Probar la IA”; mañana lo vuelve a intentar solo.");
             var root = response.RootElement;
             if (!root.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array)
                 throw new InvalidOperationException("Respuesta de Claude sin contenido.");
@@ -217,6 +281,25 @@ public sealed class ImportAgentService
                             break;
                         case "descartar":
                             output = await DiscardAsync(run, Long(input, "id"), Str(input, "motivo"), cancellationToken);
+                            break;
+                        case "buscar_en_mercado_libre":
+                            output = await SearchMercadoLibreAsync(org, Str(input, "busqueda"), cancellationToken);
+                            break;
+                        case "buscar_en_ebay":
+                            output = await SearchEbayAsync(Str(input, "busqueda"), Int(input, "limite") ?? 10, cancellationToken);
+                            break;
+                        case "calcular_ganancia":
+                            output = Profit(settings, Dec(input, "costo_usd"), Dec(input, "envio_usd"), Dec(input, "precio_ml_mxn"));
+                            break;
+                        case "importar_link":
+                            if (imported >= budget)
+                            {
+                                output = "No: ya llegaste al límite de este encargo. Llama a terminar.";
+                                break;
+                            }
+                            var (linkOk, linkText) = await ImportLinkAsync(run, Str(input, "link"), Dec(input, "costo_usd"), Str(input, "titulo_ml"), Str(input, "motivo"), cancellationToken);
+                            if (linkOk) imported++;
+                            output = linkText;
                             break;
                         case "terminar":
                             run.Summary = Truncate(Str(input, "resumen"), 2000);
@@ -379,6 +462,196 @@ public sealed class ImportAgentService
         return "Descartado.";
     }
 
+    // ── Herramientas de encargo ──
+
+    private string MlApiBase => _configuration["MercadoLibre:ApiBaseUrl"] is { Length: > 0 } v ? v.TrimEnd('/') : "https://api.mercadolibre.com";
+
+    private async Task<string> SearchMercadoLibreAsync(Guid org, string? query, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return "Falta la búsqueda.";
+        var accountId = await _context.MarketplaceAccounts.AsNoTracking()
+            .Where(a => a.OrganizationId == org && a.Marketplace == "MercadoLibre" && a.Status == "Connected")
+            .Select(a => (int?)a.Id).FirstOrDefaultAsync(cancellationToken);
+        string? token = null;
+        if (accountId is not null)
+        {
+            try { token = await _mlAuth.GetValidAccessTokenAsync(org, accountId.Value); }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested) { _logger.LogInformation(exception, "No ML token for agent search."); }
+        }
+
+        var client = _httpClientFactory.CreateClient();
+        async Task<JsonDocument?> GetAsync(string path)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, MlApiBase + path);
+            if (token is not null) request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            using var response = await client.SendAsync(request, cancellationToken);
+            return response.IsSuccessStatusCode ? JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken)) : null;
+        }
+
+        var q = Uri.EscapeDataString(query.Trim());
+        using var search = await GetAsync($"/sites/MLM/search?q={q}&limit=15");
+        if (search is not null && search.RootElement.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array && results.GetArrayLength() > 0)
+        {
+            var rows = results.EnumerateArray().Select(r => new
+            {
+                titulo = Str(r, "title"),
+                precio_mxn = Dec(r, "price"),
+                vendidos = Int(r, "sold_quantity"),
+                condicion = Str(r, "condition"),
+                link = Str(r, "permalink")
+            }).ToList();
+            return JsonSerializer.Serialize(new { busqueda = query, resultados = rows });
+        }
+
+        // Sin búsqueda abierta: categoría probable y sus más vendidos.
+        using var domains = await GetAsync($"/sites/MLM/domain_discovery/search?q={q}&limit=1");
+        var categoryId = domains?.RootElement.ValueKind == JsonValueKind.Array && domains.RootElement.GetArrayLength() > 0
+            ? Str(domains.RootElement[0], "category_id") : null;
+        if (categoryId is null)
+            return "Mercado Libre no devolvió resultados para esa búsqueda. Prueba con otras palabras.";
+        var categoryName = Str(domains!.RootElement[0], "category_name");
+        using var highlights = await GetAsync($"/highlights/MLM/category/{Uri.EscapeDataString(categoryId)}");
+        var ids = highlights?.RootElement.TryGetProperty("content", out var content) == true && content.ValueKind == JsonValueKind.Array
+            ? content.EnumerateArray().Where(c => Str(c, "type") == "ITEM").Select(c => Str(c, "id")).Where(x => x is not null).Take(15).ToList()
+            : new List<string?>();
+        var items = new List<object>();
+        foreach (var id in ids)
+        {
+            using var item = await GetAsync($"/items/{Uri.EscapeDataString(id!)}");
+            if (item is null) continue;
+            items.Add(new { titulo = Str(item.RootElement, "title"), precio_mxn = Dec(item.RootElement, "price"), link = Str(item.RootElement, "permalink") });
+        }
+        return JsonSerializer.Serialize(new { busqueda = query, categoria = categoryName, mas_vendidos_de_la_categoria = items });
+    }
+
+    private async Task<string> SearchEbayAsync(string? query, int limit, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return "Falta la búsqueda.";
+        if (!_ebay.IsConfigured)
+            return "eBay no está configurado (faltan Ebay__ClientId y Ebay__ClientSecret en Render). Dile al vendedor en el resumen.";
+        var hits = await _ebay.SearchItemsAsync(query, Math.Clamp(limit, 1, 20), cancellationToken);
+        if (hits.Count == 0)
+            return "Sin resultados nuevos de precio fijo en eBay para esa búsqueda.";
+        return JsonSerializer.Serialize(hits.Select(h => new
+        {
+            titulo = h.Title,
+            precio_usd = h.PriceUsd,
+            envio_usd = h.ShippingUsd,
+            marca = h.Brand,
+            condicion = h.Condition,
+            link = h.ItemWebUrl
+        }));
+    }
+
+    private string Profit(Web.Models.CrossBorder.CrossBorderSettings settings, decimal? costUsd, decimal? shippingUsd, decimal? priceMxn)
+    {
+        if (costUsd is not > 0 || priceMxn is not > 0)
+            return "Faltan el costo en dólares o el precio en pesos.";
+        var landed = _pricing.LandedCostMxn(costUsd.Value + (shippingUsd ?? 0), "USD", settings);
+        var estimate = _pricing.CalculateProfitFromLandedCost(landed, priceMxn.Value, settings, null);
+        return JsonSerializer.Serialize(new
+        {
+            costo_puesto_en_juarez_mxn = Math.Round(landed, 0),
+            comision_ml_mxn = Math.Round(estimate.MarketplaceFeeMxn, 0),
+            envio_y_cargos_mxn = Math.Round(estimate.ShippingOrFixedFeeMxn, 0),
+            ganancia_por_pieza_mxn = Math.Round(estimate.NetProfitMxn, 0),
+            margen_pct = Math.Round(estimate.NetMarginPercent, 1),
+            cumple_minimo = estimate.NetProfitMxn >= settings.MinProfitAmountMxn
+        });
+    }
+
+    private async Task<(bool Ok, string Text)> ImportLinkAsync(AgentRun run, string? link, decimal? costUsd, string? mlTitle, string? reason, CancellationToken cancellationToken)
+    {
+        var org = run.OrganizationId;
+        if (string.IsNullOrWhiteSpace(link) || !Uri.TryCreate(link.Trim(), UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
+            return (false, "El link no es válido.");
+        if (uri.Host.Contains("mercadoli", StringComparison.OrdinalIgnoreCase))
+            return (false, "Ese link es de Mercado Libre; importa el de la tienda donde se compra.");
+        link = uri.ToString();
+
+        if (await _context.Products.AnyAsync(p => p.OrganizationId == org && p.SourceUrl == link, cancellationToken))
+            return (false, "Ese link ya está en el catálogo.");
+        var tokens = PartNumbers(mlTitle).ToList();
+        foreach (var token in tokens.Take(3))
+        {
+            var pattern = "%" + token + "%";
+            var existing = await _context.Products.AsNoTracking()
+                .Where(p => p.OrganizationId == org && ((p.Model != null && EF.Functions.ILike(p.Model, pattern)) || (p.Title != null && EF.Functions.ILike(p.Title, pattern))))
+                .Select(p => new { p.Id, p.Title }).FirstOrDefaultAsync(cancellationToken);
+            if (existing is not null)
+                return (false, $"No lo importé: ya existe el producto {existing.Id} «{existing.Title}».");
+        }
+
+        var userId = await _context.OrganizationMemberships.AsNoTracking()
+            .Where(m => m.OrganizationId == org && m.IsActive)
+            .OrderBy(m => m.Role == Web.Models.OrganizationRoles.Owner ? 0 : 1).ThenBy(m => m.CreatedAt)
+            .Select(m => m.UserId).FirstOrDefaultAsync(cancellationToken);
+
+        var extracted = await _extractor.ExtractAsync(link);
+        var product = new Web.Models.Product
+        {
+            OrganizationId = org,
+            CreatedByUserId = userId,
+            SourceUrl = extracted.SourceUrl ?? link,
+            SourceMarketplace = extracted.SourceMarketplace ?? "UNKNOWN",
+            SourceProductId = extracted.SourceProductId,
+            Title = await _titleTranslator.ToSpanishAsync(extracted.Title ?? mlTitle, cancellationToken),
+            Description = extracted.Description,
+            SourcePrice = costUsd is > 0 ? Math.Round(costUsd.Value, 2) : extracted.SourcePrice,
+            SourceCurrency = costUsd is > 0 ? "USD" : extracted.SourceCurrency,
+            SourceStock = extracted.SourceStock,
+            ImageUrl = extracted.ImageUrl,
+            Brand = extracted.Brand,
+            Model = extracted.Model,
+            SourceStatus = extracted.SourceStatus,
+            LastSourceCheckAt = DateTime.UtcNow,
+            Status = "Draft",
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.Products.Add(product);
+        await _context.SaveChangesAsync(cancellationToken);
+        var productId = product.Id;
+        var title = product.Title;
+
+        AutopilotResult? result = null;
+        try
+        {
+            _context.ChangeTracker.Clear();
+            result = await _autopilot.RunAsync(org, productId, publishIfReady: false, cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(exception, "Autopilot failed for agent link import {ProductId}.", productId);
+        }
+
+        _context.ChangeTracker.Clear();
+        var tracked = await _context.AgentRuns.FirstAsync(r => r.Id == run.Id, cancellationToken);
+        tracked.Imported = run.Imported + 1;
+        run.Imported = tracked.Imported;
+        _context.AgentSteps.Add(new AgentStep
+        {
+            AgentRunId = run.Id,
+            Action = "imported",
+            ProductId = productId,
+            Title = Truncate(mlTitle ?? title, 300),
+            Reason = Truncate(reason, 1000)
+        });
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var missing = result?.Missing.Where(m => !m.Contains("stock", StringComparison.OrdinalIgnoreCase) && !m.Contains("piezas", StringComparison.OrdinalIgnoreCase)).ToList() ?? new List<string>();
+        return (true, missing.Count == 0
+            ? $"Importado como producto {productId} y preparado."
+            : $"Importado como producto {productId}; le falta: {string.Join(", ", missing)}.");
+    }
+
+    private static decimal? Dec(JsonElement e, string name) =>
+        e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v)
+            ? v.ValueKind == JsonValueKind.Number && v.TryGetDecimal(out var d) ? d
+            : v.ValueKind == JsonValueKind.String && decimal.TryParse(v.GetString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var s) ? s : null
+            : null;
+
     /// <summary>
     /// Productos del catálogo que parecen el mismo: mismo id de la tienda, mismo modelo, o el número de parte
     /// del título (ej. "252-1047", "RT1218") aparece en su título o modelo.
@@ -442,13 +715,15 @@ public sealed class ImportAgentService
     /// <summary>Reporte a Telegram cuando importó o descartó algo.</summary>
     private async Task ReportAsync(AgentRun run, CancellationToken cancellationToken)
     {
-        if (run.Imported == 0 && run.Discarded == 0 && run.Status != AgentRunStatus.Failed)
+        if (run.Request is null && run.Imported == 0 && run.Discarded == 0 && run.Status != AgentRunStatus.Failed)
             return;
         try
         {
             var steps = await _context.AgentSteps.AsNoTracking().Where(s => s.AgentRunId == run.Id).OrderBy(s => s.Id).ToListAsync(cancellationToken);
             var html = new StringBuilder();
-            html.Append("🤖 <b>Agente de importación</b>\n");
+            html.Append(run.Request is null
+                ? "🤖 <b>Agente de importación</b>\n"
+                : $"🤖 <b>Encargo:</b> «{TelegramNotificationService.Escape(run.Request)}»\n");
             if (!string.IsNullOrWhiteSpace(run.Summary))
                 html.Append(TelegramNotificationService.Escape(run.Summary)).Append("\n");
             var imported = steps.Where(s => s.Action == "imported").ToList();

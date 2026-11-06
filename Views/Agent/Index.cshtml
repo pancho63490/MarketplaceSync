@@ -17,11 +17,26 @@
         <h1 class="page-title">Agente de importación</h1>
         <p>Cada mañana revisa lo que conviene comprar, comprueba que la oferta de la tienda sea la misma pieza que se vende en Mercado Libre y que no la tengas ya, e importa lo que vale la pena. Tú solo compras.</p>
     </div>
-    <div class="page-head-actions">
+    <div class="page-head-actions flex-column align-items-md-end align-items-start">
         <form asp-action="RunNow" method="post" id="runForm">
             @Html.AntiForgeryToken()
-            <button type="submit" class="btn btn-primary" id="runButton" disabled="@(Model.Running || Model.Candidates == 0)">@Html.Icon("bot") @(Model.Running ? "Trabajando…" : "Ejecutar ahora")</button>
+            @if (Model.WatchedCategories == 0)
+            {
+                <a asp-controller="WatchedCategories" asp-action="Index" class="btn btn-primary">@Html.Icon("radar") Elegir categorías</a>
+            }
+            else
+            {
+                <button type="submit" class="btn btn-primary" id="runButton" disabled="@Model.Running">@Html.Icon("bot") @(Model.Running ? "Trabajando…" : Model.Candidates > 0 ? "Ejecutar ahora" : "Buscar productos y revisar")</button>
+            }
         </form>
+        @if (!Model.Running && Model.WatchedCategories > 0 && Model.Candidates == 0)
+        {
+            <span class="ag-hint">No hay productos por revisar: primero explora @(Model.WatchedCategories == 1 ? "tu categoría" : $"tus {Model.WatchedCategories} categorías") y busca precios.</span>
+        }
+        else if (Model.WatchedCategories == 0)
+        {
+            <span class="ag-hint">El agente revisa productos de las categorías que vigilas; todavía no eliges ninguna.</span>
+        }
     </div>
 </header>
 
@@ -39,6 +54,25 @@
     <div class="stat @(Model.Enabled ? "is-ok" : "")"><dt>Estado</dt><dd>@(Model.Enabled ? "Encendido" : "Apagado")</dd></div>
     <div class="stat"><dt>Próxima vuelta</dt><dd>@(Model.Enabled ? "6:15 a. m." : "—")</dd></div>
 </dl>
+
+<section class="panel ag-request" aria-labelledby="ag-req">
+    <form asp-action="Encargo" method="post" class="panel-body" id="requestForm">
+        @Html.AntiForgeryToken()
+        <label id="ag-req" for="request" class="ag-request-label">@Html.Icon("search") Encárgale algo al agente</label>
+        <div class="ag-request-row">
+            <input id="request" name="request" class="form-control" maxlength="500" autocomplete="off"
+                   placeholder="Ej. piezas de suspensión para Ford Ranger 2019, o Monster Energy en lata" required />
+            <button type="submit" class="btn btn-outline-secondary" id="requestButton" disabled="@(!Model.AiConfigured)">Encargar</button>
+        </div>
+        <div class="ag-request-examples" aria-label="Ejemplos">
+            @foreach (var example in new[] { "Faros y calaveras para Ford Ranger 2019-2023", "Monster Energy en lata", "Bombas de agua para Silverado 5.3", "Dulces americanos más vendidos" })
+            {
+                <button type="button" class="pub-chip" data-example="@example">@example</button>
+            }
+        </div>
+        <div class="form-text">Busca qué se vende de eso en Mercado Libre, encuentra la misma pieza en eBay, calcula tu ganancia e importa hasta @MarketplaceSync.Services.Agents.ImportAgentService.MaxPerRequest que convengan. También desde Telegram: <code>/encargo Ford Ranger</code>.</div>
+    </form>
+</section>
 
 <div class="ag-grid">
     <section class="panel" aria-labelledby="ag-runs">
@@ -87,6 +121,7 @@
                             <span>@run.Discarded descartados</span>
                         </span>
                     </div>
+                    @if (!string.IsNullOrWhiteSpace(run.Request)) { <p class="ag-run-request">Encargo: «@run.Request»</p> }
                     @if (!string.IsNullOrWhiteSpace(run.Summary)) { <p class="ag-summary">@run.Summary</p> }
                     @if (!string.IsNullOrWhiteSpace(run.Error)) { <p class="small text-danger mb-2">@run.Error</p> }
                     @if (run.Steps.Count > 0)
@@ -155,8 +190,14 @@
 
 @section Scripts {
     <script>
+        document.querySelectorAll('[data-example]').forEach(function (chip) {
+            chip.addEventListener('click', function () { var i = document.getElementById('request'); i.value = chip.dataset.example; i.focus(); });
+        });
+        document.getElementById('requestForm')?.addEventListener('submit', function () {
+            var b = document.getElementById('requestButton'); setTimeout(function () { b.disabled = true; b.textContent = 'Enviando…'; }, 0);
+        });
         document.getElementById('runForm')?.addEventListener('submit', function () {
-            var b = document.getElementById('runButton'); setTimeout(function () { b.disabled = true; b.textContent = 'Enviando al agente…'; }, 0);
+            var b = document.getElementById('runButton'); if (b) setTimeout(function () { b.disabled = true; b.textContent = 'Enviando al agente…'; }, 0);
         });
         @if (Model.Running)
         {

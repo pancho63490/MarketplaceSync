@@ -12,6 +12,10 @@ public sealed class AgentRun
     [MaxLength(20)]
     public string Trigger { get; set; } = "schedule";
 
+    /// <summary>Encargo del vendedor ("piezas para Ford Ranger 2019", "Monster Energy"); null en la revisión diaria del Radar.</summary>
+    [MaxLength(500)]
+    public string? Request { get; set; }
+
     /// <summary>running, done, skipped, failed.</summary>
     [MaxLength(20)]
     public string Status { get; set; } = AgentRunStatus.Running;

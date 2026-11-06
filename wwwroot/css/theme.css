@@ -1496,3 +1496,13 @@ a.mt-prod-title:hover { color: var(--denim); }
 .ag-step-reason { display: block; color: var(--muted); }
 .ag-rules { padding-left: 1.1rem; font-size: var(--fs-sm); color: var(--ink-2); display: grid; gap: .3rem; }
 @media (max-width: 991.98px) { .ag-grid { grid-template-columns: minmax(0, 1fr); } }
+.ag-hint { display: block; max-width: 260px; margin-top: .35rem; font-size: var(--fs-xs); color: var(--muted); text-align: right; }
+@media (max-width: 767.98px) { .ag-hint { text-align: left; max-width: none; } }
+.ag-request { margin-bottom: 1.25rem; border-left: 4px solid var(--signal); }
+.ag-request-label { display: flex; align-items: center; gap: .4rem; font-weight: 700; margin-bottom: .5rem; }
+.ag-request-row { display: flex; gap: .5rem; }
+.ag-request-row .form-control { min-height: 42px; }
+.ag-request-examples { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .6rem; }
+.ag-request-examples .pub-chip { border: 1px solid var(--line); background: var(--surface); cursor: pointer; }
+.ag-run-request { margin: .45rem 0 0; font-weight: 600; color: var(--ink); }
+@media (max-width: 575.98px) { .ag-request-row { flex-direction: column; } }

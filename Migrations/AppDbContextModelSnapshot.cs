@@ -51,6 +51,10 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Request")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<int>("Reviewed")
                         .HasColumnType("integer");
 

@@ -182,6 +182,13 @@ namespace MarketplaceSync.Services.Jobs
             await _agent.RunAsync(organizationId, "manual");
         }
 
+        /// <summary>Encargo al agente (desde la app o con /encargo en Telegram): busca en Mercado Libre y eBay e importa lo que convenga.</summary>
+        [AutomaticRetry(Attempts = 0)]
+        public async Task RunImportAgentRequest(Guid organizationId, string request)
+        {
+            await _agent.RunAsync(organizationId, "manual", request);
+        }
+
         /// <summary>Botón "Ejecutar ahora" del agente: solo revisa e importa (no vuelve a explorar).</summary>
         [AutomaticRetry(Attempts = 0)]
         [DisableConcurrentExecution(timeoutInSeconds: 1800)]
