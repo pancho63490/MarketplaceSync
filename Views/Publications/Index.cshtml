@@ -90,7 +90,8 @@ else
         {
             var profit = r.Profit;
             <div class="pub-row @(r.Status != "active" ? "is-paused" : "")">
-                <div>
+                <div class="pub-pick">
+                    <input type="checkbox" class="form-check-input pub-select" name="ids" value="@r.PublicationId" form="bulkForm" aria-label="Seleccionar @r.Title" />
                     <span class="recent-thumb pub-thumb">
                         @if (!string.IsNullOrWhiteSpace(r.ImageUrl))
                         {
@@ -103,6 +104,7 @@ else
                     <a asp-controller="Products" asp-action="Details" asp-route-id="@r.ProductId" class="pl-title" title="@r.Title">@r.Title</a>
                     <div class="pl-meta">
                         <span>@r.ItemId</span>
+                        <span><a asp-action="Edit" asp-route-id="@r.PublicationId" class="pub-edit">@Html.Icon("pencil", "icon-xs") Editar</a></span>
                         @if (r.Status != "active") { <span class="text-danger">@(r.Status == "paused" ? "Pausada" : r.Status)</span> }
                         @if (!string.IsNullOrWhiteSpace(r.Permalink)) { <span><a href="@r.Permalink" target="_blank" rel="noopener noreferrer">Ver en Mercado Libre @Html.Icon("external-link", "icon-xs")</a></span> }
                     </div>
@@ -187,11 +189,48 @@ else
             </div>
         }
     </div>
+    <form asp-action="Bulk" method="post" id="bulkForm" class="pub-bulk" hidden>
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="filter" value="@Model.Filter" />
+        <strong id="bulkCount">0 seleccionadas</strong>
+        <select name="bulkAction" id="bulkAction" class="form-select form-select-sm" aria-label="Qué hacer">
+            <option value="price">Cambiar precio</option>
+            <option value="paused">Pausar</option>
+            <option value="active">Activar</option>
+        </select>
+        <span class="d-inline-flex gap-1" id="bulkPrice">
+            <input name="amount" class="form-control form-control-sm" style="width: 90px" inputmode="decimal" placeholder="5 o -100" aria-label="Cuánto cambiar el precio" />
+            <select name="mode" class="form-select form-select-sm" aria-label="Porcentaje o pesos">
+                <option value="percent">%</option>
+                <option value="amount">pesos</option>
+            </select>
+        </span>
+        <button type="submit" class="btn btn-primary btn-sm" id="bulkButton">Aplicar en Mercado Libre</button>
+        <button type="button" class="btn btn-link btn-sm text-white" id="bulkClear">Quitar selección</button>
+    </form>
     <p class="small text-muted mt-2">* Comisión estimada con tu porcentaje de Costos de cruce; la real se carga al sincronizar. La ganancia descuenta envío, comisión y retenciones.</p>
 }
 
 @section Scripts {
     <script>
+        (function () {
+            var bar = document.getElementById('bulkForm');
+            if (!bar) return;
+            var boxes = Array.from(document.querySelectorAll('.pub-select'));
+            var count = document.getElementById('bulkCount');
+            function refresh() {
+                var n = boxes.filter(function (b) { return b.checked; }).length;
+                bar.hidden = n === 0;
+                count.textContent = n + (n === 1 ? ' seleccionada' : ' seleccionadas');
+            }
+            boxes.forEach(function (b) { b.addEventListener('change', refresh); });
+            document.getElementById('bulkClear').addEventListener('click', function () { boxes.forEach(function (b) { b.checked = false; }); refresh(); });
+            var action = document.getElementById('bulkAction'), price = document.getElementById('bulkPrice');
+            action.addEventListener('change', function () { price.hidden = action.value !== 'price'; });
+            bar.addEventListener('submit', function () {
+                var b = document.getElementById('bulkButton'); setTimeout(function () { b.disabled = true; b.textContent = 'Aplicando…'; }, 0);
+            });
+        })();
         document.getElementById('syncForm')?.addEventListener('submit', function () {
             var b = document.getElementById('syncButton'); setTimeout(function () { b.disabled = true; b.textContent = 'Actualizando…'; }, 0);
         });

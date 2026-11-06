@@ -20,14 +20,17 @@ public sealed class PublicationsController : Controller
     private readonly ICrossBorderPricingService _pricing;
     private readonly IMercadoLibreListingSyncService _sync;
     private readonly ILogger<PublicationsController> _logger;
+    private readonly MercadoLibreItemEditorService _editor;
 
     public PublicationsController(
         AppDbContext context,
         IOrganizationContext organizationContext,
         ICrossBorderPricingService pricing,
         IMercadoLibreListingSyncService sync,
-        ILogger<PublicationsController> logger)
+        ILogger<PublicationsController> logger,
+        MercadoLibreItemEditorService editor)
     {
+        _editor = editor;
         _context = context;
         _organizationContext = organizationContext;
         _pricing = pricing;
@@ -232,5 +235,193 @@ public sealed class PublicationsController : Controller
         TempData["Success"] = $"Listo: el SKU {sku} empieza con {publication.Stock ?? 0} piezas. " +
                               "Desde ahora las ventas, recepciones y ajustes de Inventario actualizan Mercado Libre.";
         return RedirectToAction(nameof(Index));
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Editar en Mercado Libre sin entrar a Mercado Libre
+    // ─────────────────────────────────────────────────────────────
+
+    [HttpGet]
+    public async Task<IActionResult> Edit(int id, CancellationToken cancellationToken)
+    {
+        var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        ItemDetails item;
+        try
+        {
+            item = await _editor.GetAsync(organizationId, id, cancellationToken);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (MercadoLibreEditException exception)
+        {
+            TempData["Error"] = exception.Message;
+            return RedirectToAction(nameof(Index));
+        }
+
+        var (landed, profit) = await ProfitAsync(organizationId, item.ProductId, item.Price, id, cancellationToken);
+        return View(new PublicationEditViewModel { Item = item, LandedCostMxn = landed, Profit = profit });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(int id, ItemEdit edit, CancellationToken cancellationToken)
+    {
+        var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        try
+        {
+            var result = await _editor.UpdateAsync(organizationId, id, edit, cancellationToken);
+            if (result.Changed.Count > 0)
+                TempData["Success"] = "Guardado en Mercado Libre: " + string.Join(", ", result.Changed) + ".";
+            else if (result.Ok)
+                TempData["Success"] = "No había cambios por guardar.";
+            if (!result.Ok)
+                TempData["Error"] = string.Join(" ", result.Errors);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (MercadoLibreEditException exception)
+        {
+            TempData["Error"] = exception.Message;
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(exception, "Editing publication {Id} failed.", id);
+            TempData["Error"] = "Mercado Libre no respondió. Tus cambios no se guardaron; intenta de nuevo en un momento.";
+        }
+        return RedirectToAction(nameof(Edit), new { id });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetStatus(int id, string status, string? returnTo, CancellationToken cancellationToken)
+    {
+        var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        try
+        {
+            var error = await _editor.SetStatusAsync(organizationId, id, status, cancellationToken);
+            if (error is null)
+                TempData["Success"] = status switch
+                {
+                    "paused" => "Publicación pausada: ya no aparece en Mercado Libre hasta que la actives.",
+                    "active" => "Publicación activa otra vez.",
+                    _ => "Publicación finalizada. Si la quieres de vuelta, usa Republicar."
+                };
+            else
+                TempData["Error"] = "Mercado Libre no lo permitió: " + error;
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (MercadoLibreEditException exception)
+        {
+            TempData["Error"] = exception.Message;
+        }
+        return returnTo == "index" ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Edit), new { id });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Relist(int id, string? price, int quantity, CancellationToken cancellationToken)
+    {
+        var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        if (!MercadoLibreItemEditorService.TryParseMoney(price, out var value) || value < 1 || quantity < 1)
+        {
+            TempData["Error"] = "Para republicar escribe el precio y al menos 1 pieza.";
+            return RedirectToAction(nameof(Edit), new { id });
+        }
+        try
+        {
+            var (newItemId, error) = await _editor.RelistAsync(organizationId, id, value, quantity, cancellationToken);
+            if (error is null)
+                TempData["Success"] = $"Republicada como {newItemId}. Las ventas y preguntas viejas se quedan en la publicación anterior.";
+            else
+                TempData["Error"] = "Mercado Libre no la republicó: " + error;
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (MercadoLibreEditException exception)
+        {
+            TempData["Error"] = exception.Message;
+        }
+        return RedirectToAction(nameof(Edit), new { id });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Bulk(int[] ids, string? bulkAction, string? amount, string? mode, string? filter, CancellationToken cancellationToken)
+    {
+        var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        if (ids.Length == 0)
+        {
+            TempData["Error"] = "Selecciona al menos una publicación.";
+            return RedirectToAction(nameof(Index), new { filter });
+        }
+
+        decimal? value = null;
+        if (bulkAction == "price")
+        {
+            if (!MercadoLibreItemEditorService.TryParseMoney(amount?.Replace("+", string.Empty), out var parsed) || parsed == 0)
+            {
+                TempData["Error"] = "Escribe cuánto cambiar el precio, por ejemplo 5 (sube 5%) o -100 (baja $100).";
+                return RedirectToAction(nameof(Index), new { filter });
+            }
+            value = parsed;
+        }
+
+        var result = await _editor.BulkAsync(organizationId, ids, bulkAction ?? string.Empty, value, mode != "amount", cancellationToken);
+        if (result.Done > 0)
+        {
+            var what = bulkAction switch { "paused" => "pausadas", "active" => "activadas", _ => "con precio nuevo" };
+            TempData["Success"] = $"{result.Done} {(result.Done == 1 ? "publicación" : "publicaciones")} {what} en Mercado Libre.";
+        }
+        if (result.Errors.Count > 0)
+            TempData["Error"] = string.Join(" · ", result.Errors.Take(5)) + (result.Errors.Count > 5 ? $" (y {result.Errors.Count - 5} más)" : "");
+        return RedirectToAction(nameof(Index), new { filter });
+    }
+
+    /// <summary>Ganancia por pieza si vendes a ese precio (para el editor, mientras escribes).</summary>
+    [HttpGet]
+    public async Task<IActionResult> ProfitPreview(int id, string? price, CancellationToken cancellationToken)
+    {
+        var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        if (!MercadoLibreItemEditorService.TryParseMoney(price, out var value) || value <= 0)
+            return Json(new { ok = false });
+        var productId = await _context.MarketplacePublications.AsNoTracking()
+            .Where(p => p.Id == id && p.Product.OrganizationId == organizationId)
+            .Select(p => (int?)p.ProductId).FirstOrDefaultAsync(cancellationToken);
+        if (productId is null)
+            return NotFound();
+        var (landed, profit) = await ProfitAsync(organizationId, productId.Value, value, id, cancellationToken);
+        if (profit is null)
+            return Json(new { ok = false, noCost = landed is null });
+        var mx = CultureInfo.GetCultureInfo("es-MX");
+        return Json(new
+        {
+            ok = true,
+            profit = profit.NetProfitMxn.ToString("C0", mx),
+            margin = profit.NetMarginPercent.ToString("0.#", mx) + "%",
+            fee = profit.MarketplaceFeeMxn.ToString("C0", mx),
+            loss = profit.NetProfitMxn < 0
+        });
+    }
+
+    private async Task<(decimal? Landed, CrossBorderProfitEstimate? Profit)> ProfitAsync(
+        Guid organizationId, int productId, decimal price, int publicationId, CancellationToken cancellationToken)
+    {
+        var product = await _context.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == productId, cancellationToken);
+        if (product is null || product.SourcePrice is not > 0 || product.SourceMarketplace is "MercadoLibre" or "MercadoLibreInsights")
+            return (null, null);
+        var settings = await _pricing.GetOrCreateSettingsAsync(organizationId, cancellationToken);
+        var landed = _pricing.LandedCostMxn(product.SourcePrice.Value, product.SourceCurrency, settings);
+        var publication = await _context.MarketplacePublications.AsNoTracking().FirstOrDefaultAsync(p => p.Id == publicationId, cancellationToken);
+        var realFee = publication?.SaleFeeForPrice == price ? publication.SaleFeeMxn : null;
+        return (landed, _pricing.CalculateProfitFromLandedCost(landed, price, settings, realFee));
     }
 }

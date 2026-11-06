@@ -92,7 +92,7 @@
                 {
                     <a href="@ml.Permalink" target="_blank" rel="noopener noreferrer" class="btn btn-primary">@Html.Icon("external-link") Ver en Mercado Libre</a>
                 }
-                <a asp-action="PublishToMercadoLibre" asp-route-id="@Model.Id" class="btn btn-outline-secondary">@Html.Icon("pencil") Editar publicación</a>
+                <a asp-controller="Publications" asp-action="Edit" asp-route-id="@ml.Id" class="btn btn-outline-secondary">@Html.Icon("pencil") Editar en Mercado Libre</a>
             }
             else if (missing.Count == 0)
             {

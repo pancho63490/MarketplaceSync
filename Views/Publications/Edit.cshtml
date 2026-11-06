@@ -1,0 +1,410 @@
+@model MarketplaceSync.Web.ViewModels.Publications.PublicationEditViewModel
+@using System.Globalization
+@using MarketplaceSync.Services.MercadoLibre
+
+@{
+    var item = Model.Item;
+    ViewData["Title"] = "Editar publicación";
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    string Mxn(decimal? v) => v.HasValue ? v.Value.ToString("C0", mx) : "—";
+    var (statusLabel, statusTone, statusHelp) = item.Status switch
+    {
+        "active" => ("Activa", "pill-ok", "Se ve y se vende en Mercado Libre."),
+        "paused" => ("Pausada", "pill-warn", "No aparece en Mercado Libre hasta que la actives."),
+        "closed" => ("Finalizada", "pill-bad", "Ya no se puede activar: republícala para venderla otra vez."),
+        "under_review" => ("En revisión", "pill-info", "Mercado Libre la está revisando; espera su respuesta."),
+        _ => (item.Status, "", "")
+    };
+    var outOfStock = item.SubStatus.Contains("out_of_stock");
+    var shipping = item.LogisticType switch
+    {
+        "fulfillment" => "Full",
+        "self_service" => "Flex",
+        "cross_docking" or "drop_off" or "xd_drop_off" => "Mercado Envíos",
+        _ => item.ShippingMode == "me2" ? "Mercado Envíos" : item.ShippingMode == "not_specified" ? "A convenir" : "Mercado Envíos"
+    };
+    var priceText = item.Price.ToString("0.##", CultureInfo.InvariantCulture);
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <a asp-action="Index" class="pe-back">← Publicados</a>
+        <h1 class="page-title">Editar publicación</h1>
+        <p>Lo que guardes aquí se cambia directo en Mercado Libre.</p>
+        <span class="page-head-meta">
+            @item.ItemId <span class="pill @statusTone ms-1">@statusLabel</span>
+            @if (outOfStock) { <span class="pill pill-bad ms-1">Sin stock</span> }
+            @if (!string.IsNullOrWhiteSpace(item.AccountName)) { <span> · @item.AccountName</span> }
+        </span>
+    </div>
+    <div class="page-head-actions">
+        @if (!string.IsNullOrWhiteSpace(item.Permalink))
+        {
+            <a href="@item.Permalink" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary">@Html.Icon("eye") Ver en Mercado Libre</a>
+        }
+    </div>
+</header>
+
+<div class="pe-grid">
+    <div class="pe-main">
+        <form asp-action="Edit" asp-route-id="@item.PublicationId" method="post" id="editForm">
+            @Html.AntiForgeryToken()
+            <fieldset @(item.IsClosed ? "disabled" : "")>
+
+                <section class="panel" aria-labelledby="pe-basic">
+                    <div class="panel-head"><h2 id="pe-basic">Lo básico</h2></div>
+                    <div class="panel-body pe-fields">
+                        <div class="pe-field pe-wide">
+                            <label for="Title" class="form-label">Título</label>
+                            <input id="Title" name="Title" class="form-control" maxlength="60" value="@item.Title" @(item.CanEditTitle ? "" : "readonly") />
+                            <div class="form-text d-flex justify-content-between gap-2">
+                                <span>@(item.CanEditTitle ? "Producto + marca + modelo + años. Sin “envío gratis” ni signos." : "Mercado Libre no deja cambiar el título porque ya tiene ventas. Puedes mejorar la ficha técnica y la descripción.")</span>
+                                <span id="titleCount" class="text-nowrap">@item.Title.Length/60</span>
+                            </div>
+                        </div>
+
+                        <div class="pe-field">
+                            <label for="Price" class="form-label">Precio</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input id="Price" name="Price" class="form-control pe-num" inputmode="decimal" value="@priceText" data-original="@priceText" autocomplete="off" />
+                            </div>
+                            <div class="form-text" id="profitLine" aria-live="polite">
+                                @if (Model.Profit is { } p)
+                                {
+                                    <span class="@(p.NetProfitMxn < 0 ? "text-danger" : "text-success") fw-bold">@(p.NetProfitMxn < 0 ? "Pierdes" : "Ganas") @Mxn(Math.Abs(p.NetProfitMxn))</span>
+                                    <span> por pieza · margen @p.NetMarginPercent.ToString("0.#", mx)% · comisión @Mxn(p.MarketplaceFeeMxn)</span>
+                                }
+                                else
+                                {
+                                    <span>Registra lo que te costó en <a asp-action="Index" asp-route-filter="nocost">Publicados</a> para ver tu ganancia.</span>
+                                }
+                            </div>
+                            @if (item.HasVariations)
+                            {
+                                <div class="form-text">El precio es el mismo para todas las variaciones.</div>
+                            }
+                        </div>
+
+                        @if (!item.HasVariations)
+                        {
+                            <div class="pe-field">
+                                <label for="Quantity" class="form-label">Piezas disponibles</label>
+                                @if (item.StockControlledByApp)
+                                {
+                                    <input id="Quantity" class="form-control pe-num" value="@item.AvailableQuantity" readonly />
+                                    <div class="form-text">Lo controla <a asp-controller="Inventory" asp-action="Index">Inventario</a> (@item.AppStock en tu bodega): cámbialo ahí para que no se desajuste.</div>
+                                }
+                                else
+                                {
+                                    <input id="Quantity" name="Quantity" type="number" min="0" max="99999" class="form-control pe-num" value="@item.AvailableQuantity" />
+                                    <div class="form-text">Con 0 la publicación se pausa sola por falta de stock.</div>
+                                }
+                            </div>
+                        }
+
+                        <div class="pe-field">
+                            <label for="ListingTypeId" class="form-label">Tipo de publicación</label>
+                            <select id="ListingTypeId" name="ListingTypeId" class="form-select">
+                                @foreach (var (key, label) in MercadoLibreItemEditorService.ListingTypes)
+                                {
+                                    if (key == "free" && item.ListingTypeId != "free") { continue; }
+                                    <option value="@key" selected="@(item.ListingTypeId == key)">@label</option>
+                                }
+                                @if (!MercadoLibreItemEditorService.ListingTypes.ContainsKey(item.ListingTypeId))
+                                {
+                                    <option value="@item.ListingTypeId" selected>@item.ListingTypeId</option>
+                                }
+                            </select>
+                            <div class="form-text">Premium cobra más comisión, pero sale más arriba y ofrece meses sin intereses.</div>
+                        </div>
+
+                        <div class="pe-field">
+                            <label for="WarrantyType" class="form-label">Garantía</label>
+                            <div class="d-flex gap-2">
+                                <select id="WarrantyType" name="WarrantyType" class="form-select pe-warranty-type">
+                                    @if (string.IsNullOrWhiteSpace(item.WarrantyType)) { <option value="">Sin indicar</option> }
+                                    @foreach (var w in MercadoLibreItemEditorService.WarrantyTypes)
+                                    {
+                                        <option selected="@(item.WarrantyType == w)">@w</option>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(item.WarrantyType) && !MercadoLibreItemEditorService.WarrantyTypes.Contains(item.WarrantyType))
+                                    {
+                                        <option selected>@item.WarrantyType</option>
+                                    }
+                                </select>
+                                <input name="WarrantyTime" class="form-control pe-warranty-time" value="@item.WarrantyTime" placeholder="30 días" aria-label="Duración de la garantía" />
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                @if (item.HasVariations)
+                {
+                    <section class="panel" aria-labelledby="pe-vars">
+                        <div class="panel-head">
+                            <h2 id="pe-vars">Variaciones</h2>
+                            @if (item.StockControlledByApp) { <p>El stock de cada variación lo controla Inventario.</p> }
+                        </div>
+                        <div class="table-responsive">
+                            <table class="data-table pe-vars">
+                                <thead><tr><th>Variación</th><th>SKU</th><th class="text-end">Vendidos</th><th class="text-end">Disponibles</th></tr></thead>
+                                <tbody>
+                                    @foreach (var v in item.Variations)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <span class="d-inline-flex align-items-center gap-2">
+                                                    @if (!string.IsNullOrWhiteSpace(v.PictureUrl)) { <img src="@v.PictureUrl" alt="" class="pe-var-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" /> }
+                                                    @v.Label
+                                                </span>
+                                            </td>
+                                            <td class="text-muted">@(v.SellerSku ?? "—")</td>
+                                            <td class="text-end">@v.SoldQuantity</td>
+                                            <td class="text-end">
+                                                @if (item.StockControlledByApp)
+                                                {
+                                                    @v.AvailableQuantity
+                                                }
+                                                else
+                                                {
+                                                    <input type="number" min="0" max="99999" name="VariationQuantities[@v.Id]" value="@v.AvailableQuantity" class="form-control form-control-sm pe-num pe-qty" aria-label="Disponibles de @v.Label" />
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                }
+
+                <section class="panel" aria-labelledby="pe-photos">
+                    <div class="panel-head">
+                        <h2 id="pe-photos">Fotos</h2>
+                        <p>La primera es la portada. Usa las flechas para ordenarlas. Máximo @MercadoLibreItemEditorService.MaxPictures.</p>
+                    </div>
+                    <div class="panel-body">
+                        <input type="hidden" name="PicturesSubmitted" value="true" />
+                        <ol class="pe-photos" id="photoList">
+                            @foreach (var pic in item.Pictures)
+                            {
+                                <li class="pe-photo" data-id="@pic.Id">
+                                    <input type="hidden" name="KeepPictureIds" value="@pic.Id" />
+                                    <img src="@pic.Url" alt="" loading="lazy" referrerpolicy="no-referrer" />
+                                    <span class="pe-photo-cover">Portada</span>
+                                    <div class="pe-photo-tools">
+                                        <button type="button" class="pe-photo-btn" data-move="-1" aria-label="Mover antes">←</button>
+                                        <button type="button" class="pe-photo-btn" data-move="1" aria-label="Mover después">→</button>
+                                        <button type="button" class="pe-photo-btn is-remove" data-remove aria-label="Quitar foto">@Html.Icon("x", "icon-xs")</button>
+                                    </div>
+                                </li>
+                            }
+                        </ol>
+                        @if (item.Pictures.Count == 0)
+                        {
+                            <p class="text-muted small">Esta publicación no tiene fotos.</p>
+                        }
+                        <label for="NewPictureUrls" class="form-label mt-3">Agregar fotos</label>
+                        <textarea id="NewPictureUrls" name="NewPictureUrls" class="form-control" rows="2" placeholder="https://m.media-amazon.com/images/I/….jpg"></textarea>
+                        <div class="form-text">Pega el link de cada foto, uno por línea (clic derecho en la foto de la tienda → Copiar dirección de la imagen). Fondo blanco y mínimo 500 px.</div>
+                    </div>
+                </section>
+
+                <section class="panel" aria-labelledby="pe-desc">
+                    <div class="panel-head">
+                        <h2 id="pe-desc">Descripción</h2>
+                        <p>Texto simple: compatibilidad, qué incluye y garantía. Sin teléfonos, correos ni links (Mercado Libre los rechaza).</p>
+                    </div>
+                    <div class="panel-body">
+                        <textarea name="Description" class="form-control" rows="10" aria-label="Descripción">@item.Description</textarea>
+                    </div>
+                </section>
+
+                @if (item.Attributes.Count > 0)
+                {
+                    <section class="panel" aria-labelledby="pe-attrs">
+                        <div class="panel-head">
+                            <h2 id="pe-attrs">Ficha técnica</h2>
+                            <p>Mientras más completa, mejor sale en las búsquedas. Para quitar un dato, hazlo en Mercado Libre.</p>
+                        </div>
+                        <div class="panel-body pe-attrs">
+                            @foreach (var a in item.Attributes.OrderBy(a => string.IsNullOrWhiteSpace(a.ValueName) ? 1 : 0))
+                            {
+                                <div class="pe-attr">
+                                    <label for="attr-@a.Id" class="form-label">@a.Name</label>
+                                    <input id="attr-@a.Id" name="Attributes[@a.Id]" class="form-control form-control-sm @(string.IsNullOrWhiteSpace(a.ValueName) ? "is-empty" : "")" value="@a.ValueName" placeholder="Sin dato" />
+                                </div>
+                            }
+                        </div>
+                    </section>
+                }
+            </fieldset>
+
+            @if (!item.IsClosed)
+            {
+                <div class="pe-savebar">
+                    <button type="submit" class="btn btn-primary" id="saveButton">@Html.Icon("upload") Guardar en Mercado Libre</button>
+                    <a asp-action="Edit" asp-route-id="@item.PublicationId" class="btn btn-link">Descartar cambios</a>
+                    <span class="pe-dirty" id="dirtyNote" hidden>Tienes cambios sin guardar</span>
+                </div>
+            }
+        </form>
+    </div>
+
+    <aside class="pe-side">
+        <section class="panel" aria-labelledby="pe-status">
+            <div class="panel-head"><h2 id="pe-status">Estado</h2></div>
+            <div class="panel-body">
+                <p class="mb-3"><span class="pill @statusTone">@statusLabel</span> <span class="small text-muted d-block mt-1">@statusHelp</span></p>
+                @if (item.IsClosed)
+                {
+                    <form asp-action="Relist" asp-route-id="@item.PublicationId" method="post" class="pe-relist">
+                        @Html.AntiForgeryToken()
+                        <div class="d-flex gap-2">
+                            <div>
+                                <label for="relistPrice" class="form-label small">Precio</label>
+                                <input id="relistPrice" name="price" class="form-control form-control-sm pe-num" value="@priceText" inputmode="decimal" required />
+                            </div>
+                            <div>
+                                <label for="relistQty" class="form-label small">Piezas</label>
+                                <input id="relistQty" name="quantity" type="number" min="1" class="form-control form-control-sm pe-num" value="@(Math.Max(1, item.AppStock ?? 1))" required />
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm mt-2">@Html.Icon("refresh-cw") Republicar</button>
+                        <div class="form-text">Mercado Libre crea una publicación nueva con otro número.</div>
+                    </form>
+                }
+                else
+                {
+                    <div class="d-flex flex-wrap gap-2">
+                        @if (item.Status == "active")
+                        {
+                            <form asp-action="SetStatus" asp-route-id="@item.PublicationId" method="post">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="status" value="paused" />
+                                <button type="submit" class="btn btn-outline-secondary btn-sm">@Html.Icon("pause") Pausar</button>
+                            </form>
+                        }
+                        else if (item.Status == "paused")
+                        {
+                            <form asp-action="SetStatus" asp-route-id="@item.PublicationId" method="post">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="status" value="active" />
+                                <button type="submit" class="btn btn-outline-secondary btn-sm" disabled="@(outOfStock && item.AvailableQuantity == 0)">@Html.Icon("play") Activar</button>
+                            </form>
+                        }
+                        <form asp-action="SetStatus" asp-route-id="@item.PublicationId" method="post" class="pe-close-form">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="status" value="closed" />
+                            <button type="submit" class="btn btn-outline-danger btn-sm">Finalizar</button>
+                        </form>
+                    </div>
+                    @if (outOfStock && item.AvailableQuantity == 0)
+                    {
+                        <p class="small text-muted mt-2 mb-0">Está pausada porque se quedó sin piezas: agrega stock y se activa sola.</p>
+                    }
+                    <p class="small text-muted mt-2 mb-0">Finalizar la quita para siempre; después solo se puede republicar.</p>
+                }
+            </div>
+        </section>
+
+        <section class="panel" aria-labelledby="pe-summary">
+            <div class="panel-head"><h2 id="pe-summary">Resumen</h2></div>
+            <div class="panel-body">
+                <dl class="facts pe-facts">
+                    <div><dt>Vendidos</dt><dd>@item.SoldQuantity.ToString("N0", mx)</dd></div>
+                    <div><dt>Disponibles</dt><dd>@(item.HasVariations ? item.Variations.Sum(v => v.AvailableQuantity) : item.AvailableQuantity)</dd></div>
+                    <div><dt>Envío</dt><dd>@shipping@(item.FreeShipping ? " · gratis" : "")</dd></div>
+                    <div><dt>Condición</dt><dd>@(item.Condition == "new" ? "Nuevo" : item.Condition == "used" ? "Usado" : item.Condition)</dd></div>
+                    <div><dt>Te cuesta</dt><dd class="@(Model.LandedCostMxn.HasValue ? "" : "is-missing")">@(Model.LandedCostMxn.HasValue ? Mxn(Model.LandedCostMxn) : "Sin costo")</dd></div>
+                    <div><dt>Cambiada en ML</dt><dd>@(item.LastUpdated.HasValue ? item.LastUpdated.Value.AddHours(-7).ToString("dd/MM/yyyy HH:mm") : "—")</dd></div>
+                </dl>
+                <div class="d-flex flex-wrap gap-3 mt-3 small">
+                    <a asp-controller="Products" asp-action="Details" asp-route-id="@item.ProductId">Ver el producto en la app</a>
+                </div>
+            </div>
+        </section>
+    </aside>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var form = document.getElementById('editForm');
+            var price = document.getElementById('Price');
+            var dirty = false;
+            var note = document.getElementById('dirtyNote');
+            function markDirty() { if (!dirty) { dirty = true; if (note) note.hidden = false; } }
+            form.addEventListener('input', markDirty);
+            form.addEventListener('change', markDirty);
+            window.addEventListener('beforeunload', function (e) { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+            form.addEventListener('submit', function (event) {
+                var b = document.getElementById('saveButton');
+                // Bajar el precio a menos de la mitad pide confirmación (evita un cero de más o de menos).
+                var original = parseFloat(price.dataset.original), now = parseFloat((price.value || '').replace(/[$,\s]/g, ''));
+                if (now > 0 && original > 0 && now < original / 2 && b.dataset.confirmed !== '1') {
+                    event.preventDefault();
+                    b.dataset.confirmed = '1';
+                    b.textContent = 'Confirmar: bajar de $' + original + ' a $' + now;
+                    b.classList.replace('btn-primary', 'btn-danger');
+                    setTimeout(function () { b.dataset.confirmed = ''; b.textContent = 'Guardar en Mercado Libre'; b.classList.replace('btn-danger', 'btn-primary'); }, 5000);
+                    return;
+                }
+                dirty = false;
+                if (b) setTimeout(function () { b.disabled = true; b.textContent = 'Guardando en Mercado Libre…'; }, 0);
+            });
+
+            // Contador del título
+            var title = document.getElementById('Title'), count = document.getElementById('titleCount');
+            title.addEventListener('input', function () { count.textContent = title.value.length + '/60'; });
+
+            // Ganancia mientras escribes el precio
+            var line = document.getElementById('profitLine'), timer;
+            price.addEventListener('input', function () {
+                clearTimeout(timer);
+                timer = setTimeout(function () {
+                    fetch('@Url.Action("ProfitPreview", new { id = item.PublicationId })?price=' + encodeURIComponent(price.value), { credentials: 'same-origin' })
+                        .then(function (r) { return r.ok ? r.json() : null; })
+                        .then(function (d) {
+                            if (!d || !d.ok) return;
+                            line.innerHTML = '';
+                            var strong = document.createElement('span');
+                            strong.className = 'fw-bold ' + (d.loss ? 'text-danger' : 'text-success');
+                            strong.textContent = (d.loss ? 'Pierdes ' : 'Ganas ') + d.profit.replace('-', '');
+                            var rest = document.createElement('span');
+                            rest.textContent = ' por pieza · margen ' + d.margin + ' · comisión ' + d.fee + ' (estimada)';
+                            line.append(strong, rest);
+                        });
+                }, 350);
+            });
+
+            // Fotos: ordenar y quitar
+            var list = document.getElementById('photoList');
+            list.addEventListener('click', function (e) {
+                var btn = e.target.closest('button');
+                if (!btn) return;
+                var li = btn.closest('.pe-photo');
+                if (btn.hasAttribute('data-remove')) {
+                    li.remove();
+                } else {
+                    var dir = parseInt(btn.dataset.move, 10);
+                    if (dir < 0 && li.previousElementSibling) list.insertBefore(li, li.previousElementSibling);
+                    if (dir > 0 && li.nextElementSibling) list.insertBefore(li.nextElementSibling, li);
+                }
+                markDirty();
+            });
+
+            // Finalizar: doble clic
+            document.querySelector('.pe-close-form')?.addEventListener('submit', function (event) {
+                var b = this.querySelector('button');
+                if (b.dataset.confirmed === '1') return;
+                event.preventDefault();
+                b.dataset.confirmed = '1';
+                b.textContent = 'Confirmar: finalizar';
+                b.classList.replace('btn-outline-danger', 'btn-danger');
+                setTimeout(function () { b.dataset.confirmed = ''; b.textContent = 'Finalizar'; b.classList.replace('btn-danger', 'btn-outline-danger'); }, 4000);
+            });
+        })();
+    </script>
+}
