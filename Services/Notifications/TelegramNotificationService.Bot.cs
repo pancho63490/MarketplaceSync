@@ -340,4 +340,76 @@ public sealed partial class TelegramNotificationService
     }
 
     private static string Shorten(string text, int max) => text.Length <= max ? text : text[..(max - 1)] + "…";
+
+    // ─────────────────────────────────────────────────────────────
+    // Avisos de envíos atrasados y reputación
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>Un aviso por pedido cuando pasa su hora límite de despacho.</summary>
+    private async Task NotifyLateOrdersAsync(string token, NotificationSettings settings, CancellationToken cancellationToken)
+    {
+        var org = settings.OrganizationId;
+        var sent = _context.NotificationLogs.Where(l => l.OrganizationId == org && l.Kind == NotificationKind.LateOrder).Select(l => l.Key);
+        var late = await MarketplaceSync.Web.Models.Orders.SalesOrderShippingQueries
+            .LateToShip(_context.SalesOrders.AsNoTracking().Where(o => o.OrganizationId == org), DateTime.UtcNow)
+            .Where(o => !sent.Contains("late:" + o.Id))
+            .Include(o => o.Items)
+            .OrderBy(o => o.ShippingDeadline)
+            .Take(10)
+            .ToListAsync(cancellationToken);
+
+        foreach (var order in late)
+        {
+            var items = string.Join(", ", order.Items.Take(3).Select(i => $"{i.Quantity}× {E(Shorten(i.Title ?? i.ExternalItemId, 50))}"));
+            var html = $"🚨 <b>Pedido atrasado</b> · #{E(order.ExternalOrderId)}\n{items}\n" +
+                       $"La hora límite era {order.ShippingDeadline!.Value.AddHours(-7):dd/MM HH:mm}. Despáchalo hoy: cada día cuenta como demora en tu reputación.";
+            var buttons = settings.PublicBaseUrl is null
+                ? null
+                : new List<IReadOnlyList<TelegramButton>> { new[] { new TelegramButton("Ver por enviar", Url: AppUrl(settings, "/Orders?view=late")) } };
+            var messageId = await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, html, buttons, cancellationToken: cancellationToken);
+            await LogAsync(org, "late:" + order.Id, NotificationKind.LateOrder, order.Id.ToString(CultureInfo.InvariantCulture), settings.TelegramChatId, messageId, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Reputación: avisa una vez al día si una métrica pasó el límite verde,
+    /// y una vez por semana si está cerca (80% o más del límite).
+    /// </summary>
+    private async Task NotifyReputationAsync(string token, NotificationSettings settings, CancellationToken cancellationToken)
+    {
+        var org = settings.OrganizationId;
+        IReadOnlyList<MarketplaceSync.Services.Metrics.ReputationAlert> alerts;
+        try
+        {
+            alerts = await _metrics.GetReputationAlertsAsync(org, cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(exception, "Reputation alerts unavailable for Telegram.");
+            return;
+        }
+
+        var local = LocalNow;
+        var week = ISOWeek.GetWeekOfYear(local);
+        foreach (var alert in alerts)
+        {
+            var key = alert.Risk == "over"
+                ? $"rep:{alert.Account}:{alert.Metric}:over:{local:yyyyMMdd}"
+                : $"rep:{alert.Account}:{alert.Metric}:near:{local:yyyy}-{week}";
+            if (key.Length > 190) key = key[..190];
+            if (await _context.NotificationLogs.AnyAsync(l => l.OrganizationId == org && l.Key == key, cancellationToken))
+                continue;
+
+            var rate = alert.RatePercent.ToString("0.##", Mx) + "%";
+            var limit = alert.GreenLimit.ToString("0.#", Mx) + "%";
+            var html = alert.Risk == "over"
+                ? $"🔴 <b>Reputación en riesgo</b> · {E(alert.Account)}\n<b>{E(alert.Metric)}: {rate}</b>, arriba del límite verde ({limit}).\nMercado Libre puede bajarte de color y mostrar menos tus publicaciones. Evita nuevos casos esta semana."
+                : $"🟡 <b>Cuida tu reputación</b> · {E(alert.Account)}\n{E(alert.Metric)}: {rate}, cerca del límite verde ({limit}).";
+            var buttons = settings.PublicBaseUrl is null
+                ? null
+                : new List<IReadOnlyList<TelegramButton>> { new[] { new TelegramButton("Ver métricas", Url: AppUrl(settings, "/Metrics")) } };
+            var messageId = await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, html, buttons, cancellationToken: cancellationToken);
+            await LogAsync(org, key, NotificationKind.Reputation, null, settings.TelegramChatId, messageId, cancellationToken);
+        }
+    }
 }

@@ -1427,3 +1427,54 @@ a.mt-prod-title:hover { color: var(--denim); }
   .mt-prod { min-width: 190px; }
   .mt-ylabel { font-size: 10px; }
 }
+
+/* ── Pedidos en celular ── */
+.pub-chip.is-bad { border-color: var(--bad); color: var(--bad); }
+.pub-chip.is-bad.active { background: var(--bad); color: #fff; }
+.orders-filters-toggle { display: none; }
+.order-cards { display: none; list-style: none; margin: 0; padding: 0; }
+@media (max-width: 767.98px) {
+  .orders-filters-toggle { display: inline-flex; align-items: center; gap: .4rem; margin-bottom: .75rem; font-size: var(--fs-sm); font-weight: 600; color: var(--denim); cursor: pointer; list-style: none; }
+  .orders-filters-toggle::-webkit-details-marker { display: none; }
+  .orders-filters-wrap:not([open]) > form { display: none; }
+  .order-cards { display: block; }
+  .order-cards + .table-wrap { display: none; }
+  .order-cards li + li { border-top: 1px solid var(--line); }
+  .order-card { display: grid; gap: .4rem; padding: .85rem 1rem; color: var(--ink); text-decoration: none; }
+  .order-card:active { background: var(--paper-2); }
+  .order-card.is-late { box-shadow: inset 4px 0 0 var(--bad); }
+  .order-card-top { display: flex; justify-content: space-between; gap: .75rem; align-items: flex-start; }
+  .order-card-items { display: grid; gap: .15rem; min-width: 0; font-size: var(--fs-sm); }
+  .order-card-item { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .order-card-total { font-weight: 800; font-variant-numeric: var(--num); white-space: nowrap; }
+  .order-card-pills { display: flex; flex-wrap: wrap; gap: .3rem; }
+  .order-card-meta { font-size: var(--fs-xs); color: var(--muted); }
+  .order-card-meta b { color: var(--bad); font-weight: 700; margin-top: .15rem; }
+}
+
+/* ── Contadores del menú ── */
+.nav-badge { margin-left: auto; min-width: 22px; padding: .05rem .45rem; border-radius: var(--r-pill); background: var(--signal); color: var(--ink); font-size: var(--fs-xs); font-weight: 800; text-align: center; font-variant-numeric: var(--num); }
+.nav-badge.is-bad { background: var(--bad); color: #fff; }
+.tab-bar-icon { position: relative; display: inline-flex; }
+.tab-badge { position: absolute; top: -6px; right: -12px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--signal); color: var(--ink); font-size: 11px; font-weight: 800; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--surface); font-variant-numeric: var(--num); }
+.tab-badge.is-bad { background: var(--bad); color: #fff; }
+
+/* ── Publicados: tocar para editar ── */
+.pub-edit-btn { margin-top: .45rem; min-height: 36px; display: inline-flex; align-items: center; gap: .35rem; }
+.pub-pick .pub-select { width: 22px; height: 22px; top: -8px; left: -8px; }
+.pub-pick { padding: 4px 0 0 4px; }
+@media (max-width: 767.98px) {
+  .pub-search { width: 100%; }
+  .pub-search input[type=search] { min-height: 40px; }
+  .pub-pick .pub-select { width: 26px; height: 26px; }
+}
+
+/* ── Hoy: ventas del día ── */
+.today-sales { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .75rem; margin-top: .9rem; padding: .7rem 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); color: var(--ink); text-decoration: none; font-size: var(--fs-sm); }
+.today-sales:hover { border-color: var(--line-strong); }
+.today-sales strong { font-size: var(--fs-lg); font-weight: 800; font-variant-numeric: var(--num); }
+.today-sales-label { color: var(--muted); font-weight: 600; }
+.today-sales-vs { color: var(--muted); font-variant-numeric: var(--num); }
+.today-sales-vs.is-up { color: var(--ok); font-weight: 600; }
+.today-sales-vs.is-down { color: var(--bad); font-weight: 600; }
+.today-sales-link { margin-left: auto; color: var(--denim); font-weight: 600; display: inline-flex; align-items: center; gap: .15rem; }

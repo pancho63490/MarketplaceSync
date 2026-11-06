@@ -803,9 +803,27 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<decimal>("PaidAmount")
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<DateTime?>("ShippingCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ShippingDeadline")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("ShippingId")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ShippingLogistic")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("ShippingStatus")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("ShippingSubstatus")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
 
                     b.Property<string>("Status")
                         .IsRequired()

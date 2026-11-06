@@ -1,3 +1,4 @@
+using MarketplaceSync.Web.Models.Orders;
 using MarketplaceSync.Services.Interfaces;
 using MarketplaceSync.Web.Data;
 using MarketplaceSync.Web.Services.Tenancy;
@@ -31,6 +32,7 @@ public sealed class OrdersController : Controller
     [HttpGet]
     public async Task<IActionResult> Index(
         string? status,
+        string? view,
         int? accountId,
         string? search,
         DateOnly? dateFrom,
@@ -51,6 +53,14 @@ public sealed class OrdersController : Controller
 
         if (!string.IsNullOrWhiteSpace(status))
             query = query.Where(x => x.Status == status);
+
+        var nowUtc = DateTime.UtcNow;
+        if (view == "toship")
+            query = query.ToShip();
+        else if (view == "late")
+            query = query.LateToShip(nowUtc);
+        else
+            view = null;
 
         if (accountId.HasValue)
             query = query.Where(x => x.MarketplaceAccountId == accountId.Value);
@@ -84,11 +94,13 @@ public sealed class OrdersController : Controller
         var totalPages = Math.Max(1, (int)Math.Ceiling(filteredOrders / (double)pageSize));
         page = Math.Min(page, totalPages);
 
-        var orders = await query
+        var ordered = view is "toship" or "late"
+            ? query.OrderBy(x => x.ShippingDeadline ?? x.DateCreated)
+            : query.OrderByDescending(x => x.DateCreated);
+        var orders = await ordered
             .AsNoTracking()
             .Include(x => x.Items)
             .Include(x => x.MarketplaceAccount)
-            .OrderByDescending(x => x.DateCreated)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -125,8 +137,14 @@ public sealed class OrdersController : Controller
             .Where(x => x.OrganizationId == organizationId && x.Marketplace == "MercadoLibre")
             .MaxAsync(x => x.LastOrdersSyncAt, cancellationToken);
 
+        var toShip = await organizationOrders.ToShip().CountAsync(cancellationToken);
+        var late = await organizationOrders.LateToShip(nowUtc).CountAsync(cancellationToken);
+
         return View(new OrdersIndexViewModel
         {
+            View = view,
+            ToShipCount = toShip,
+            LateCount = late,
             Orders = orders,
             Statuses = statuses,
             Accounts = accounts,

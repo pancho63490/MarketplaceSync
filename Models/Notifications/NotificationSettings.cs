@@ -81,5 +81,7 @@ public static class NotificationKind
     public const string OutOfStock = "out";
     public const string Summary = "summary";
     public const string Import = "import";
+    public const string LateOrder = "late";
+    public const string Reputation = "reputation";
     public const string Test = "test";
 }

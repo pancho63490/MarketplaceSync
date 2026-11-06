@@ -21,7 +21,7 @@
     </div>
     <form asp-action="Sync" method="post">
         @Html.AntiForgeryToken()
-        <button type="submit" class="btn btn-primary" @(Model.HasAccounts ? "" : "disabled")>@Html.Icon("refresh-cw") Buscar preguntas nuevas</button>
+        <button type="submit" class="btn @(Model.Rows.Any(r => r.Question.Status == MarketplaceSync.Web.Models.Questions.BuyerQuestionStatus.Unanswered) ? "btn-outline-secondary" : "btn-primary")" @(Model.HasAccounts ? "" : "disabled")>@Html.Icon("refresh-cw") Buscar preguntas nuevas</button>
     </form>
 </div>
 
@@ -56,6 +56,7 @@ else if (!Model.AiConfigured)
 else
 {
     <ol class="q-list">
+        @{ var firstAnswer = true; }
         @foreach (var row in Model.Rows)
         {
             var q = row.Question;
@@ -98,7 +99,8 @@ else
                             <div class="small text-danger mt-1">Último intento: @q.LastError</div>
                         }
                         <div class="d-flex flex-wrap gap-2 mt-2">
-                            <button type="submit" class="btn btn-primary btn-sm">Responder</button>
+                            <button type="submit" class="btn @(firstAnswer ? "btn-primary" : "btn-outline-secondary") btn-sm">Responder</button>
+                            @{ firstAnswer = false; }
                             @if (Model.AiConfigured)
                             {
                                 <button type="submit" class="btn btn-outline-secondary btn-sm ai-suggest"

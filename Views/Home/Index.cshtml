@@ -26,9 +26,20 @@
     var expiringLots = (int)(ViewBag.ExpiringLots ?? 0);
     var watchedCategories = (int)(ViewBag.WatchedCategories ?? 0);
     var telegramLinked = (bool)(ViewBag.TelegramLinked ?? false);
+    var salesToday = (decimal)(ViewBag.SalesToday ?? 0m);
+    var salesYesterdaySoFar = (decimal)(ViewBag.SalesYesterdaySoFar ?? 0m);
+    var ordersToShip = (int)(ViewBag.OrdersToShip ?? 0);
+    var lateOrders = (int)(ViewBag.LateOrders ?? 0);
+    var repAlerts = (ViewBag.ReputationAlerts as IReadOnlyList<MarketplaceSync.Services.Metrics.ReputationAlert>) ?? Array.Empty<MarketplaceSync.Services.Metrics.ReputationAlert>();
 
     // Lo que hay que hacer, en el orden en que conviene hacerlo.
     var tasks = new List<(int Count, string Title, string Detail, string Action, string Controller, string ActionName, object? Route, string Tone)>();
+    foreach (var alert in repAlerts.Where(a => a.Risk == "over"))
+        tasks.Add((0, $"{alert.Metric}: {alert.RatePercent.ToString("0.##", mx)}%, arriba del límite verde ({alert.GreenLimit.ToString("0.#", mx)}%)", "Tu reputación puede bajar de color y vender menos. Revisa qué pasó y evita más casos esta semana.", "Ver reputación", "Metrics", "Index", null, "tone-urgent"));
+    if (lateOrders > 0)
+        tasks.Add((lateOrders, lateOrders == 1 ? "pedido atrasado por enviar" : "pedidos atrasados por enviar", "Ya pasó la hora límite: cada día de retraso cuenta como despacho con demora.", "Despachar", "Orders", "Index", new { view = "late" }, "tone-urgent"));
+    if (ordersToShip - lateOrders > 0)
+        tasks.Add((ordersToShip - lateOrders, ordersToShip - lateOrders == 1 ? "pedido por enviar" : "pedidos por enviar", "Imprime la etiqueta y entrégalo antes de la hora límite.", "Ver por enviar", "Orders", "Index", new { view = "toship" }, "tone-urgent"));
     if (openQuestions > 0)
         tasks.Add((openQuestions, openQuestions == 1 ? "pregunta sin responder" : "preguntas sin responder", "Contestar en menos de una hora ayuda a cerrar la venta; la IA ya dejó una respuesta lista.", "Responder", "Questions", "Index", null, "tone-urgent"));
     if (pendingOrders > 0)
@@ -47,6 +58,9 @@
         tasks.Add((lowStock, lowStock == 1 ? "SKU con stock bajo" : "SKU con stock bajo", "Agrégalos a tu próxima compra en El Paso.", "Ver qué resurtir", "Purchasing", "Index", new { tab = "restock" }, "tone-normal"));
     if (radarToBuy > 0)
         tasks.Add((radarToBuy, radarToBuy == 1 ? "producto que conviene comprar" : "productos que conviene comprar", "Tienen demanda en Mercado Libre y te dejan margen.", "Ver lista", "Purchasing", "Index", null, "tone-normal"));
+
+    foreach (var alert in repAlerts.Where(a => a.Risk == "near"))
+        tasks.Add((0, $"{alert.Metric}: {alert.RatePercent.ToString("0.##", mx)}%, cerca del límite verde ({alert.GreenLimit.ToString("0.#", mx)}%)", "Todavía estás en verde; cuida los próximos pedidos.", "Ver reputación", "Metrics", "Index", null, "tone-normal"));
 
     var setupSteps = new[]
     {
@@ -76,6 +90,19 @@
                 <span>Tienes @tasks.Count @(tasks.Count == 1 ? "pendiente" : "pendientes") hoy.</span>
             }
         </p>
+        @if (totalOrders > 0)
+        {
+            var diff = salesToday - salesYesterdaySoFar;
+            <a asp-controller="Metrics" asp-action="Index" asp-route-days="7" class="today-sales">
+                <span class="today-sales-label">Hoy llevas</span>
+                <strong>@salesToday.ToString("C0", mx)</strong>
+                <span>@ordersToday @(ordersToday == 1 ? "venta" : "ventas")</span>
+                <span class="today-sales-vs @(diff > 0 ? "is-up" : diff < 0 ? "is-down" : "")">
+                    @(salesYesterdaySoFar == 0 && salesToday == 0 ? "igual que ayer a esta hora" : diff >= 0 ? $"▲ {diff.ToString("C0", mx)} vs. ayer a esta hora" : $"▼ {(-diff).ToString("C0", mx)} vs. ayer a esta hora")
+                </span>
+                <span class="today-sales-link">Métricas @Html.Icon("chevron-right", "icon-xs")</span>
+            </a>
+        }
     </header>
 
     <div class="today-grid">
@@ -99,7 +126,7 @@
                     @foreach (var task in tasks)
                     {
                         <li class="task-row @task.Tone">
-                            <span class="task-count">@task.Count</span>
+                            <span class="task-count">@if (task.Count > 0) { @task.Count } else { @Html.Icon("triangle-alert") }</span>
                             <span class="task-text">
                                 <span class="task-title">@task.Title</span>
                                 <span class="task-detail">@task.Detail</span>

@@ -20,14 +20,21 @@ public sealed class MercadoLibreOrderSyncService : IMercadoLibreOrderSyncService
     private readonly IMercadoLibreAuthService _authService;
     private readonly IInventoryService _inventoryService;
     private readonly ILogger<MercadoLibreOrderSyncService> _logger;
+    private readonly string _apiBase;
+
+    /// <summary>Envíos que siguen abiertos y se vuelven a consultar en cada sincronización.</summary>
+    private static readonly string[] OpenShippingStatuses = { "pending", "handling", "ready_to_ship", "shipped" };
 
     public MercadoLibreOrderSyncService(
         AppDbContext dbContext,
         IHttpClientFactory httpClientFactory,
         IMercadoLibreAuthService authService,
         IInventoryService inventoryService,
-        ILogger<MercadoLibreOrderSyncService> logger)
+        ILogger<MercadoLibreOrderSyncService> logger,
+        IConfiguration configuration)
     {
+        var configured = configuration["MercadoLibre:ApiBaseUrl"];
+        _apiBase = string.IsNullOrWhiteSpace(configured) ? "https://api.mercadolibre.com" : configured.TrimEnd('/');
         _dbContext = dbContext;
         _httpClientFactory = httpClientFactory;
         _authService = authService;
@@ -101,7 +108,7 @@ public sealed class MercadoLibreOrderSyncService : IMercadoLibreOrderSyncService
 
         while (true)
         {
-            var url = BuildSearchUrl(account.ExternalAccountId, updatedFrom, offset);
+            var url = _apiBase + BuildSearchUrl(account.ExternalAccountId, updatedFrom, offset);
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
             using var response = await client.SendAsync(request, cancellationToken);
@@ -186,6 +193,8 @@ public sealed class MercadoLibreOrderSyncService : IMercadoLibreOrderSyncService
                 break;
         }
 
+        await RefreshShipmentsAsync(account.Id, accessToken, client, cancellationToken);
+
         account.LastOrdersSyncAt = syncStartedAt;
         account.LastOrdersSyncError = null;
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -199,6 +208,66 @@ public sealed class MercadoLibreOrderSyncService : IMercadoLibreOrderSyncService
         return (created, updated);
     }
 
+    /// <summary>
+    /// Consulta el envío (/shipments/{id}) de los pedidos pagados recientes que aún no se entregan:
+    /// así la app sabe qué falta despachar, qué está atrasado y qué ya va en camino.
+    /// </summary>
+    private async Task RefreshShipmentsAsync(int accountId, string accessToken, HttpClient client, CancellationToken cancellationToken)
+    {
+        var since = DateTime.UtcNow.AddDays(-20);
+        var staleBefore = DateTime.UtcNow.AddMinutes(-15);
+        var orders = await _dbContext.SalesOrders
+            .Where(o => o.MarketplaceAccountId == accountId && o.ShippingId != null && o.Status == "paid" && o.DateCreated >= since &&
+                        (o.ShippingStatus == null || OpenShippingStatuses.Contains(o.ShippingStatus)) &&
+                        (o.ShippingCheckedAt == null || o.ShippingCheckedAt < staleBefore))
+            .OrderBy(o => o.ShippingCheckedAt ?? DateTime.MinValue)
+            .Take(60)
+            .ToListAsync(cancellationToken);
+
+        foreach (var order in orders)
+        {
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"{_apiBase}/shipments/{Uri.EscapeDataString(order.ShippingId!)}");
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                request.Headers.TryAddWithoutValidation("x-format-new", "true");
+                using var response = await client.SendAsync(request, cancellationToken);
+                order.ShippingCheckedAt = DateTime.UtcNow;
+                if (!response.IsSuccessStatusCode)
+                    continue;
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+                MapShipment(order, doc.RootElement);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogInformation(exception, "Could not read shipment {ShippingId}.", order.ShippingId);
+            }
+        }
+
+        if (orders.Count > 0)
+            await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static void MapShipment(SalesOrder order, JsonElement json)
+    {
+        order.ShippingStatus = ReadString(json, "status") ?? order.ShippingStatus;
+        order.ShippingSubstatus = ReadString(json, "substatus");
+        // Formato nuevo: logistic.type; formato anterior: logistic_type.
+        order.ShippingLogistic =
+            (json.TryGetProperty("logistic", out var logistic) && logistic.ValueKind == JsonValueKind.Object ? ReadString(logistic, "type") : null)
+            ?? ReadString(json, "logistic_type") ?? order.ShippingLogistic;
+
+        DateTime? deadline = null;
+        if (json.TryGetProperty("lead_time", out var lead) && lead.ValueKind == JsonValueKind.Object &&
+            lead.TryGetProperty("estimated_handling_limit", out var limit) && limit.ValueKind == JsonValueKind.Object)
+            deadline = ReadDate(limit, "date");
+        if (deadline is null && json.TryGetProperty("shipping_option", out var option) && option.ValueKind == JsonValueKind.Object &&
+            option.TryGetProperty("estimated_handling_limit", out var oldLimit) && oldLimit.ValueKind == JsonValueKind.Object)
+            deadline = ReadDate(oldLimit, "date");
+        order.ShippingDeadline = deadline ?? order.ShippingDeadline;
+    }
+
     private static string BuildSearchUrl(string sellerId, DateTime updatedFrom, int offset)
     {
         var query = string.Join("&", new[]
@@ -210,7 +279,7 @@ public sealed class MercadoLibreOrderSyncService : IMercadoLibreOrderSyncService
             $"offset={offset}"
         });
 
-        return $"https://api.mercadolibre.com/orders/search?{query}";
+        return $"/orders/search?{query}";
     }
 
     private static void MapOrder(SalesOrder order, JsonElement json)

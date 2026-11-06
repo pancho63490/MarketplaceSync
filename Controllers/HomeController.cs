@@ -14,12 +14,15 @@ namespace MarketplaceSync.Web.Controllers
         private readonly ILogger<HomeController> _logger;
         private readonly AppDbContext _context;
         private readonly IOrganizationContext _organizationContext;
+        private readonly MarketplaceSync.Services.Metrics.MetricsService _metrics;
 
         public HomeController(
             ILogger<HomeController> logger,
             AppDbContext context,
-            IOrganizationContext organizationContext)
+            IOrganizationContext organizationContext,
+            MarketplaceSync.Services.Metrics.MetricsService metrics)
         {
+            _metrics = metrics;
             _logger = logger;
             _context = context;
             _organizationContext = organizationContext;
@@ -48,9 +51,29 @@ namespace MarketplaceSync.Web.Controllers
                 .CountAsync(x => x.OrganizationId == organizationId && x.IsActive);
             var organizationOrders = _context.SalesOrders
                 .Where(x => x.OrganizationId == organizationId);
-            var todayUtc = DateTime.UtcNow.Date;
+            // "Hoy" es el día de Ciudad Juárez (UTC-7), no el de UTC.
+            var todayLocal = DateTime.UtcNow.AddHours(-7).Date;
+            var todayUtc = DateTime.SpecifyKind(todayLocal.AddHours(7), DateTimeKind.Utc);
+            var yesterdayUtc = todayUtc.AddDays(-1);
+            var sameTimeYesterdayUtc = DateTime.UtcNow.AddDays(-1);
             ViewBag.TotalOrders = await organizationOrders.CountAsync();
-            ViewBag.OrdersToday = await organizationOrders.CountAsync(x => x.DateCreated >= todayUtc);
+            var paidToday = organizationOrders.Where(x => x.Status == "paid" && x.DateCreated >= todayUtc);
+            ViewBag.OrdersToday = await paidToday.CountAsync();
+            ViewBag.SalesToday = await paidToday.SumAsync(x => (decimal?)x.TotalAmount) ?? 0m;
+            ViewBag.SalesYesterdaySoFar = await organizationOrders
+                .Where(x => x.Status == "paid" && x.DateCreated >= yesterdayUtc && x.DateCreated < sameTimeYesterdayUtc)
+                .SumAsync(x => (decimal?)x.TotalAmount) ?? 0m;
+            ViewBag.OrdersToShip = await MarketplaceSync.Web.Models.Orders.SalesOrderShippingQueries.ToShip(organizationOrders).CountAsync();
+            ViewBag.LateOrders = await MarketplaceSync.Web.Models.Orders.SalesOrderShippingQueries.LateToShip(organizationOrders, DateTime.UtcNow).CountAsync();
+            try
+            {
+                ViewBag.ReputationAlerts = await _metrics.GetReputationAlertsAsync(organizationId, HttpContext.RequestAborted);
+            }
+            catch (Exception exception) when (!HttpContext.RequestAborted.IsCancellationRequested)
+            {
+                _logger.LogInformation(exception, "Reputation alerts unavailable on Hoy.");
+                ViewBag.ReputationAlerts = Array.Empty<MarketplaceSync.Services.Metrics.ReputationAlert>();
+            }
             ViewBag.PendingOrders = await organizationOrders.CountAsync(x =>
                 x.Status != "paid" && x.Status != "cancelled" && x.Status != "invalid");
             ViewBag.TotalSales = await organizationOrders

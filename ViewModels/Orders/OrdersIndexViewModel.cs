@@ -9,6 +9,10 @@ public sealed class OrdersIndexViewModel
     public IReadOnlyList<string> Statuses { get; init; } = Array.Empty<string>();
     public IReadOnlyList<MarketplaceAccount> Accounts { get; init; } = Array.Empty<MarketplaceAccount>();
     public string? SelectedStatus { get; init; }
+    /// <summary>null = todos, "toship" = por enviar, "late" = atrasados.</summary>
+    public string? View { get; init; }
+    public int ToShipCount { get; init; }
+    public int LateCount { get; init; }
     public int? SelectedAccountId { get; init; }
     public string? Search { get; init; }
     public DateOnly? DateFrom { get; init; }

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Memory;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -19,7 +20,12 @@ public sealed record KpiValue(decimal Value, decimal? Previous)
 public sealed record ReputationMetric(string Key, string Label, string Help, decimal? RatePercent, int? Value, decimal GreenLimit, decimal LeaderLimit, string? Period)
 {
     public string Tone => RatePercent is null ? "" : RatePercent <= LeaderLimit ? "ok" : RatePercent <= GreenLimit ? "warn" : "bad";
+
+    /// <summary>"over" si ya pasó el límite verde; "near" si va en 80% o más del límite; null si va bien.</summary>
+    public string? Risk => RatePercent is not { } r ? null : r > GreenLimit ? "over" : r >= GreenLimit * 0.8m ? "near" : null;
 }
+
+public sealed record ReputationAlert(string Account, string Metric, string Risk, decimal RatePercent, decimal GreenLimit);
 
 public sealed record AccountReputation(
     string AccountName,
@@ -93,6 +99,7 @@ public sealed class MetricsService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<MetricsService> _logger;
+    private readonly Microsoft.Extensions.Caching.Memory.IMemoryCache _cache;
 
     public MetricsService(
         AppDbContext context,
@@ -100,8 +107,10 @@ public sealed class MetricsService
         IMercadoLibreAuthService auth,
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
-        ILogger<MetricsService> logger)
+        ILogger<MetricsService> logger,
+        Microsoft.Extensions.Caching.Memory.IMemoryCache cache)
     {
+        _cache = cache;
         _context = context;
         _pricing = pricing;
         _auth = auth;
@@ -364,6 +373,43 @@ public sealed class MetricsService
             reputation,
             warnings,
             accounts.Count > 0);
+    }
+
+    /// <summary>
+    /// Métricas de reputación que pasaron o están por pasar el límite verde, de todas las cuentas.
+    /// Se guarda 30 minutos en memoria para que Hoy y Telegram no consulten a Mercado Libre en cada vista.
+    /// </summary>
+    public async Task<IReadOnlyList<ReputationAlert>> GetReputationAlertsAsync(Guid organizationId, CancellationToken cancellationToken = default)
+    {
+        if (_cache.TryGetValue($"rep-alerts:{organizationId}", out IReadOnlyList<ReputationAlert>? cached) && cached is not null)
+            return cached;
+
+        var alerts = new List<ReputationAlert>();
+        var accounts = await _context.MarketplaceAccounts.AsNoTracking()
+            .Where(a => a.OrganizationId == organizationId && a.Marketplace == "MercadoLibre" && a.Status == "Connected")
+            .Select(a => new { a.Id, a.ExternalAccountId, a.DisplayName })
+            .ToListAsync(cancellationToken);
+        var ok = true;
+        foreach (var account in accounts)
+        {
+            try
+            {
+                var token = await _auth.GetValidAccessTokenAsync(organizationId, account.Id);
+                using var user = await GetAsync(token, $"/users/{Uri.EscapeDataString(account.ExternalAccountId)}", cancellationToken);
+                var rep = ParseReputation(account.DisplayName, user.RootElement);
+                alerts.AddRange(rep.Metrics.Where(m => m.Risk is not null)
+                    .Select(m => new ReputationAlert(account.DisplayName, m.Label, m.Risk!, m.RatePercent!.Value, m.GreenLimit)));
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                ok = false;
+                _logger.LogInformation(exception, "Reputation alerts failed for {Account}.", account.Id);
+            }
+        }
+
+        var result = alerts.OrderBy(a => a.Risk == "over" ? 0 : 1).ToList();
+        _cache.Set($"rep-alerts:{organizationId}", (IReadOnlyList<ReputationAlert>)result, ok ? TimeSpan.FromMinutes(30) : TimeSpan.FromMinutes(5));
+        return result;
     }
 
     /// <summary>Ventas de las piezas con costo conocido (base del margen).</summary>

@@ -1,8 +1,22 @@
+@inject MarketplaceSync.Services.Navigation.NavBadgeService NavBadgeService
 @{
     var currentController = ViewContext.RouteData.Values["controller"]?.ToString();
     var currentAction = ViewContext.RouteData.Values["action"]?.ToString();
 
     bool isAuthenticated = User.Identity != null && User.Identity.IsAuthenticated;
+    var badges = isAuthenticated ? await NavBadgeService.GetAsync(Context.RequestAborted) : new MarketplaceSync.Services.Navigation.NavBadges(0, 0, 0);
+    int BadgeFor(string controller) => controller switch
+    {
+        "Questions" => badges.PendingQuestions,
+        "Orders" => badges.OrdersToShip,
+        _ => 0
+    };
+    string BadgeTitle(string controller) => controller switch
+    {
+        "Questions" => badges.PendingQuestions == 1 ? "1 pregunta sin responder" : $"{badges.PendingQuestions} preguntas sin responder",
+        "Orders" => (badges.OrdersToShip == 1 ? "1 pedido por enviar" : $"{badges.OrdersToShip} pedidos por enviar") + (badges.LateOrders > 0 ? $", {badges.LateOrders} atrasado(s)" : ""),
+        _ => ""
+    };
     var userName = User.Identity?.Name ?? "";
     var userInitial = string.IsNullOrEmpty(userName) ? "?" : userName[..1].ToUpperInvariant();
 
@@ -99,6 +113,10 @@
                        aria-current="@(active == "active" ? "page" : null)">
                         <span class="nav-icon">@Html.Icon(item.Icon)</span>
                         <span>@item.Label</span>
+                        @if (BadgeFor(item.Controller) is > 0 and var count)
+                        {
+                            <span class="nav-badge @(item.Controller == "Orders" && badges.LateOrders > 0 ? "is-bad" : "")" title="@BadgeTitle(item.Controller)">@(count > 99 ? "99+" : count.ToString())<span class="visually-hidden"> — @BadgeTitle(item.Controller)</span></span>
+                        }
                     </a>
                 }
             </nav>
@@ -192,14 +210,21 @@ else
             @pageBody
         </main>
 
-        @* Celular: las 4 pantallas de todos los días, al alcance del pulgar. *@
+        @* Celular: las 4 tareas de todos los días al alcance del pulgar (Productos queda en Más). *@
         <nav class="tab-bar" aria-label="Accesos rápidos">
-            @foreach (var tab in new[] { ("Home", "house", "Hoy"), ("Orders", "receipt", "Pedidos"), ("Products", "package", "Productos"), ("Purchasing", "shopping-cart", "Comprar") })
+            @foreach (var tab in new[] { ("Home", "house", "Hoy"), ("Orders", "receipt", "Pedidos"), ("Questions", "message-circle-question", "Preguntas"), ("Purchasing", "shopping-cart", "Comprar") })
             {
                 var activeTab = IsActive(tab.Item1);
                 <a asp-controller="@tab.Item1" asp-action="Index" class="tab-bar-item @activeTab" aria-current="@(activeTab == "active" ? "page" : null)">
-                    @Html.Icon(tab.Item2)
+                    <span class="tab-bar-icon">
+                        @Html.Icon(tab.Item2)
+                        @if (BadgeFor(tab.Item1) is > 0 and var tabCount)
+                        {
+                            <span class="tab-badge @(tab.Item1 == "Orders" && badges.LateOrders > 0 || tab.Item1 == "Questions" ? "is-bad" : "")">@(tabCount > 99 ? "99+" : tabCount.ToString())</span>
+                        }
+                    </span>
                     <span>@tab.Item3</span>
+                    @if (BadgeFor(tab.Item1) is > 0) { <span class="visually-hidden">@BadgeTitle(tab.Item1)</span> }
                 </a>
             }
             <button type="button" class="tab-bar-item" data-bs-toggle="offcanvas" data-bs-target="#mobileDrawer" aria-controls="mobileDrawer">

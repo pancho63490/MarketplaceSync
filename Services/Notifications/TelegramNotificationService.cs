@@ -39,6 +39,7 @@ public sealed partial class TelegramNotificationService
     private readonly MarketplaceSync.Services.Ai.ProductTitleTranslator _titleTranslator;
     private readonly MarketplaceSync.Services.Ai.IListingAutopilotService _autopilot;
     private readonly Hangfire.IBackgroundJobClient _jobs;
+    private readonly MarketplaceSync.Services.Metrics.MetricsService _metrics;
 
     public TelegramNotificationService(
         AppDbContext context,
@@ -49,8 +50,10 @@ public sealed partial class TelegramNotificationService
         MarketplaceSync.Web.Services.ProductExtractorService extractor,
         MarketplaceSync.Services.Ai.ProductTitleTranslator titleTranslator,
         MarketplaceSync.Services.Ai.IListingAutopilotService autopilot,
-        Hangfire.IBackgroundJobClient jobs)
+        Hangfire.IBackgroundJobClient jobs,
+        MarketplaceSync.Services.Metrics.MetricsService metrics)
     {
+        _metrics = metrics;
         _extractor = extractor;
         _titleTranslator = titleTranslator;
         _autopilot = autopilot;
@@ -517,6 +520,9 @@ public sealed partial class TelegramNotificationService
                 await NotifyOrdersAsync(token, settings, since, cancellationToken);
             if (settings.NotifyStock)
                 await NotifyOutOfStockAsync(token, settings, since, cancellationToken);
+            if (settings.NotifyOrders)
+                await NotifyLateOrdersAsync(token, settings, cancellationToken);
+            await NotifyReputationAsync(token, settings, cancellationToken);
             if (settings.DailySummary)
                 await SendSummaryAsync(token, settings, force: false, cancellationToken);
         }

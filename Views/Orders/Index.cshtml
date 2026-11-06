@@ -14,6 +14,37 @@
         _ => status.Replace('_', ' ')
     };
 
+    /// <summary>Texto y color del envío; null si no hay dato.</summary>
+    private static (string Label, string Tone)? Shipping(MarketplaceSync.Web.Models.Orders.SalesOrder o)
+    {
+        if (o.Status is "cancelled" or "invalid") return null;
+        if (o.ShippingLogistic == "fulfillment") return ("Full: lo envía Mercado Libre", "pill-info");
+        var late = o.NeedsShipping && o.ShippingDeadline < DateTime.UtcNow;
+        if (late) return ("Atrasado: despáchalo ya", "pill-bad");
+        return (o.ShippingStatus, o.ShippingSubstatus) switch
+        {
+            ("ready_to_ship", "ready_to_print") => ("Imprime la etiqueta", "pill-warn"),
+            ("ready_to_ship", "printed") => ("Etiqueta impresa: entrégalo", "pill-warn"),
+            ("ready_to_ship", "in_hub" or "in_packing_list" or "picked_up" or "dropped_off" or "in_warehouse") => ("Entregado al transporte", "pill-info"),
+            ("ready_to_ship", _) => ("Listo para enviar", "pill-warn"),
+            ("handling" or "pending", _) => ("Por preparar", "pill-warn"),
+            ("shipped", _) => ("En camino", "pill-info"),
+            ("delivered", _) => ("Entregado", "pill-ok"),
+            ("not_delivered", _) => ("No entregado", "pill-bad"),
+            ("cancelled", _) => ("Envío cancelado", "pill-bad"),
+            _ => null
+        };
+    }
+
+    private static string? Deadline(MarketplaceSync.Web.Models.Orders.SalesOrder o)
+    {
+        if (!o.NeedsShipping || o.ShippingDeadline is not { } d) return null;
+        var local = d.AddHours(-7);
+        var today = DateTime.UtcNow.AddHours(-7).Date;
+        var day = local.Date == today ? "hoy" : local.Date == today.AddDays(1) ? "mañana" : local.ToString("dd/MM");
+        return d < DateTime.UtcNow ? $"Venció {day} a las {local:HH:mm}" : $"Despacha antes de {day} {local:HH:mm}";
+    }
+
     private static string StatusClass(string status) => status.ToLowerInvariant() switch
     {
         "paid" => "pill-ok",
@@ -65,7 +96,19 @@
     <div class="stat"><dt>Cobrado</dt><dd>@Model.TotalSales.ToString("C0", mx)</dd></div>
 </dl>
 
+<nav class="pl-chips mb-3" aria-label="Ver pedidos">
+    <a class="pub-chip @(Model.View is null ? "active" : "")" asp-action="Index">Todos</a>
+    <a class="pub-chip @(Model.View == "toship" ? "active" : "")" asp-action="Index" asp-route-view="toship">Por enviar <span>@Model.ToShipCount</span></a>
+    @if (Model.LateCount > 0 || Model.View == "late")
+    {
+        <a class="pub-chip is-bad @(Model.View == "late" ? "active" : "")" asp-action="Index" asp-route-view="late">Atrasados <span>@Model.LateCount</span></a>
+    }
+</nav>
+
+<details class="orders-filters-wrap" @(hasFilters ? "open" : "")>
+<summary class="orders-filters-toggle">@Html.Icon("search") Buscar y filtrar@(hasFilters ? " · con filtros" : "")</summary>
 <form method="get" class="orders-filters panel panel-body mb-3" role="search">
+    <input type="hidden" name="view" value="@Model.View" />
     <div class="orders-filter-grid">
         <div class="orders-filter-search">
             <label for="search" class="form-label">Buscar</label>
@@ -108,6 +151,7 @@
         </div>
     </div>
 </form>
+</details>
 
 <section class="panel" aria-label="Lista de pedidos">
     @if (Model.Orders.Count == 0)
@@ -116,7 +160,7 @@
             <div class="today-clear">
                 @Html.Icon("receipt", "icon-lg")
                 <div>
-                    <div class="fw-bold">@(hasFilters ? "Ningún pedido coincide con los filtros" : "Todavía no hay pedidos")</div>
+                    <div class="fw-bold">@(Model.View is not null && !hasFilters ? "Nada por enviar: estás al día" : hasFilters ? "Ningún pedido coincide con los filtros" : "Todavía no hay pedidos")</div>
                     <div class="text-muted small">@(hasFilters ? "Prueba con otras fechas o quita los filtros." : "Cuando vendas en Mercado Libre aparecerán aquí; también puedes traerlos con el botón de arriba.")</div>
                 </div>
             </div>
@@ -124,6 +168,35 @@
     }
     else
     {
+        <ul class="order-cards" aria-label="Pedidos">
+            @foreach (var order in Model.Orders)
+            {
+                var local = order.DateCreated.AddHours(-7);
+                var ship = Shipping(order);
+                <li>
+                    <a asp-action="Details" asp-route-id="@order.Id" class="order-card @(ship?.Tone == "pill-bad" ? "is-late" : "")">
+                        <span class="order-card-top">
+                            <span class="order-card-items">
+                                @foreach (var item in order.Items.Take(2))
+                                {
+                                    <span class="order-card-item"><b>@item.Quantity×</b> @(item.Title ?? item.ExternalItemId)</span>
+                                }
+                                @if (order.Items.Count > 2) { <span class="sub">+@(order.Items.Count - 2) más</span> }
+                            </span>
+                            <span class="order-card-total">@order.TotalAmount.ToString("C0", mx)</span>
+                        </span>
+                        <span class="order-card-pills">
+                            @if (ship is { } sh) { <span class="pill @sh.Tone">@sh.Label</span> }
+                            else { <span class="pill @StatusClass(order.Status)">@StatusLabel(order.Status)</span> }
+                        </span>
+                        <span class="order-card-meta">
+                            #@order.ExternalOrderId · @local.ToString("dd/MM HH:mm")@(string.IsNullOrWhiteSpace(order.BuyerNickname) ? "" : " · " + order.BuyerNickname)
+                            @if (Deadline(order) is { } dl) { <b class="d-block">@dl</b> }
+                        </span>
+                    </a>
+                </li>
+            }
+        </ul>
         <div class="table-wrap">
             <table class="data-table orders-table">
                 <thead>
@@ -147,7 +220,11 @@
                             }
                             @if (order.Items.Count > 2) { <span class="sub">+@(order.Items.Count - 2) más</span> }
                         </td>
-                        <td><span class="pill @StatusClass(order.Status)">@StatusLabel(order.Status)</span></td>
+                        <td>
+                            <span class="pill @StatusClass(order.Status)">@StatusLabel(order.Status)</span>
+                            @if (Shipping(order) is { } ship) { <span class="pill @ship.Tone d-table mt-1">@ship.Label</span> }
+                            @if (Deadline(order) is { } dl) { <span class="sub">@dl</span> }
+                        </td>
                         <td class="num fw-bold">@order.TotalAmount.ToString("C2", mx)@if (order.CurrencyId != "MXN") { <span class="sub">@order.CurrencyId</span> }</td>
                         <td class="text-nowrap">@local.ToString("dd/MM/yyyy")<span class="sub">@local.ToString("HH:mm")</span></td>
                     </tr>
@@ -162,15 +239,25 @@
                 <nav aria-label="Páginas de pedidos" class="d-flex gap-2">
                     @if (Model.Page > 1)
                     {
-                        <a class="btn btn-sm btn-outline-secondary" asp-action="Index" asp-route-page="@(Model.Page - 1)" asp-route-status="@Model.SelectedStatus" asp-route-accountId="@Model.SelectedAccountId" asp-route-search="@Model.Search" asp-route-dateFrom="@Model.DateFrom" asp-route-dateTo="@Model.DateTo">Anterior</a>
+                        <a class="btn btn-sm btn-outline-secondary" asp-action="Index" asp-route-page="@(Model.Page - 1)" asp-route-status="@Model.SelectedStatus" asp-route-view="@Model.View" asp-route-accountId="@Model.SelectedAccountId" asp-route-search="@Model.Search" asp-route-dateFrom="@Model.DateFrom" asp-route-dateTo="@Model.DateTo">Anterior</a>
                     }
                     <span class="small text-muted align-self-center">Página @Model.Page de @Model.TotalPages</span>
                     @if (Model.Page < Model.TotalPages)
                     {
-                        <a class="btn btn-sm btn-outline-secondary" asp-action="Index" asp-route-page="@(Model.Page + 1)" asp-route-status="@Model.SelectedStatus" asp-route-accountId="@Model.SelectedAccountId" asp-route-search="@Model.Search" asp-route-dateFrom="@Model.DateFrom" asp-route-dateTo="@Model.DateTo">Siguiente</a>
+                        <a class="btn btn-sm btn-outline-secondary" asp-action="Index" asp-route-page="@(Model.Page + 1)" asp-route-status="@Model.SelectedStatus" asp-route-view="@Model.View" asp-route-accountId="@Model.SelectedAccountId" asp-route-search="@Model.Search" asp-route-dateFrom="@Model.DateFrom" asp-route-dateTo="@Model.DateTo">Siguiente</a>
                     }
                 </nav>
             }
         </div>
     }
 </section>
+
+@section Scripts {
+    <script>
+        // En computadora los filtros siempre se ven; en celular se abren con "Buscar y filtrar".
+        (function () {
+            var d = document.querySelector('.orders-filters-wrap');
+            if (d && window.matchMedia('(min-width: 768px)').matches) d.open = true;
+        })();
+    </script>
+}
