@@ -1570,3 +1570,26 @@ a.cp-item-title:hover { color: var(--denim); }
   .cp-card, .cp-item { flex-wrap: wrap; }
   .cp-actions, .cp-item-action { width: 100%; justify-content: flex-end; display: flex; }
 }
+
+/* ── Empacar con escáner ── */
+.pk-input { min-height: 48px; font-size: var(--fs-md); font-variant-numeric: var(--num); }
+.pk-camera { width: 100%; max-width: 420px; margin-top: .75rem; border-radius: var(--r-panel); background: #000; }
+.pk-feedback { min-height: 1.6rem; margin-top: .65rem; font-weight: 700; font-size: var(--fs-md); }
+.pk-feedback.is-ok { color: var(--ok); }
+.pk-feedback.is-bad { color: var(--bad); }
+.pk-items { list-style: none; margin: 0; padding: 0; }
+.pk-item { display: flex; align-items: center; gap: .8rem; padding: .75rem 1.25rem; border-top: 1px solid var(--line); }
+.pk-item.is-done { background: var(--ok-soft); }
+.pk-item .recent-thumb { width: 48px; height: 48px; flex: 0 0 48px; }
+.pk-item-main { flex: 1; min-width: 0; display: grid; }
+.pk-count { font-weight: 800; font-size: var(--fs-lg); font-variant-numeric: var(--num); min-width: 64px; text-align: center; }
+.pk-item.is-done .pk-count { color: var(--ok); }
+
+/* ── Despacho en Pedidos ── */
+.od-dispatch { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1rem; padding: .75rem 1rem; margin-bottom: 1rem; border-left: 4px solid var(--signal); }
+.od-dispatch-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.pick-col { width: 36px; }
+.order-cards li.has-pick { position: relative; }
+.order-cards li.has-pick .order-card { padding-left: 2.6rem; }
+.order-pick { width: 20px; height: 20px; }
+.order-cards .order-pick { position: absolute; left: .9rem; top: 1rem; z-index: 1; }

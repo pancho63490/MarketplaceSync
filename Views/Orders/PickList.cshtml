@@ -1,0 +1,86 @@
+@model IReadOnlyList<MarketplaceSync.Web.Models.Orders.SalesOrder>
+@{
+    Layout = null;
+    var images = (ViewBag.Images as Dictionary<string, string?>) ?? new();
+    var now = DateTime.UtcNow.AddHours(-7);
+    var totals = Model.SelectMany(o => o.Items)
+        .GroupBy(i => (i.SellerSku ?? i.ExternalItemId))
+        .Select(g => new { Key = g.Key, Title = g.First().Title ?? g.First().ExternalItemId, Sku = g.First().SellerSku, ItemId = g.First().ExternalItemId, Qty = g.Sum(i => i.Quantity), Orders = g.Select(i => i.SalesOrderId).Distinct().Count() })
+        .OrderBy(x => x.Sku ?? x.Title).ToList();
+}
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lista de empaque @now.ToString("dd/MM HH:mm")</title>
+    <link rel="stylesheet" href="~/css/theme.css" asp-append-version="true" />
+    <style>
+        body { background: #fff; color: #111; font-family: Archivo, system-ui, sans-serif; margin: 0; padding: 24px; font-size: 14px; }
+        h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 16px; margin: 24px 0 8px; }
+        .meta { color: #555; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border-bottom: 1px solid #ddd; padding: 8px 6px; text-align: left; vertical-align: top; }
+        th { font-size: 12px; color: #555; }
+        .qty { font-size: 18px; font-weight: 800; text-align: center; width: 60px; }
+        .box { width: 18px; height: 18px; border: 2px solid #111; border-radius: 3px; display: inline-block; }
+        img { width: 44px; height: 44px; object-fit: contain; }
+        .order { break-inside: avoid; border: 1px solid #ccc; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+        .order-head { display: flex; justify-content: space-between; gap: 12px; font-weight: 700; }
+        .actions { margin-bottom: 16px; display: flex; gap: 8px; }
+        .actions a, .actions button { padding: 8px 14px; border-radius: 8px; border: 1px solid #999; background: #fff; font: inherit; cursor: pointer; text-decoration: none; color: #111; }
+        .actions button { background: #f0a202; border-color: #f0a202; font-weight: 700; }
+        @@media print { .actions { display: none; } body { padding: 0; } }
+    </style>
+</head>
+<body>
+    <div class="actions">
+        <button type="button" onclick="window.print()">Imprimir</button>
+        <a href="@Url.Action("Index", new { view = "toship" })">← Volver a pedidos</a>
+    </div>
+    <h1>Lista de empaque</h1>
+    <div class="meta">@Model.Count @(Model.Count == 1 ? "pedido" : "pedidos") · @totals.Sum(t => t.Qty) piezas · @now.ToString("dd/MM/yyyy HH:mm")</div>
+
+    @if (Model.Count == 0)
+    {
+        <p>No hay pedidos por enviar.</p>
+    }
+    else
+    {
+        <h2>1. Junta estas piezas</h2>
+        <table>
+            <thead><tr><th></th><th>Producto</th><th>SKU</th><th class="qty">Piezas</th><th>Pedidos</th><th>✓</th></tr></thead>
+            <tbody>
+                @foreach (var t in totals)
+                {
+                    <tr>
+                        <td>@if (images.GetValueOrDefault(t.ItemId) is { } img) { <img src="@img" alt="" referrerpolicy="no-referrer" onerror="this.remove()" /> }</td>
+                        <td>@t.Title</td>
+                        <td>@(t.Sku ?? "—")</td>
+                        <td class="qty">@t.Qty</td>
+                        <td>@t.Orders</td>
+                        <td><span class="box"></span></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <h2>2. Arma cada paquete</h2>
+        @foreach (var o in Model)
+        {
+            <div class="order">
+                <div class="order-head">
+                    <span>#@o.ExternalOrderId · @(o.BuyerNickname ?? "Comprador")</span>
+                    <span>@(o.ShippingDeadline is { } d ? "Antes de " + d.AddHours(-7).ToString("dd/MM HH:mm") : "")</span>
+                </div>
+                <table>
+                    @foreach (var i in o.Items)
+                    {
+                        <tr><td style="width:30px"><span class="box"></span></td><td class="qty">@i.Quantity×</td><td>@(i.Title ?? i.ExternalItemId)</td><td>@(i.SellerSku ?? "")</td></tr>
+                    }
+                </table>
+            </div>
+        }
+    }
+</body>
+</html>

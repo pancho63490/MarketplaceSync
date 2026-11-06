@@ -241,4 +241,110 @@ public sealed class OrdersController : Controller
 
         return RedirectToAction(nameof(Index));
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // Despacho: etiquetas en lote, lista de empaque y empacar con escáner
+    // ─────────────────────────────────────────────────────────────
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Labels(int[] ids, bool thermal, CancellationToken cancellationToken)
+    {
+        var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var labels = HttpContext.RequestServices.GetRequiredService<MarketplaceSync.Services.Shipping.ShippingLabelService>();
+        try
+        {
+            var (file, error) = await labels.GetLabelsAsync(org, ids, thermal, cancellationToken);
+            if (file is null)
+            {
+                TempData["Error"] = error;
+                return RedirectToAction(nameof(Index), new { view = "toship" });
+            }
+            if (file.Skipped.Count > 0)
+                TempData["Warning"] = "No se incluyeron: " + string.Join("; ", file.Skipped.Take(6));
+            return File(file.Content, file.ContentType, file.FileName);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(exception, "Batch labels failed.");
+            TempData["Error"] = "Mercado Libre no entregó las etiquetas. Intenta de nuevo en un momento.";
+            return RedirectToAction(nameof(Index), new { view = "toship" });
+        }
+    }
+
+    /// <summary>Lista de empaque imprimible: piezas agrupadas por producto y pedidos con casillas.</summary>
+    [HttpGet]
+    public async Task<IActionResult> PickList([FromQuery] int[] ids, CancellationToken cancellationToken)
+    {
+        var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var query = _dbContext.SalesOrders.AsNoTracking().Include(o => o.Items).Where(o => o.OrganizationId == org);
+        query = ids.Length > 0 ? query.Where(o => ids.Contains(o.Id)) : query.ToShip();
+        var orders = await query.OrderBy(o => o.ShippingDeadline ?? o.DateCreated).Take(200).ToListAsync(cancellationToken);
+        ViewBag.Images = await ItemImagesAsync(org, orders.SelectMany(o => o.Items.Select(i => i.ExternalItemId)).Distinct().ToList(), cancellationToken);
+        return View(orders);
+    }
+
+    /// <summary>Pantalla para empacar con lector de código de barras (o la cámara del celular).</summary>
+    [HttpGet]
+    public IActionResult Pack() => View();
+
+    /// <summary>Busca el pedido por número de envío (código de la etiqueta), de pedido o de carrito.</summary>
+    [HttpGet]
+    public async Task<IActionResult> PackLookup(string? code, CancellationToken cancellationToken)
+    {
+        var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        // El QR de la etiqueta de Mercado Envíos trae JSON ({"id":"4412345678","t":"lm"}); el código de barras, solo el número.
+        var qr = System.Text.RegularExpressions.Regex.Match(code ?? string.Empty, "\"id\"\\s*:\\s*\"?(\\d+)");
+        code = qr.Success ? qr.Groups[1].Value : new string((code ?? string.Empty).Where(char.IsLetterOrDigit).ToArray());
+        if (code.Length < 2)
+            return Json(new { ok = false, message = "Escanea el código de barras de la etiqueta." });
+        var orders = await _dbContext.SalesOrders.AsNoTracking().Include(o => o.Items)
+            .Where(o => o.OrganizationId == org && (o.ShippingId == code || o.ExternalOrderId == code || o.ExternalPackId == code))
+            .ToListAsync(cancellationToken);
+        if (orders.Count == 0)
+            return Json(new { ok = false, message = $"No encontré un pedido con el código {code}. Sincroniza los pedidos e intenta de nuevo." });
+
+        var itemIds = orders.SelectMany(o => o.Items.Select(i => i.ExternalItemId)).Distinct().ToList();
+        var images = await ItemImagesAsync(org, itemIds, cancellationToken);
+        var skus = orders.SelectMany(o => o.Items).Select(i => i.SellerSku).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList();
+        var barcodes = await _dbContext.ProductVariants.AsNoTracking()
+            .Where(v => v.OrganizationId == org && skus.Contains(v.Sku))
+            .Select(v => new { v.Sku, v.Barcode }).ToListAsync(cancellationToken);
+        var cancelled = orders.Any(o => o.Status == "cancelled");
+        return Json(new
+        {
+            ok = true,
+            orderIds = orders.Select(o => o.Id),
+            title = orders.Count == 1 ? $"Pedido #{orders[0].ExternalOrderId}" : $"Carrito con {orders.Count} pedidos",
+            buyer = orders[0].BuyerNickname,
+            warning = cancelled ? "¡Este pedido está CANCELADO! No lo envíes." : orders.Any(o => o.PackedAt.HasValue) ? "Este paquete ya se había empacado antes." : null,
+            items = orders.SelectMany(o => o.Items).Select(i => new
+            {
+                title = i.Title ?? i.ExternalItemId,
+                quantity = i.Quantity,
+                sku = i.SellerSku,
+                codes = new[] { i.SellerSku, barcodes.FirstOrDefault(b => b.Sku == i.SellerSku)?.Barcode, i.ExternalItemId }
+                    .Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => new string(x!.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant()),
+                image = images.GetValueOrDefault(i.ExternalItemId)
+            })
+        });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PackConfirm([FromForm] int[] ids, CancellationToken cancellationToken)
+    {
+        var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var orders = await _dbContext.SalesOrders.Where(o => o.OrganizationId == org && ids.Contains(o.Id)).ToListAsync(cancellationToken);
+        foreach (var o in orders) o.PackedAt = DateTime.UtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Json(new { ok = orders.Count > 0 });
+    }
+
+    private async Task<Dictionary<string, string?>> ItemImagesAsync(Guid org, List<string> itemIds, CancellationToken cancellationToken) =>
+        (await _dbContext.MarketplacePublications.AsNoTracking()
+            .Where(p => p.Product.OrganizationId == org && p.ExternalItemId != null && itemIds.Contains(p.ExternalItemId))
+            .Select(p => new { Id = p.ExternalItemId!, p.Product.ImageUrl })
+            .ToListAsync(cancellationToken))
+        .GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First().ImageUrl);
 }

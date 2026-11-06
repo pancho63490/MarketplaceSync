@@ -168,12 +168,29 @@
     }
     else
     {
+        @if (Model.View is "toship" or "late")
+        {
+            <form asp-action="Labels" method="post" id="labelsForm" class="od-dispatch panel">
+                @Html.AntiForgeryToken()
+                <span class="od-dispatch-text"><strong id="selCount">@Model.Orders.Count</strong> seleccionados para despachar</span>
+                <span class="od-dispatch-actions">
+                    <button type="submit" class="btn btn-primary btn-sm" name="thermal" value="false">@Html.Icon("download") Etiquetas PDF</button>
+                    <button type="submit" class="btn btn-outline-secondary btn-sm" name="thermal" value="true" title="Para impresora térmica (Zebra)">Térmicas (ZPL)</button>
+                    <button type="submit" class="btn btn-outline-secondary btn-sm" formaction="@Url.Action("PickList")" formmethod="get" formtarget="_blank">@Html.Icon("list-checks") Lista de empaque</button>
+                    <a asp-action="Pack" class="btn btn-outline-secondary btn-sm">@Html.Icon("search") Empacar con escáner</a>
+                </span>
+            </form>
+        }
         <ul class="order-cards" aria-label="Pedidos">
             @foreach (var order in Model.Orders)
             {
                 var local = order.DateCreated.AddHours(-7);
                 var ship = Shipping(order);
-                <li>
+                <li class="@(Model.View is "toship" or "late" ? "has-pick" : "")">
+                    @if (Model.View is "toship" or "late")
+                    {
+                        <input type="checkbox" class="form-check-input order-pick" name="ids" value="@order.Id" form="labelsForm" checked aria-label="Despachar pedido @order.ExternalOrderId" />
+                    }
                     <a asp-action="Details" asp-route-id="@order.Id" class="order-card @(ship?.Tone == "pill-bad" ? "is-late" : "")">
                         <span class="order-card-top">
                             <span class="order-card-items">
@@ -187,6 +204,8 @@
                         </span>
                         <span class="order-card-pills">
                             @if (ship is { } sh) { <span class="pill @sh.Tone">@sh.Label</span> }
+                            @if (order.PackedAt is not null) { <span class="pill pill-ok">Empacado ✓</span> }
+                            else if (order.LabelPrintedAt is not null && order.NeedsShipping) { <span class="pill">Etiqueta descargada</span> }
                             else { <span class="pill @StatusClass(order.Status)">@StatusLabel(order.Status)</span> }
                         </span>
                         <span class="order-card-meta">
@@ -200,13 +219,14 @@
         <div class="table-wrap">
             <table class="data-table orders-table">
                 <thead>
-                    <tr><th>Pedido</th><th>Comprador</th><th>Productos</th><th>Estado</th><th class="num">Total</th><th>Fecha</th></tr>
+                    <tr>@if (Model.View is "toship" or "late") { <th class="pick-col"><input type="checkbox" class="form-check-input" id="pickAll" checked aria-label="Seleccionar todos" /></th> }<th>Pedido</th><th>Comprador</th><th>Productos</th><th>Estado</th><th class="num">Total</th><th>Fecha</th></tr>
                 </thead>
                 <tbody>
                 @foreach (var order in Model.Orders)
                 {
                     var local = order.DateCreated.AddHours(-7);
                     <tr>
+                        @if (Model.View is "toship" or "late") { <td class="pick-col"><input type="checkbox" class="form-check-input order-pick" name="ids" value="@order.Id" form="labelsForm" checked aria-label="Despachar pedido @order.ExternalOrderId" /></td> }
                         <td>
                             <a asp-action="Details" asp-route-id="@order.Id" class="order-number">#@order.ExternalOrderId</a>
                             @if (Model.Accounts.Count > 1) { <span class="sub">@(order.MarketplaceAccount.DisplayName ?? order.MarketplaceAccount.ExternalAccountId)</span> }
@@ -224,6 +244,7 @@
                             <span class="pill @StatusClass(order.Status)">@StatusLabel(order.Status)</span>
                             @if (Shipping(order) is { } ship) { <span class="pill @ship.Tone d-table mt-1">@ship.Label</span> }
                             @if (Deadline(order) is { } dl) { <span class="sub">@dl</span> }
+                            @if (order.PackedAt is not null) { <span class="pill pill-ok d-table mt-1">Empacado ✓</span> }
                         </td>
                         <td class="num fw-bold">@order.TotalAmount.ToString("C2", mx)@if (order.CurrencyId != "MXN") { <span class="sub">@order.CurrencyId</span> }</td>
                         <td class="text-nowrap">@local.ToString("dd/MM/yyyy")<span class="sub">@local.ToString("HH:mm")</span></td>
@@ -258,6 +279,25 @@
         (function () {
             var d = document.querySelector('.orders-filters-wrap');
             if (d && window.matchMedia('(min-width: 768px)').matches) d.open = true;
+
+            // Selección para despachar: tabla y tarjetas comparten casillas (en celular solo se ven las tarjetas).
+            var boxes = Array.from(document.querySelectorAll('.order-pick'));
+            var count = document.getElementById('selCount');
+            function visible() { return boxes.filter(function (b) { return b.offsetParent !== null; }); }
+            function sync(changed) {
+                boxes.filter(function (b) { return b.value === changed.value; }).forEach(function (b) { b.checked = changed.checked; });
+                if (count) count.textContent = visible().filter(function (b) { return b.checked; }).length;
+            }
+            boxes.forEach(function (b) { b.addEventListener('change', function () { sync(b); }); });
+            document.getElementById('pickAll')?.addEventListener('change', function () {
+                var on = this.checked; boxes.forEach(function (b) { b.checked = on; }); if (count) count.textContent = on ? visible().length : 0;
+            });
+            // No mandar duplicados: solo las casillas visibles.
+            document.getElementById('labelsForm')?.addEventListener('submit', function () {
+                boxes.forEach(function (b) { b.disabled = b.offsetParent === null; });
+                setTimeout(function () { boxes.forEach(function (b) { b.disabled = false; }); }, 500);
+            });
+            if (count) count.textContent = visible().filter(function (b) { return b.checked; }).length;
         })();
     </script>
 }

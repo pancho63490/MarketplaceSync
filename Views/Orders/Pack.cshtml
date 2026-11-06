@@ -1,0 +1,159 @@
+@{
+    ViewData["Title"] = "Empacar con escáner";
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <a asp-action="Index" asp-route-view="toship" class="pe-back">← Por enviar</a>
+        <h1 class="page-title">Empacar con escáner</h1>
+        <p>Escanea la etiqueta del paquete, luego cada pieza que metes. Si una no corresponde, te avisa antes de cerrar la caja.</p>
+    </div>
+</header>
+
+<section class="panel pk-panel" aria-labelledby="pk-step">
+    <div class="panel-body">
+        <label for="scan" class="ag-request-label" id="pk-step">@Html.Icon("search") <span id="stepText">1. Escanea la etiqueta del paquete</span></label>
+        <div class="ag-request-row">
+            <input id="scan" class="form-control pk-input" autocomplete="off" autofocus inputmode="text" placeholder="Código de barras de la etiqueta o número de pedido" />
+            <button type="button" class="btn btn-outline-secondary" id="cameraButton" hidden>@Html.Icon("eye") Cámara</button>
+        </div>
+        <video id="camera" class="pk-camera" playsinline muted hidden></video>
+        <div class="pk-feedback" id="feedback" role="status" aria-live="assertive"></div>
+    </div>
+</section>
+
+<section class="panel mt-3" id="orderPanel" hidden aria-labelledby="orderTitle">
+    <div class="panel-head">
+        <h2 id="orderTitle"></h2>
+        <span class="small text-muted" id="orderBuyer"></span>
+    </div>
+    <div class="alert alert-danger m-3 mb-0" id="orderWarning" hidden></div>
+    <ul class="pk-items" id="items"></ul>
+    <div class="panel-body d-flex flex-wrap gap-2 justify-content-between align-items-center">
+        <button type="button" class="btn btn-link px-0" id="resetButton">Otro paquete</button>
+        <button type="button" class="btn btn-primary" id="doneButton" disabled>@Html.Icon("check") Listo, cerrar paquete</button>
+    </div>
+</section>
+
+<form id="tokenForm">@Html.AntiForgeryToken()</form>
+
+@section Scripts {
+    <script>
+        (function () {
+            var input = document.getElementById('scan'), feedback = document.getElementById('feedback');
+            var panel = document.getElementById('orderPanel'), list = document.getElementById('items');
+            var done = document.getElementById('doneButton'), stepText = document.getElementById('stepText');
+            var current = null;
+
+            function say(text, tone) {
+                feedback.textContent = text; feedback.className = 'pk-feedback ' + (tone ? 'is-' + tone : '');
+                if (tone === 'bad' && navigator.vibrate) navigator.vibrate([120, 60, 120]);
+            }
+            function norm(code) { return (code || '').replace(/[^0-9a-z]/gi, '').toUpperCase(); }
+
+            function render() {
+                list.innerHTML = '';
+                var complete = true;
+                current.items.forEach(function (item, index) {
+                    var li = document.createElement('li');
+                    var ok = item.scanned >= item.quantity; if (!ok) complete = false;
+                    li.className = 'pk-item' + (ok ? ' is-done' : '');
+                    var img = document.createElement('span'); img.className = 'recent-thumb';
+                    if (item.image) { var i = document.createElement('img'); i.src = item.image; i.alt = ''; i.referrerPolicy = 'no-referrer'; i.onerror = function () { i.remove(); }; img.append(i); }
+                    var text = document.createElement('span'); text.className = 'pk-item-main';
+                    var t = document.createElement('strong'); t.textContent = item.title;
+                    var s = document.createElement('span'); s.className = 'small text-muted'; s.textContent = item.sku ? 'SKU ' + item.sku : 'Sin SKU: confírmala a mano';
+                    text.append(t, s);
+                    var count = document.createElement('span'); count.className = 'pk-count'; count.textContent = item.scanned + ' / ' + item.quantity;
+                    var plus = document.createElement('button'); plus.type = 'button'; plus.className = 'btn btn-outline-secondary btn-sm'; plus.textContent = '+1';
+                    plus.setAttribute('aria-label', 'Contar una pieza de ' + item.title);
+                    plus.addEventListener('click', function () { if (item.scanned < item.quantity) { item.scanned++; render(); } input.focus(); });
+                    li.append(img, text, count, plus);
+                    list.append(li);
+                });
+                done.disabled = !complete;
+                stepText.textContent = complete ? '3. Todo listo: cierra el paquete' : '2. Escanea cada pieza que metes';
+                if (complete) say('✓ Todas las piezas van en el paquete.', 'ok');
+            }
+
+            function lookup(code) {
+                say('Buscando…');
+                fetch('@Url.Action("PackLookup")?code=' + encodeURIComponent(code), { credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (!d.ok) { say(d.message, 'bad'); return; }
+                        current = d; current.items.forEach(function (i) { i.scanned = 0; });
+                        document.getElementById('orderTitle').textContent = d.title;
+                        document.getElementById('orderBuyer').textContent = d.buyer || '';
+                        var w = document.getElementById('orderWarning'); w.hidden = !d.warning; w.textContent = d.warning || '';
+                        panel.hidden = false; render();
+                        say(d.warning ? d.warning : 'Paquete encontrado. Escanea las piezas.', d.warning ? 'bad' : 'ok');
+                    })
+                    .catch(function () { say('No pude buscar el pedido. Revisa tu conexión.', 'bad'); });
+            }
+
+            function scanItem(code) {
+                var n = norm(code);
+                var item = current.items.find(function (i) { return i.codes.indexOf(n) >= 0 && i.scanned < i.quantity; })
+                        || current.items.find(function (i) { return i.codes.indexOf(n) >= 0; });
+                if (!item) { say('✕ Esa pieza (' + code + ') NO va en este paquete.', 'bad'); return; }
+                if (item.scanned >= item.quantity) { say('Ya contaste todas las piezas de ' + item.title + '. ¿Metiste una de más?', 'bad'); return; }
+                item.scanned++; say('✓ ' + item.title, 'ok'); render();
+            }
+
+            // Sin paquete abierto: el código es una etiqueta. Con paquete: si coincide con una pieza se cuenta;
+            // si el paquete ya está completo y escaneas otra cosa, se toma como la siguiente etiqueta.
+            function handle(code) {
+                code = (code || '').trim(); if (!code) return;
+                if (!current) { lookup(code); return; }
+                var n = norm(code);
+                if (current.items.some(function (i) { return i.codes.indexOf(n) >= 0; })) { scanItem(code); return; }
+                if (current.items.every(function (i) { return i.scanned >= i.quantity; })) { lookup(code); return; }
+                scanItem(code);
+            }
+
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); handle(input.value); input.value = ''; }
+            });
+
+            done.addEventListener('click', function () {
+                var data = new FormData();
+                current.orderIds.forEach(function (id) { data.append('ids', id); });
+                data.append('__RequestVerificationToken', document.querySelector('#tokenForm input').value);
+                fetch('@Url.Action("PackConfirm")', { method: 'POST', body: data, credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function () { say('✓ Paquete cerrado. Escanea la siguiente etiqueta.', 'ok'); reset(true); });
+            });
+            function reset(keepMessage) {
+                current = null; panel.hidden = true; list.innerHTML = ''; stepText.textContent = '1. Escanea la etiqueta del paquete';
+                if (!keepMessage) say(''); input.focus();
+            }
+            document.getElementById('resetButton').addEventListener('click', function () { reset(false); });
+
+            // Cámara del celular (Chrome en Android) con el detector de códigos del navegador.
+            if ('BarcodeDetector' in window && navigator.mediaDevices) {
+                var cam = document.getElementById('cameraButton'), video = document.getElementById('camera'), stream = null;
+                cam.hidden = false;
+                cam.addEventListener('click', function () {
+                    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; video.hidden = true; return; }
+                    var detector = new BarcodeDetector();
+                    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function (s) {
+                        stream = s; video.srcObject = s; video.hidden = false; video.play();
+                        var last = '', lastAt = 0;
+                        (function tick() {
+                            if (!stream) return;
+                            detector.detect(video).then(function (codes) {
+                                if (codes.length) {
+                                    var v = codes[0].rawValue, now = Date.now();
+                                    if (v !== last || now - lastAt > 2000) { last = v; lastAt = now; handle(v); }
+                                }
+                                requestAnimationFrame(tick);
+                            }).catch(function () { requestAnimationFrame(tick); });
+                        })();
+                    }).catch(function () { say('No me dieron permiso para usar la cámara.', 'bad'); });
+                });
+            }
+            document.addEventListener('click', function (e) { if (!e.target.closest('input,textarea,select,button,a')) input.focus(); });
+        })();
+    </script>
+}
