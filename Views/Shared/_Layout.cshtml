@@ -84,17 +84,27 @@
 }
 
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-bs-theme="light">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1b2a41" />
+    <meta name="theme-color" content="#f6f7f9" />
+    <meta name="color-scheme" content="light dark" />
     <title>@ViewData["Title"] · MarketplaceSync</title>
+    <script>
+        // Tema antes de pintar (sin parpadeo): lo guardado o el del sistema.
+        (function () {
+            var t = null;
+            try { t = localStorage.getItem('ms-theme'); } catch (e) { }
+            if (t !== 'light' && t !== 'dark') t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-bs-theme', t);
+        })();
+    </script>
 
-    <link rel="preload" href="~/fonts/archivo-latin-wdth-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="~/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/lib/notyf/notyf.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/css/app.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/theme.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/MarketplaceSync.Web.styles.css" asp-append-version="true" />
 </head>
@@ -180,12 +190,32 @@ else
     </aside>
 
     <div class="app-main">
+        <header class="topbar">
+            <button type="button" class="topbar-search" data-cmdk-open aria-label="Buscar pantallas, productos o pedidos (Ctrl+K)">
+                @Html.Icon("search")<span>Buscar productos, pedidos o pantallas…</span><kbd class="kbd">Ctrl K</kbd>
+            </button>
+            <div class="topbar-actions">
+                <a class="icon-btn" asp-controller="Home" asp-action="Index" title="Pendientes de hoy" aria-label="Pendientes de hoy">
+                    @Html.Icon("bell")
+                    @if (badges.OpenClaims + badges.LateOrders + badges.PendingQuestions > 0) { <span class="dot" aria-hidden="true"></span> }
+                </a>
+                <button type="button" class="icon-btn" data-theme-toggle title="Cambiar a modo oscuro o claro" aria-label="Cambiar tema claro u oscuro">
+                    <span class="theme-icon-light">@Html.Icon("moon")</span><span class="theme-icon-dark">@Html.Icon("sun")</span>
+                </button>
+                <span class="account-avatar" title="@userName" aria-hidden="true">@userInitial</span>
+            </div>
+        </header>
+
         <header class="mobile-bar">
             <a class="brand" asp-controller="Home" asp-action="Index">
                 <span class="brand-mark" aria-hidden="true">MS</span>
                 <span class="brand-name">MarketplaceSync</span>
             </a>
             <div class="d-flex align-items-center gap-2">
+                <button type="button" class="icon-btn" data-cmdk-open aria-label="Buscar">@Html.Icon("search")</button>
+                <button type="button" class="icon-btn" data-theme-toggle aria-label="Cambiar tema claro u oscuro">
+                    <span class="theme-icon-light">@Html.Icon("moon")</span><span class="theme-icon-dark">@Html.Icon("sun")</span>
+                </button>
                 @if (isAuthenticated)
                 {
                     <a asp-controller="Products" asp-action="CreateFromUrl" class="btn btn-primary btn-sm" aria-label="Importar producto">@Html.Icon("plus") Importar</a>
@@ -243,8 +273,13 @@ else
 </div>
 }
 
+@if (isAuthenticated)
+{
+    <partial name="_CommandPalette" model="@menu.SelectMany(m => m.Items.Select(i => (m.Title, i.Controller, i.Action, i.Icon, i.Label))).ToList()" />
+}
 <script src="~/lib/jquery/dist/jquery.min.js"></script>
 <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+<script src="~/lib/notyf/notyf.min.js"></script>
 <script src="~/js/site.js" asp-append-version="true"></script>
 
 @if (isAuthenticated)

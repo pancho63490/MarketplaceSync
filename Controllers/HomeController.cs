@@ -107,6 +107,20 @@ namespace MarketplaceSync.Web.Controllers
                 .SumAsync(x => (decimal?)x.PaidAmount) ?? 0m;
             ViewBag.Orders30Days = await organizationOrders
                 .CountAsync(x => x.DateCreated >= since30 && x.Status != "cancelled" && x.Status != "invalid");
+            // Serie diaria (día de Juárez) de los últimos 30 días y el total de los 30 anteriores, para la gráfica de Hoy.
+            var startLocal = todayLocal.AddDays(-29);
+            var startUtc = DateTime.SpecifyKind(startLocal.AddHours(7), DateTimeKind.Utc);
+            var recent = await organizationOrders
+                .Where(x => x.DateCreated >= startUtc && x.Status != "cancelled" && x.Status != "invalid")
+                .Select(x => new { x.DateCreated, x.PaidAmount })
+                .ToListAsync();
+            var byDay = recent.GroupBy(x => x.DateCreated.AddHours(-7).Date).ToDictionary(g => g.Key, g => g.Sum(x => x.PaidAmount));
+            ViewBag.SalesDaily = Enumerable.Range(0, 30).Select(i => startLocal.AddDays(i))
+                .Select(d => (Day: d, Total: byDay.GetValueOrDefault(d))).ToList();
+            var prevStartUtc = startUtc.AddDays(-30);
+            ViewBag.SalesPrev30 = await organizationOrders
+                .Where(x => x.DateCreated >= prevStartUtc && x.DateCreated < startUtc && x.Status != "cancelled" && x.Status != "invalid")
+                .SumAsync(x => (decimal?)x.PaidAmount) ?? 0m;
             ViewBag.UnitsInStock = await organizationVariants.SumAsync(x => (int?)(x.Stock > 0 ? x.Stock : 0)) ?? 0;
             var expiryLimit = MarketplaceSync.Services.Inventory.InventoryLotService.Today.AddDays(MarketplaceSync.Services.Inventory.InventoryLotService.WarningDays);
             ViewBag.ExpiringLots = await _context.InventoryLots.CountAsync(x =>

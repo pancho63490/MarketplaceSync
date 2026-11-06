@@ -105,15 +105,37 @@
         @if (totalOrders > 0)
         {
             var diff = salesToday - salesYesterdaySoFar;
-            <a asp-controller="Metrics" asp-action="Index" asp-route-days="7" class="today-sales">
-                <span class="today-sales-label">Hoy llevas</span>
-                <strong>@salesToday.ToString("C0", mx)</strong>
-                <span>@ordersToday @(ordersToday == 1 ? "venta" : "ventas")</span>
-                <span class="today-sales-vs @(diff > 0 ? "is-up" : diff < 0 ? "is-down" : "")">
-                    @(salesYesterdaySoFar == 0 && salesToday == 0 ? "igual que ayer a esta hora" : diff >= 0 ? $"▲ {diff.ToString("C0", mx)} vs. ayer a esta hora" : $"▼ {(-diff).ToString("C0", mx)} vs. ayer a esta hora")
-                </span>
-                <span class="today-sales-link">Métricas @Html.Icon("chevron-right", "icon-xs")</span>
-            </a>
+            var daily = (ViewBag.SalesDaily as List<(DateTime Day, decimal Total)>) ?? new();
+            var prev30 = (decimal)(ViewBag.SalesPrev30 ?? 0m);
+            var last30 = daily.Sum(d => d.Total);
+            var change30 = prev30 > 0 ? (double)((last30 - prev30) / prev30 * 100) : (double?)null;
+            <div class="kpis" role="list">
+                <a class="kpi" role="listitem" asp-controller="Metrics" asp-action="Index" asp-route-days="7">
+                    <span class="kpi-label">@Html.Icon("circle-dollar-sign") Ventas de hoy</span>
+                    <strong class="kpi-value">@salesToday.ToString("C0", mx)</strong>
+                    <span class="kpi-delta @(diff > 0 ? "is-up" : diff < 0 ? "is-down" : "")">
+                        @(salesYesterdaySoFar == 0 && salesToday == 0 ? "Igual que ayer a esta hora" : diff >= 0 ? $"▲ {diff.ToString("C0", mx)} vs. ayer a esta hora" : $"▼ {(-diff).ToString("C0", mx)} vs. ayer a esta hora")
+                    </span>
+                </a>
+                <a class="kpi" role="listitem" asp-controller="Orders" asp-action="Index" asp-route-view="toship">
+                    <span class="kpi-label">@Html.Icon("receipt") Pedidos de hoy</span>
+                    <strong class="kpi-value">@ordersToday</strong>
+                    <span class="kpi-delta @(lateOrders > 0 ? "is-down" : "")">@(ordersToShip == 0 ? "Nada por enviar" : lateOrders > 0 ? $"{ordersToShip} por enviar · {lateOrders} atrasado{(lateOrders == 1 ? "" : "s")}" : $"{ordersToShip} por enviar")</span>
+                </a>
+                <a class="kpi" role="listitem" asp-controller="Questions" asp-action="Index">
+                    <span class="kpi-label">@Html.Icon("message-circle-question") Preguntas</span>
+                    <strong class="kpi-value">@openQuestions</strong>
+                    <span class="kpi-delta @(openQuestions > 0 ? "is-warn" : "is-up")">@(openQuestions == 0 ? "Todas respondidas" : "sin responder")</span>
+                </a>
+                <a class="kpi kpi-chart" role="listitem" asp-controller="Metrics" asp-action="Index" asp-route-days="30">
+                    <span class="kpi-label">@Html.Icon("trending-up") Últimos 30 días</span>
+                    <strong class="kpi-value">@last30.ToString("C0", mx)</strong>
+                    <span class="kpi-delta @(change30 > 0 ? "is-up" : change30 < 0 ? "is-down" : "")">@(change30 is { } c ? (c >= 0 ? "▲ " : "▼ ") + Math.Abs(c).ToString("0", mx) + "% vs. 30 días antes" : "Sin datos del mes anterior")</span>
+                    <span class="kpi-spark" id="salesSpark" aria-hidden="true"
+                          data-values="@string.Join(",", daily.Select(d => d.Total.ToString("0.##", CultureInfo.InvariantCulture)))"
+                          data-labels="@string.Join(",", daily.Select(d => d.Day.ToString("dd/MM")))"></span>
+                </a>
+            </div>
         }
     </header>
 
@@ -175,14 +197,10 @@
         </section>
 
         <aside class="today-numbers" aria-labelledby="numeros">
-            <h2 id="numeros" class="today-section-title">Últimos 30 días</h2>
+            <h2 id="numeros" class="today-section-title">Tu negocio</h2>
             <dl class="numbers">
                 <div>
-                    <dt>Ventas</dt>
-                    <dd>@sales30.ToString("C0", mx)</dd>
-                </div>
-                <div>
-                    <dt>Pedidos</dt>
+                    <dt>Pedidos en 30 días</dt>
                     <dd>@orders30.ToString("N0", mx) <small>@ordersToday hoy</small></dd>
                 </div>
                 <div>
@@ -237,3 +255,26 @@
         }
     </section>
 </div>
+
+@section Scripts {
+    <script src="~/lib/apexcharts/apexcharts.min.js"></script>
+    <script>
+        (function () {
+            var el = document.getElementById('salesSpark');
+            if (!el || typeof ApexCharts === 'undefined') return;
+            var values = el.dataset.values.split(',').map(Number), labels = el.dataset.labels.split(',');
+            var money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
+            var chart = new ApexCharts(el, {
+                chart: { type: 'area', height: 64, sparkline: { enabled: true }, animations: { speed: 450 } },
+                series: [{ name: 'Ventas', data: values }],
+                labels: labels,
+                stroke: { curve: 'smooth', width: 2 },
+                colors: ['#f5a30a'],
+                fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: .32, opacityTo: 0, stops: [0, 95] } },
+                tooltip: { theme: document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light', x: { show: true }, y: { formatter: function (v) { return money.format(v); }, title: { formatter: function () { return ''; } } } }
+            });
+            chart.render();
+            document.addEventListener('ms:theme', function (e) { chart.updateOptions({ tooltip: { theme: e.detail } }); });
+        })();
+    </script>
+}

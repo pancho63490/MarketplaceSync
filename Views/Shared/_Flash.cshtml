@@ -1,35 +1,25 @@
 @*
     Mensajes de confirmación/error después de una acción (TempData).
-    El layout lo muestra en todas las pantallas; una vista que dibuja sus propios avisos
-    marca Context.Items["FlashRendered"] = true para no duplicarlos.
+    Salen como aviso flotante (Notyf, js/site.js) y, sin JavaScript, como franja.
+    Una vista que dibuja sus propios avisos marca Context.Items["FlashRendered"] = true para no duplicarlos.
 *@
 @{
     var success = TempData["Success"] as string ?? TempData["SuccessMessage"] as string;
     var warning = TempData["Warning"] as string;
     var error = TempData["Error"] as string;
+    var toasts = new List<(string Type, string Message)>();
+    if (!string.IsNullOrWhiteSpace(success)) toasts.Add(("success", success));
+    if (!string.IsNullOrWhiteSpace(warning)) toasts.Add(("warning", warning));
+    if (!string.IsNullOrWhiteSpace(error)) toasts.Add(("error", error));
 }
 
-@if (!string.IsNullOrWhiteSpace(success))
+@if (toasts.Count > 0)
 {
-    <div class="alert alert-success border-0 shadow-sm d-flex align-items-start gap-2 alert-dismissible fade show" role="status">
-        <span aria-hidden="true">✓</span>
-        <div>@success</div>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-    </div>
-}
-@if (!string.IsNullOrWhiteSpace(warning))
-{
-    <div class="alert alert-warning border-0 shadow-sm d-flex align-items-start gap-2 alert-dismissible fade show" role="status">
-        <span aria-hidden="true">!</span>
-        <div>@warning</div>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-    </div>
-}
-@if (!string.IsNullOrWhiteSpace(error))
-{
-    <div class="alert alert-danger border-0 shadow-sm d-flex align-items-start gap-2 alert-dismissible fade show" role="alert">
-        <span aria-hidden="true">✕</span>
-        <div>@error</div>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-    </div>
+    @* Notyf pinta el texto como HTML: se escapa aquí y se manda como texto plano. *@
+    <script type="application/json" data-toast>@Html.Raw(System.Text.Json.JsonSerializer.Serialize(toasts.Select(t => new { type = t.Type, message = System.Net.WebUtility.HtmlEncode(t.Message) })))</script>
+    <noscript>
+        @if (!string.IsNullOrWhiteSpace(success)) { <div class="alert alert-success" role="status">✓ @success</div> }
+        @if (!string.IsNullOrWhiteSpace(warning)) { <div class="alert alert-warning" role="status">@warning</div> }
+        @if (!string.IsNullOrWhiteSpace(error)) { <div class="alert alert-danger" role="alert">@error</div> }
+    </noscript>
 }

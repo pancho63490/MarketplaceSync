@@ -100,7 +100,7 @@
 <section class="panel mt-chart-panel" aria-labelledby="mt-daily">
     <div class="panel-head">
         <h2 id="mt-daily">Ventas por día</h2>
-        <p>Pasa el dedo o el mouse sobre una barra para ver el día.</p>
+        <p>Ventas en barras y pedidos en línea. Pasa el dedo o el mouse para ver cada día; arrastra para acercar.</p>
     </div>
     <div class="panel-body">
         @if (!anySales)
@@ -114,46 +114,15 @@
         }
         else
         {
-            <div class="mt-chart" id="dailyChart">
-                <svg viewBox="0 0 @W @H" role="img" aria-label="Ventas por día del @Model.From.ToString("dd/MM") al @Model.To.ToString("dd/MM")" preserveAspectRatio="none">
-                    @for (var g = 0d; g <= niceMax + 0.001; g += step)
-                    {
-                        var y = PadT + plotH - g / niceMax * plotH;
-                        <line x1="@PadL" x2="@W" y1="@y.ToString(CultureInfo.InvariantCulture)" y2="@y.ToString(CultureInfo.InvariantCulture)" class="mt-grid" vector-effect="non-scaling-stroke" />
-                        yLabels.Add((y / H * 100, g >= 1000 ? (g / 1000).ToString("0.#", mx) + "k" : g.ToString("0", mx)));
-                    }
-                    @for (var i = 0; i < Model.Daily.Count; i++)
-                    {
-                        var d = Model.Daily[i];
-                        var x = PadL + i * slot + (slot - barW) / 2;
-                        var h = (double)d.Sales / niceMax * plotH;
-                        var top = PadT + plotH - h;
-                        var r = Math.Min(4, Math.Min(barW / 2, h));
-                        var inv = CultureInfo.InvariantCulture;
-                        if (h > 0)
-                        {
-                            <path class="mt-bar" d="M@(x.ToString(inv)),@((PadT + plotH).ToString(inv)) V@((top + r).ToString(inv)) Q@(x.ToString(inv)),@(top.ToString(inv)) @((x + r).ToString(inv)),@(top.ToString(inv)) H@((x + barW - r).ToString(inv)) Q@((x + barW).ToString(inv)),@(top.ToString(inv)) @((x + barW).ToString(inv)),@((top + r).ToString(inv)) V@((PadT + plotH).ToString(inv)) Z" />
-                        }
-                        <rect class="mt-hit" x="@((PadL + i * slot).ToString(inv))" y="@PadT" width="@slot.ToString(inv)" height="@plotH.ToString(inv)"
-                              data-day="@d.Day.ToString("ddd dd/MM", mx)" data-sales="@Mxn(d.Sales)" data-orders="@d.Orders" data-visits="@(d.Visits?.ToString("N0", mx) ?? "")" />
-                        if (i % labelEvery == 0 || i == Model.Daily.Count - 1)
-                        {
-                            xLabels.Add(((PadL + i * slot + slot / 2) / W * 100, d.Day.ToString("dd/MM")));
-                        }
-                    }
-                    <line x1="@PadL" x2="@W" y1="@(PadT + plotH)" y2="@(PadT + plotH)" class="mt-baseline" vector-effect="non-scaling-stroke" />
-                </svg>
-                @foreach (var (top, text) in yLabels)
+            var chartData = System.Text.Json.JsonSerializer.Serialize(new
                 {
-                    <span class="mt-ylabel" style="top: @top.ToString("0.##", CultureInfo.InvariantCulture)%">@text</span>
-                }
-                @for (var xi = 0; xi < xLabels.Count; xi++)
-                {
-                    var (left, text) = xLabels[xi];
-                    <span class="mt-xlabel @(xi % 2 == 1 && xi != xLabels.Count - 1 ? "is-minor" : "")" style="left: @left.ToString("0.##", CultureInfo.InvariantCulture)%">@text</span>
-                }
-                <div class="mt-tip" id="dailyTip" hidden></div>
-            </div>
+                    days = Model.Daily.Select(d => d.Day.ToString("ddd dd/MM", mx)),
+                    sales = Model.Daily.Select(d => d.Sales),
+                    orders = Model.Daily.Select(d => d.Orders),
+                    visits = Model.Daily.Select(d => d.Visits)
+                });
+            <div class="mt-apex" id="dailyChart" role="img" aria-label="Ventas por día del @Model.From.ToString("dd/MM") al @Model.To.ToString("dd/MM"); la tabla de abajo tiene los mismos datos."></div>
+            <script type="application/json" id="dailyData">@Html.Raw(chartData)</script>
             <details class="mt-table">
                 <summary>Ver como tabla</summary>
                 <div class="table-responsive">
@@ -313,33 +282,49 @@
 }
 
 @section Scripts {
+    <script src="~/lib/apexcharts/apexcharts.min.js"></script>
     <script>
         (function () {
-            var chart = document.getElementById('dailyChart');
-            if (!chart) return;
-            var tip = document.getElementById('dailyTip');
-            function show(rect) {
-                var d = rect.dataset;
-                tip.innerHTML = '';
-                var day = document.createElement('div'); day.className = 'mt-tip-day'; day.textContent = d.day;
-                var s = document.createElement('div'); s.textContent = d.sales + ' · ' + d.orders + (d.orders === '1' ? ' pedido' : ' pedidos');
-                tip.append(day, s);
-                if (d.visits) { var v = document.createElement('div'); v.textContent = d.visits + ' visitas'; tip.append(v); }
-                tip.hidden = false;
-                var box = chart.getBoundingClientRect(), r = rect.getBoundingClientRect();
-                var left = r.left - box.left + r.width / 2;
-                tip.style.left = Math.max(70, Math.min(box.width - 70, left)) + 'px';
-                chart.querySelectorAll('.mt-hit.is-hover').forEach(function (x) { x.classList.remove('is-hover'); });
-                rect.classList.add('is-hover');
+            var el = document.getElementById('dailyChart'), src = document.getElementById('dailyData');
+            if (!el || !src || typeof ApexCharts === 'undefined') return;
+            var d = JSON.parse(src.textContent);
+            var css = getComputedStyle(document.documentElement);
+            function tok(n) { return css.getPropertyValue(n).trim(); }
+            var money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
+            var short = new Intl.NumberFormat('es-MX', { notation: 'compact', maximumFractionDigits: 1 });
+            function options() {
+                css = getComputedStyle(document.documentElement);
+                var dark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+                return {
+                    chart: { type: 'line', height: 300, fontFamily: 'Inter, system-ui, sans-serif', foreColor: tok('--muted-2'), toolbar: { show: true, tools: { download: false, selection: true, zoom: true, zoomin: true, zoomout: true, pan: false, reset: true } }, zoom: { enabled: true, type: 'x' }, animations: { speed: 500 } },
+                    series: [
+                        { name: 'Ventas', type: 'column', data: d.sales },
+                        { name: 'Pedidos', type: 'line', data: d.orders }
+                    ],
+                    labels: d.days,
+                    colors: [tok('--signal'), tok('--denim')],
+                    stroke: { width: [0, 2.5], curve: 'monotoneCubic' },
+                    plotOptions: { bar: { columnWidth: '62%', borderRadius: 4, borderRadiusApplication: 'end' } },
+                    markers: { size: 0, hover: { size: 5 } },
+                    dataLabels: { enabled: false },
+                    grid: { borderColor: tok('--line'), strokeDashArray: 3, padding: { left: 6, right: 6 } },
+                    xaxis: { tickAmount: Math.min(10, d.days.length), labels: { rotate: 0, hideOverlappingLabels: true, style: { fontSize: '11px' } }, axisBorder: { show: false }, axisTicks: { show: false }, tooltip: { enabled: false } },
+                    yaxis: [
+                        { labels: { formatter: function (v) { return '$' + short.format(v); } } },
+                        { opposite: true, labels: { formatter: function (v) { return Math.round(v); } } }
+                    ],
+                    legend: { position: 'top', horizontalAlign: 'left', fontWeight: 500, markers: { size: 5 } },
+                    tooltip: {
+                        theme: dark ? 'dark' : 'light', shared: true, intersect: false,
+                        y: { formatter: function (v, o) { return o.seriesIndex === 0 ? money.format(v) : v + (v === 1 ? ' pedido' : ' pedidos'); } },
+                        custom: undefined
+                    },
+                    states: { hover: { filter: { type: 'darken', value: .9 } } }
+                };
             }
-            chart.querySelectorAll('.mt-hit').forEach(function (rect) {
-                rect.addEventListener('mouseenter', function () { show(rect); });
-                rect.addEventListener('click', function () { show(rect); });
-            });
-            chart.addEventListener('mouseleave', function () {
-                tip.hidden = true;
-                chart.querySelectorAll('.mt-hit.is-hover').forEach(function (x) { x.classList.remove('is-hover'); });
-            });
+            var chart = new ApexCharts(el, options());
+            chart.render();
+            document.addEventListener('ms:theme', function () { chart.updateOptions(options(), false, false); });
         })();
     </script>
 }

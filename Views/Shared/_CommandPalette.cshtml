@@ -1,0 +1,32 @@
+@model List<(string Group, string Controller, string Action, string Icon, string Label)>
+@{
+    // Pantallas y acciones rápidas: se filtran en el navegador. Productos y pedidos se buscan en el servidor.
+    var pages = Model.Select(p => new { g = string.IsNullOrEmpty(p.Group) ? "Inicio" : p.Group, label = p.Label, icon = p.Icon, url = Url.Action(p.Action, p.Controller) }).ToList();
+    var actions = new[]
+    {
+        new { g = "Acciones", label = "Importar producto desde un link", icon = "plus", url = Url.Action("CreateFromUrl", "Products") },
+        new { g = "Acciones", label = "Pedidos por enviar", icon = "truck", url = Url.Action("Index", "Orders", new { view = "toship" }) },
+        new { g = "Acciones", label = "Empacar con escáner", icon = "package-open", url = Url.Action("Pack", "Orders") },
+        new { g = "Acciones", label = "Encargo al agente de importación", icon = "bot", url = Url.Action("Index", "Agent") + "#encargo" },
+        new { g = "Acciones", label = "Fotos por mejorar", icon = "image", url = Url.Action("Index", "Photos", new { filter = "arreglar" }) }
+    };
+    var data = System.Text.Json.JsonSerializer.Serialize(new { pages, actions, search = Url.Action("Quick", "Search") });
+}
+
+<dialog class="cmdk" id="cmdk" aria-label="Buscar en MarketplaceSync">
+    <div class="cmdk-box">
+        <div class="cmdk-input-row">
+            @Html.Icon("search")
+            <input id="cmdkInput" type="text" autocomplete="off" spellcheck="false" placeholder="Busca un producto, un pedido (número o comprador) o una pantalla…"
+                   role="combobox" aria-expanded="true" aria-controls="cmdkList" aria-autocomplete="list" />
+            <kbd class="kbd">Esc</kbd>
+        </div>
+        <div class="cmdk-list" id="cmdkList" role="listbox" aria-label="Resultados"></div>
+        <div class="cmdk-foot">
+            <span><kbd class="kbd">↑</kbd><kbd class="kbd">↓</kbd> moverte</span>
+            <span><kbd class="kbd">Enter</kbd> abrir</span>
+            <span class="ms-auto">Ctrl K para abrir desde cualquier pantalla</span>
+        </div>
+    </div>
+</dialog>
+<script type="application/json" id="cmdkData">@Html.Raw(data)</script>
