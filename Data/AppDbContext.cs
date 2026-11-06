@@ -39,6 +39,8 @@ namespace MarketplaceSync.Web.Data
         public DbSet<MarketplaceSync.Web.Models.Notifications.NotificationSettings> NotificationSettings { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Notifications.NotificationLog> NotificationLogs { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Agents.AgentRun> AgentRuns { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.PostSale.OrderMessage> OrderMessages { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.PostSale.OrderClaim> OrderClaims { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Agents.AgentStep> AgentSteps { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
@@ -349,6 +351,17 @@ namespace MarketplaceSync.Web.Data
                 entity.Property(x => x.SuggestedAnswer).HasMaxLength(2000);
                 entity.Property(x => x.AnswerText).HasMaxLength(2000);
                 entity.Property(x => x.LastError).HasMaxLength(500);
+            });
+
+            builder.Entity<MarketplaceSync.Web.Models.PostSale.OrderMessage>(entity =>
+            {
+                entity.HasIndex(x => new { x.OrganizationId, x.ExternalId }).IsUnique();
+                entity.HasIndex(x => new { x.OrganizationId, x.PackId, x.SentAt });
+            });
+            builder.Entity<MarketplaceSync.Web.Models.PostSale.OrderClaim>(entity =>
+            {
+                entity.HasIndex(x => new { x.OrganizationId, x.ExternalId }).IsUnique();
+                entity.HasIndex(x => new { x.OrganizationId, x.Status, x.DueDate });
             });
 
             builder.Entity<MarketplaceSync.Web.Models.Agents.AgentRun>(entity =>

@@ -65,6 +65,13 @@ namespace MarketplaceSync.Web.Controllers
                 .SumAsync(x => (decimal?)x.TotalAmount) ?? 0m;
             ViewBag.OrdersToShip = await MarketplaceSync.Web.Models.Orders.SalesOrderShippingQueries.ToShip(organizationOrders).CountAsync();
             ViewBag.LateOrders = await MarketplaceSync.Web.Models.Orders.SalesOrderShippingQueries.LateToShip(organizationOrders, DateTime.UtcNow).CountAsync();
+            ViewBag.OpenClaims = await _context.OrderClaims.AsNoTracking()
+                .Where(c => c.OrganizationId == organizationId && c.Status == "opened")
+                .OrderBy(c => c.DueDate ?? DateTime.MaxValue)
+                .ToListAsync();
+            ViewBag.UnansweredMessages = (await HttpContext.RequestServices
+                .GetRequiredService<MarketplaceSync.Services.PostSale.PostSaleService>()
+                .GetPendingAsync(organizationId, 99, HttpContext.RequestAborted)).Count;
             try
             {
                 ViewBag.ReputationAlerts = await _metrics.GetReputationAlertsAsync(organizationId, HttpContext.RequestAborted);

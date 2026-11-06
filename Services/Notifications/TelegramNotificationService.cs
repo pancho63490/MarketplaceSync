@@ -41,6 +41,7 @@ public sealed partial class TelegramNotificationService
     private readonly MarketplaceSync.Services.Ai.IListingAutopilotService _autopilot;
     private readonly Hangfire.IBackgroundJobClient _jobs;
     private readonly MarketplaceSync.Services.Metrics.MetricsService _metrics;
+    private readonly MarketplaceSync.Services.PostSale.PostSaleService _postSale;
 
     public TelegramNotificationService(
         AppDbContext context,
@@ -52,8 +53,10 @@ public sealed partial class TelegramNotificationService
         MarketplaceSync.Services.Ai.ProductTitleTranslator titleTranslator,
         MarketplaceSync.Services.Ai.IListingAutopilotService autopilot,
         Hangfire.IBackgroundJobClient jobs,
-        MarketplaceSync.Services.Metrics.MetricsService metrics)
+        MarketplaceSync.Services.Metrics.MetricsService metrics,
+        MarketplaceSync.Services.PostSale.PostSaleService postSale)
     {
+        _postSale = postSale;
         _metrics = metrics;
         _extractor = extractor;
         _titleTranslator = titleTranslator;
@@ -367,6 +370,18 @@ public sealed partial class TelegramNotificationService
                 await AnswerAndReportAsync(token, settings, questionId, text, replyTo, update.MessageId, cancellationToken);
                 return;
             }
+
+            // Respuesta a un mensaje de comprador → se le contesta en Mercado Libre.
+            var msgLog = await _context.NotificationLogs.AsNoTracking()
+                .Where(x => x.OrganizationId == org && x.TelegramChatId == update.ChatId &&
+                            x.TelegramMessageId == replyTo && x.Kind == NotificationKind.BuyerMessage)
+                .OrderByDescending(x => x.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (msgLog is not null && int.TryParse(msgLog.EntityId, out var orderId))
+            {
+                await ReplyToBuyerAsync(token, settings, orderId, text, update.MessageId, cancellationToken);
+                return;
+            }
         }
 
         // Un link de Amazon, eBay, Walmart… → se importa como producto.
@@ -540,6 +555,9 @@ public sealed partial class TelegramNotificationService
                 await NotifyOutOfStockAsync(token, settings, since, cancellationToken);
             if (settings.NotifyOrders)
                 await NotifyLateOrdersAsync(token, settings, cancellationToken);
+            if (settings.NotifyQuestions)
+                await NotifyBuyerMessagesAsync(token, settings, since, cancellationToken);
+            await NotifyClaimsAsync(token, settings, since, cancellationToken);
             await NotifyReputationAsync(token, settings, cancellationToken);
             if (settings.DailySummary)
                 await SendSummaryAsync(token, settings, force: false, cancellationToken);

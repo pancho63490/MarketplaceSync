@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MarketplaceSync.Services.Navigation;
 
-public sealed record NavBadges(int PendingQuestions, int OrdersToShip, int LateOrders);
+public sealed record NavBadges(int PendingQuestions, int OrdersToShip, int LateOrders, int PostSale = 0, int OpenClaims = 0);
 
 /// <summary>Contadores del menú (preguntas sin responder, pedidos por enviar). Una consulta por petición.</summary>
 public sealed class NavBadgeService
@@ -34,7 +34,14 @@ public sealed class NavBadgeService
             var orders = _context.SalesOrders.Where(o => o.OrganizationId == org);
             var toShip = await orders.ToShip().CountAsync(cancellationToken);
             var late = await orders.LateToShip(DateTime.UtcNow).CountAsync(cancellationToken);
-            _cached = new NavBadges(questions, toShip, late);
+            var since = DateTime.UtcNow.AddDays(-45);
+            var recent = await _context.OrderMessages.AsNoTracking()
+                .Where(m => m.OrganizationId == org && m.SentAt >= since)
+                .Select(m => new { m.PackId, m.FromSeller, m.SentAt })
+                .ToListAsync(cancellationToken);
+            var unanswered = recent.GroupBy(m => m.PackId).Count(g => !g.OrderByDescending(m => m.SentAt).First().FromSeller);
+            var claims = await _context.OrderClaims.CountAsync(c => c.OrganizationId == org && c.Status == "opened", cancellationToken);
+            _cached = new NavBadges(questions, toShip, late, unanswered + claims, claims);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

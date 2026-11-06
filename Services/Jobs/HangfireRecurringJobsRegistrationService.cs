@@ -74,6 +74,12 @@ public sealed class HangfireRecurringJobsRegistrationService : BackgroundService
                     job => job.SweepTelegramNotifications(),
                     "*/5 * * * *");
 
+                // Mensajes de compradores y reclamos (además de las notificaciones "messages" y "claims").
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "sync-postsale",
+                    job => job.SyncPostSale(),
+                    "*/10 * * * *");
+
                 // Radar de compra: después de la captura diaria del ranking (12:15 UTC)
                 _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
                     "refresh-purchase-radar",

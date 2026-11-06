@@ -1,0 +1,127 @@
+@model MarketplaceSync.Web.Controllers.ClaimDetailViewModel
+@using MarketplaceSync.Services.PostSale
+
+@{
+    var c = Model.Claim;
+    ViewData["Title"] = "Reclamo";
+    string Local(DateTime utc, string f = "dd/MM/yyyy HH:mm") => utc.AddHours(-7).ToString(f);
+    var draft = TempData["DraftMessage"] as string;
+    var actions = (c.PendingActions ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries);
+    string ActionLabel(string a) => a switch
+    {
+        "send_message_to_complainant" or "send_message_to_mediator" => "Mandar un mensaje",
+        "refund" => "Reembolsar el dinero",
+        "allow_return" or "allow_partial_refund" => "Aceptar la devolución",
+        "open_dispute" => "Pedir que intervenga Mercado Libre",
+        "send_potential_shipping" or "add_shipping_evidence" => "Mandar prueba del envío",
+        "send_attachments" => "Mandar fotos o documentos",
+        _ => a.Replace('_', ' ')
+    };
+    var lateDue = c.DueDate is { } d && d < DateTime.UtcNow;
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <a asp-action="Index" asp-route-tab="claims" class="pe-back">← Postventa</a>
+        <h1 class="page-title">@(c.Stage == "dispute" ? "Disputa" : "Reclamo"): @c.ReasonLabel</h1>
+        <span class="page-head-meta">
+            <span class="pill @(c.IsOpen ? "pill-warn" : "pill-ok")">@(c.IsOpen ? "Abierto" : "Cerrado")</span>
+            · Pedido @c.ResourceId@(Model.OrderTitle is null ? "" : " · " + Model.OrderTitle) · abierto el @Local(c.DateCreated, "dd/MM/yyyy")
+        </span>
+    </div>
+    <div class="page-head-actions">
+        @if (c.SalesOrderId is { } oid) { <a asp-controller="Orders" asp-action="Details" asp-route-id="@oid" class="btn btn-outline-secondary">Ver el pedido</a> }
+    </div>
+</header>
+
+@if (!string.IsNullOrWhiteSpace(Model.Error)) { <div class="alert alert-warning">@Model.Error</div> }
+
+<div class="od-grid">
+    <div class="od-main">
+        <section class="panel" aria-labelledby="cl-chat">
+            <div class="panel-head">
+                <h2 id="cl-chat">@Html.Icon("message-circle") Mensajes del reclamo</h2>
+                @if (c.Stage == "dispute") { <p>Ya intervino Mercado Libre: tus mensajes van al mediador.</p> }
+            </div>
+            <div class="od-thread">
+                @if (Model.Messages.Count == 0)
+                {
+                    <p class="text-muted small mb-0">Todavía no hay mensajes. Escríbele al comprador para entender qué pasó; muchas veces se resuelve sin devolución.</p>
+                }
+                @foreach (var m in Model.Messages)
+                {
+                    var mine = m.SenderRole == "respondent";
+                    <div class="od-msg @(mine ? "is-me" : "is-buyer")">
+                        <div class="od-bubble">@m.Text</div>
+                        <div class="od-meta">@(mine ? "Tú" : m.SenderRole == "mediator" ? "Mercado Libre" : "Comprador") · @Local(m.SentAt, "dd/MM HH:mm")</div>
+                    </div>
+                }
+            </div>
+            @if (c.IsOpen)
+            {
+                <form asp-action="SendClaimMessage" asp-route-id="@c.Id" method="post" class="od-reply" id="claimForm">
+                    @Html.AntiForgeryToken()
+                    <div class="od-templates">
+                        @foreach (var t in new[]
+                        {
+                            "Hola, lamento lo que pasó. ¿Me compartes una foto del producto y de la etiqueta para revisarlo y darte una solución?",
+                            "Revisé tu caso: te ofrezco cambio por la pieza correcta sin costo. ¿Te parece bien?",
+                            "Tu paquete aparece en camino. Te comparto el seguimiento y estoy al pendiente hasta que te llegue."
+                        })
+                        {
+                            <button type="button" class="pub-chip" data-template="@t">@(t[..32])…</button>
+                        }
+                    </div>
+                    <label for="claimText" class="visually-hidden">Mensaje</label>
+                    <textarea id="claimText" name="text" class="form-control" rows="3" maxlength="2000" required placeholder="Escribe tu respuesta…">@draft</textarea>
+                    <div class="od-reply-foot">
+                        <span class="form-text m-0">Sin teléfonos, correos ni links.</span>
+                        <button type="submit" class="btn btn-primary" id="claimSend">@Html.Icon("send") Enviar</button>
+                    </div>
+                </form>
+            }
+        </section>
+    </div>
+
+    <aside class="od-side">
+        <section class="panel" aria-labelledby="cl-todo">
+            <div class="panel-head"><h2 id="cl-todo">Qué tienes que hacer</h2></div>
+            <div class="panel-body">
+                @if (!c.IsOpen)
+                {
+                    <p class="mb-0">Este reclamo ya se cerró@(c.Resolution is null ? "." : $": {c.Resolution}.")</p>
+                }
+                else
+                {
+                    @if (c.DueDate is { } due)
+                    {
+                        <p class="cl-due @(lateDue ? "is-late" : "")">@Html.Icon("clock") @(lateDue ? "La fecha límite ya pasó" : "Responde antes del") <strong>@Local(due, "dd/MM HH:mm")</strong></p>
+                    }
+                    @if (actions.Length > 0)
+                    {
+                        <p class="small text-muted mb-1">Mercado Libre te deja:</p>
+                        <ul class="ag-rules">
+                            @foreach (var a in actions) { <li>@ActionLabel(a)</li> }
+                        </ul>
+                    }
+                    <p class="small text-muted">Los mensajes los mandas desde aquí. Reembolsar o aceptar una devolución mueve dinero y no se puede deshacer: hazlo en Mercado Libre.</p>
+                    <a href="@PostSaleService.ClaimUrl(c)" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm">@Html.Icon("external-link") Abrir en Mercado Libre</a>
+                }
+            </div>
+        </section>
+    </aside>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var text = document.getElementById('claimText');
+            document.querySelectorAll('[data-template]').forEach(function (b) {
+                b.addEventListener('click', function () { text.value = b.dataset.template; text.focus(); });
+            });
+            document.getElementById('claimForm')?.addEventListener('submit', function () {
+                var b = document.getElementById('claimSend'); setTimeout(function () { b.disabled = true; b.textContent = 'Enviando…'; }, 0);
+            });
+        })();
+    </script>
+}

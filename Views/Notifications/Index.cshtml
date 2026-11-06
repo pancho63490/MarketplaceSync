@@ -107,7 +107,7 @@
                             @Html.AntiForgeryToken()
                             @foreach (var (name, value, title, help) in new[]
                             {
-                                ("notifyQuestions", s.NotifyQuestions, "Preguntas nuevas", "Con la respuesta que sugiere la IA y un botón para enviarla."),
+                                ("notifyQuestions", s.NotifyQuestions, "Preguntas y mensajes de compradores", "Preguntas con respuesta sugerida por la IA, y mensajes de postventa: respondes desde Telegram contestando al aviso."),
                                 ("notifyOrders", s.NotifyOrders, "Ventas", "Cada pedido pagado, con cuántas piezas te quedan."),
                                 ("notifyStock", s.NotifyStock, "Piezas agotadas", "Cuando un SKU llega a cero o se sobrevende."),
                                 ("dailySummary", s.DailySummary, "Resumen de cada mañana", "Ventas de ayer y lo pendiente de hoy.")

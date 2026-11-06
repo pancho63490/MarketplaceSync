@@ -1506,3 +1506,47 @@ a.mt-prod-title:hover { color: var(--denim); }
 .ag-request-examples .pub-chip { border: 1px solid var(--line); background: var(--surface); cursor: pointer; }
 .ag-run-request { margin: .45rem 0 0; font-weight: 600; color: var(--ink); }
 @media (max-width: 575.98px) { .ag-request-row { flex-direction: column; } }
+
+/* ── Pedido: detalle y mensajes ── */
+.od-total { text-align: right; }
+.od-total span { display: block; font-size: var(--fs-xs); color: var(--muted); }
+.od-total strong { font-size: var(--fs-xl); font-weight: 800; font-variant-numeric: var(--num); }
+.od-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.od-main, .od-side { display: grid; gap: 1.25rem; min-width: 0; }
+.od-claim-alert { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; padding: .8rem 1rem; border-radius: var(--r-panel); background: var(--bad-soft); color: var(--bad); text-decoration: none; border: 1px solid var(--bad); }
+.od-claim-alert strong { color: var(--ink); }
+.od-claim-alert .small { color: var(--ink-2); }
+.od-thread { display: flex; flex-direction: column; gap: .7rem; max-height: 460px; overflow-y: auto; padding: 1rem 1.25rem; background: var(--paper); }
+.od-msg { display: flex; flex-direction: column; max-width: 82%; }
+.od-msg.is-buyer { align-self: flex-start; }
+.od-msg.is-me { align-self: flex-end; align-items: flex-end; }
+.od-bubble { padding: .55rem .8rem; border-radius: 14px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-sm); line-height: 1.45; }
+.od-msg.is-buyer .od-bubble { background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.od-msg.is-me .od-bubble { background: var(--ink); color: #fff; border-bottom-right-radius: 4px; }
+.od-meta { margin-top: .2rem; font-size: var(--fs-xs); color: var(--muted); }
+.od-reply { display: grid; gap: .55rem; padding: 1rem 1.25rem; border-top: 1px solid var(--line); }
+.od-templates { display: flex; flex-wrap: wrap; gap: .35rem; }
+.od-templates .pub-chip { border: 1px solid var(--line); background: var(--surface); cursor: pointer; }
+.od-templates .pub-chip.is-ai { border-color: var(--signal); background: var(--signal-soft); display: inline-flex; align-items: center; gap: .25rem; }
+.od-reply-foot { display: flex; justify-content: space-between; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.od-items { list-style: none; margin: 0; padding: 0; }
+.od-items li { display: flex; justify-content: space-between; gap: 1rem; padding: .75rem 1.25rem; border-top: 1px solid var(--line); }
+.od-items li:first-child { border-top: 0; }
+.od-facts { grid-template-columns: minmax(0, 1fr); }
+.cl-due { display: flex; align-items: center; gap: .4rem; padding: .55rem .75rem; border-radius: var(--r-control); background: var(--warn-soft); }
+.cl-due.is-late { background: var(--bad-soft); color: var(--bad); }
+
+/* ── Postventa ── */
+.ps-list { list-style: none; margin: 0; padding: 0; overflow: hidden; }
+.ps-list li + li { border-top: 1px solid var(--line); }
+.ps-row { display: flex; align-items: center; gap: 1rem; padding: .85rem 1.25rem; color: var(--ink); text-decoration: none; }
+.ps-row:hover { background: var(--paper); }
+.ps-row.is-urgent { box-shadow: inset 4px 0 0 var(--bad); }
+.ps-row-main { min-width: 0; flex: 1; display: grid; gap: .15rem; }
+.ps-row-title { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-row-text { font-size: var(--fs-sm); color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ps-row-side { display: flex; flex-direction: column; align-items: flex-end; gap: .3rem; flex: 0 0 auto; }
+.ps-row-action { font-size: var(--fs-sm); font-weight: 600; color: var(--denim); display: inline-flex; align-items: center; gap: .15rem; }
+@media (max-width: 991.98px) { .od-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 575.98px) { .ps-row { flex-direction: column; align-items: stretch; } .ps-row-side { flex-direction: row; justify-content: space-between; align-items: center; } .od-msg { max-width: 92%; } }
+@media (max-width: 767.98px) { .od-total { text-align: left; display: flex; align-items: baseline; gap: .5rem; } .od-total span { display: inline; } }

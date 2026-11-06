@@ -612,6 +612,15 @@ namespace MarketplaceSync.Web.Controllers
                             job => job.SyncOrdersForOrganization(account.OrganizationId), TimeSpan.FromSeconds(15));
                     }
                     break;
+                case "messages":
+                case "claims":
+                case "post_purchase":
+                    if (ShouldEnqueue($"ps:{account.OrganizationId}", TimeSpan.FromSeconds(45)))
+                    {
+                        jobs.Schedule<MarketplaceSync.Services.Jobs.MarketplaceJobsService>(
+                            job => job.SyncPostSaleForOrganization(account.OrganizationId), TimeSpan.FromSeconds(10));
+                    }
+                    break;
                 case "items":
                     if (ShouldEnqueue($"i:{account.OrganizationId}", TimeSpan.FromMinutes(3)))
                     {

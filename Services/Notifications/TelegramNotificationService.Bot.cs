@@ -428,4 +428,78 @@ public sealed partial class TelegramNotificationService
             : new List<IReadOnlyList<TelegramButton>> { new[] { new TelegramButton(buttonText, Url: AppUrl(settings, path)) } };
         await _telegram.SendMessageAsync(token, chatId, html, buttons, cancellationToken: cancellationToken);
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // Postventa: mensajes de compradores y reclamos
+    // ─────────────────────────────────────────────────────────────
+
+    private async Task NotifyBuyerMessagesAsync(string token, NotificationSettings settings, DateTime since, CancellationToken cancellationToken)
+    {
+        var org = settings.OrganizationId;
+        var sent = _context.NotificationLogs.Where(l => l.OrganizationId == org && l.Kind == NotificationKind.BuyerMessage).Select(l => l.Key);
+        var messages = await _context.OrderMessages.AsNoTracking()
+            .Where(m => m.OrganizationId == org && !m.FromSeller && m.SentAt >= since && m.SalesOrderId != null && !sent.Contains("msg:" + m.ExternalId))
+            .OrderBy(m => m.SentAt)
+            .Take(10)
+            .ToListAsync(cancellationToken);
+        foreach (var m in messages)
+        {
+            var order = await _context.SalesOrders.AsNoTracking().Include(o => o.Items).FirstOrDefaultAsync(o => o.Id == m.SalesOrderId, cancellationToken);
+            var html = $"💬 <b>Mensaje de {E(order?.BuyerNickname ?? "un comprador")}</b>\n" +
+                       (order?.Items.FirstOrDefault()?.Title is { } title ? $"<b>{E(Shorten(title, 70))}</b>\n" : "") +
+                       $"«{E(Shorten(m.Text, 600))}»\n\n<i>Responde a este mensaje para contestarle.</i>";
+            var buttons = settings.PublicBaseUrl is null
+                ? null
+                : new List<IReadOnlyList<TelegramButton>> { new[] { new TelegramButton("Abrir conversación", Url: AppUrl(settings, $"/Orders/Details/{m.SalesOrderId}#conversacion")) } };
+            var messageId = await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, html, buttons, cancellationToken: cancellationToken);
+            await LogAsync(org, "msg:" + m.ExternalId, NotificationKind.BuyerMessage, m.SalesOrderId!.Value.ToString(CultureInfo.InvariantCulture), settings.TelegramChatId, messageId, cancellationToken);
+        }
+    }
+
+    /// <summary>Un aviso cuando se abre un reclamo y otro si pasa a disputa (interviene Mercado Libre).</summary>
+    private async Task NotifyClaimsAsync(string token, NotificationSettings settings, DateTime since, CancellationToken cancellationToken)
+    {
+        var org = settings.OrganizationId;
+        var claims = await _context.OrderClaims.AsNoTracking()
+            .Where(c => c.OrganizationId == org && c.Status == "opened" && c.LastUpdated >= since.AddDays(-2))
+            .OrderBy(c => c.DueDate ?? c.DateCreated)
+            .Take(10)
+            .ToListAsync(cancellationToken);
+        foreach (var c in claims)
+        {
+            var key = $"claim:{c.ExternalId}:{c.Stage ?? "claim"}";
+            if (await _context.NotificationLogs.AnyAsync(l => l.OrganizationId == org && l.Key == key, cancellationToken))
+                continue;
+            var title = c.SalesOrderId is { } oid
+                ? await _context.SalesOrderItems.AsNoTracking().Where(i => i.SalesOrderId == oid).Select(i => i.Title).FirstOrDefaultAsync(cancellationToken)
+                : null;
+            var due = c.DueDate is { } d ? $"\n⏰ Responde antes del <b>{d.AddHours(-7):dd/MM HH:mm}</b> para no afectar tu reputación." : "";
+            var html = (c.Stage == "dispute"
+                           ? $"🔴 <b>El reclamo pasó a disputa</b>: {E(c.ReasonLabel)}\nMercado Libre va a decidir; manda tus pruebas al mediador."
+                           : $"⚠️ <b>Reclamo abierto</b>: {E(c.ReasonLabel)}") +
+                       (title is null ? $"\nPedido {E(c.ResourceId)}" : $"\n{E(Shorten(title, 70))}") + due;
+            var buttons = settings.PublicBaseUrl is null
+                ? null
+                : new List<IReadOnlyList<TelegramButton>> { new[] { new TelegramButton("Atender reclamo", Url: AppUrl(settings, $"/PostSale/Claim/{c.Id}")) } };
+            var messageId = await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, html, buttons, cancellationToken: cancellationToken);
+            await LogAsync(org, key, NotificationKind.Claim, c.Id.ToString(CultureInfo.InvariantCulture), settings.TelegramChatId, messageId, cancellationToken);
+        }
+    }
+
+    private async Task ReplyToBuyerAsync(string token, NotificationSettings settings, int orderId, string text, long? userMessageId, CancellationToken cancellationToken)
+    {
+        string? error;
+        try
+        {
+            error = await _postSale.SendMessageAsync(settings.OrganizationId, orderId, text, cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(exception, "Reply to buyer from Telegram failed for order {Order}.", orderId);
+            error = "Mercado Libre no respondió; intenta de nuevo en un momento.";
+        }
+        await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value,
+            error is null ? "✅ Mensaje enviado al comprador." : "⚠️ " + E(error),
+            replyToMessageId: userMessageId, cancellationToken: cancellationToken);
+    }
 }

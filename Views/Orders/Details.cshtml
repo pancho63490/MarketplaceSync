@@ -1,88 +1,210 @@
-@model MarketplaceSync.Web.Models.Orders.SalesOrder
-
-@functions {
-    private static string StatusLabel(string status) => status.ToLowerInvariant() switch
-    {
-        "paid" => "Pagado",
-        "confirmed" => "Confirmado",
-        "payment_required" => "Pago pendiente",
-        "payment_in_process" => "Pago en proceso",
-        "partially_refunded" => "Reembolso parcial",
-        "pending_cancel" => "Cancelación pendiente",
-        "cancelled" => "Cancelado",
-        "invalid" => "Inválido",
-        _ => status.Replace('_', ' ')
-    };
-}
+@model MarketplaceSync.Web.ViewModels.Orders.OrderDetailsViewModel
+@using System.Globalization
+@using MarketplaceSync.Services.PostSale
 
 @{
-    ViewData["Title"] = $"Pedido #{Model.ExternalOrderId}";
+    var o = Model.Order;
+    ViewData["Title"] = $"Pedido #{o.ExternalOrderId}";
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    string Local(DateTime utc, string format = "dd/MM/yyyy HH:mm") => utc.AddHours(-7).ToString(format);
+    var (statusLabel, statusTone) = o.Status switch
+    {
+        "paid" => ("Pagado", "pill-ok"),
+        "cancelled" => ("Cancelado", "pill-bad"),
+        "partially_refunded" => ("Reembolso parcial", "pill-warn"),
+        "payment_required" or "payment_in_process" => ("Pago pendiente", "pill-warn"),
+        _ => (o.Status.Replace('_', ' '), "")
+    };
+    var shipLabel = o.ShippingLogistic == "fulfillment" ? "Full: lo envía Mercado Libre"
+        : (o.ShippingStatus, o.ShippingSubstatus) switch
+        {
+            ("ready_to_ship", "ready_to_print") => "Imprime la etiqueta",
+            ("ready_to_ship", "printed") => "Etiqueta impresa: entrégalo",
+            ("ready_to_ship", _) => "Listo para enviar",
+            ("handling" or "pending", _) => "Por preparar",
+            ("shipped", _) => "En camino",
+            ("delivered", _) => "Entregado",
+            ("not_delivered", _) => "No entregado",
+            ("cancelled", _) => "Envío cancelado",
+            _ => o.ShippingId is null ? "Sin envío de Mercado Libre" : "Sin dato todavía"
+        };
+    var late = o.NeedsShipping && o.ShippingDeadline < DateTime.UtcNow;
+    var draft = TempData["DraftMessage"] as string;
+    var lastFromBuyer = Model.Messages.Count > 0 && !Model.Messages[^1].FromSeller;
+    var openClaims = Model.Claims.Where(c => c.IsOpen).ToList();
 }
 
-<div class="order-detail-page">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
-        <div>
-            <a asp-action="Index" class="order-back-link">← Volver a pedidos</a>
-            <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
-                <h2 class="h4 fw-bold mb-0">Pedido #@Model.ExternalOrderId</h2>
-                <span class="badge rounded-pill text-bg-primary">@StatusLabel(Model.Status)</span>
-            </div>
-            <div class="text-muted small mt-2">Mercado Libre · @(Model.MarketplaceAccount.DisplayName ?? Model.MarketplaceAccount.ExternalAccountId)</div>
-        </div>
-        <div class="text-end"><div class="text-muted small">Total del pedido</div><div class="order-detail-total">$@Model.TotalAmount.ToString("N2") @Model.CurrencyId</div></div>
+<header class="page-head">
+    <div class="page-head-text">
+        <a asp-action="Index" class="pe-back">← Pedidos</a>
+        <h1 class="page-title">Pedido #@o.ExternalOrderId</h1>
+        <span class="page-head-meta">
+            <span class="pill @statusTone">@statusLabel</span>
+            <span class="pill @(late ? "pill-bad" : o.NeedsShipping ? "pill-warn" : "pill-info") ms-1">@(late ? "Atrasado: despáchalo ya" : shipLabel)</span>
+            · @Local(o.DateCreated) · @(o.MarketplaceAccount.DisplayName ?? o.MarketplaceAccount.ExternalAccountId)
+        </span>
     </div>
+    <div class="od-total">
+        <span>Total</span>
+        <strong>@o.TotalAmount.ToString("C0", mx)</strong>
+    </div>
+</header>
 
-    <div class="row g-4">
-        <div class="col-lg-8">
-            <div class="card border-0 shadow-sm order-detail-card mb-4">
-                <div class="card-header bg-white"><h3 class="h6 fw-bold mb-0">Productos</h3></div>
-                <div class="table-responsive">
-                    <table class="table align-middle mb-0">
-                        <thead class="table-light"><tr><th>Producto</th><th>SKU</th><th class="text-center">Cantidad</th><th class="text-end">Precio</th><th class="text-end">Subtotal</th></tr></thead>
-                        <tbody>
-                        @foreach (var item in Model.Items)
+@if (openClaims.Count > 0)
+{
+    foreach (var c in openClaims)
+    {
+        <a asp-controller="PostSale" asp-action="Claim" asp-route-id="@c.Id" class="od-claim-alert">
+            @Html.Icon("triangle-alert")
+            <span>
+                <strong>@(c.Stage == "dispute" ? "Disputa abierta" : "Reclamo abierto"): @c.ReasonLabel</strong>
+                <span class="d-block small">@(c.DueDate is { } due ? $"Responde antes del {Local(due, "dd/MM HH:mm")} para no afectar tu reputación." : "Revisa qué pide el comprador.")</span>
+            </span>
+            <span class="ms-auto fw-bold">Atender @Html.Icon("chevron-right", "icon-xs")</span>
+        </a>
+    }
+}
+
+<div class="od-grid">
+    <div class="od-main">
+        <section class="panel" id="conversacion" aria-labelledby="od-chat">
+            <div class="panel-head">
+                <h2 id="od-chat">@Html.Icon("message-circle") Mensajes con @(o.BuyerNickname ?? "el comprador")</h2>
+                @if (lastFromBuyer) { <span class="pill pill-warn">Espera tu respuesta</span> }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.MessagesError))
+            {
+                <div class="panel-body pb-0"><div class="alert alert-warning mb-0 small">@Model.MessagesError</div></div>
+            }
+            <div class="od-thread" id="thread">
+                @if (Model.Messages.Count == 0)
+                {
+                    <p class="text-muted small mb-0">Todavía no hay mensajes en esta venta. Un "gracias por tu compra" ayuda a que te califiquen bien.</p>
+                }
+                @foreach (var m in Model.Messages)
+                {
+                    <div class="od-msg @(m.FromSeller ? "is-me" : "is-buyer")">
+                        <div class="od-bubble">@m.Text</div>
+                        <div class="od-meta">@(m.FromSeller ? "Tú" : (o.BuyerNickname ?? "Comprador")) · @Local(m.SentAt, "dd/MM HH:mm")@(m.Status is "moderated" or "rejected" ? " · Mercado Libre no lo mostró" : "")</div>
+                    </div>
+                }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(o.BuyerId))
+            {
+                <form asp-controller="PostSale" asp-action="SendMessage" method="post" class="od-reply" id="replyForm">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="orderId" value="@o.Id" />
+                    <div class="od-templates" aria-label="Respuestas rápidas">
+                        @foreach (var t in PostSaleService.Templates)
                         {
-                            <tr>
-                                <td><div class="fw-semibold">@(item.Title ?? item.ExternalItemId)</div><div class="small text-muted">MLM @item.ExternalItemId</div></td>
-                                <td>@(item.SellerSku ?? "—")</td><td class="text-center">@item.Quantity</td><td class="text-end">$@item.UnitPrice.ToString("N2")</td><td class="text-end fw-bold">$@((item.UnitPrice * item.Quantity).ToString("N2"))</td>
-                            </tr>
+                            <button type="button" class="pub-chip" data-template="@t">@(t.Length > 34 ? t[..32] + "…" : t)</button>
                         }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+                        @if (lastFromBuyer)
+                        {
+                            <button type="button" class="pub-chip is-ai" id="suggestButton">@Html.Icon("sparkles", "icon-xs") Sugerir con IA</button>
+                        }
+                    </div>
+                    <label for="messageText" class="visually-hidden">Mensaje para el comprador</label>
+                    <textarea id="messageText" name="text" class="form-control" rows="3" maxlength="@PostSaleService.MaxMessageLength" placeholder="Escribe tu mensaje…" required>@draft</textarea>
+                    <div class="od-reply-foot">
+                        <span class="form-text m-0"><span id="msgCount">@(draft?.Length ?? 0)</span>/@PostSaleService.MaxMessageLength · Sin teléfonos, correos ni links: Mercado Libre los bloquea.</span>
+                        <button type="submit" class="btn btn-primary" id="sendButton">@Html.Icon("send") Enviar</button>
+                    </div>
+                </form>
+            }
+        </section>
 
-            <div class="card border-0 shadow-sm order-detail-card">
-                <div class="card-header bg-white"><h3 class="h6 fw-bold mb-0">Resumen de pago</h3></div>
-                <div class="card-body">
-                    <div class="detail-row"><span>Total publicado</span><strong>$@Model.TotalAmount.ToString("N2") @Model.CurrencyId</strong></div>
-                    <div class="detail-row"><span>Monto cobrado</span><strong class="text-success">$@Model.PaidAmount.ToString("N2") @Model.CurrencyId</strong></div>
-                    <div class="detail-row"><span>Estado del pago</span><strong>@StatusLabel(Model.Status)</strong></div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-lg-4">
-            <div class="card border-0 shadow-sm order-detail-card mb-4">
-                <div class="card-header bg-white"><h3 class="h6 fw-bold mb-0">Comprador</h3></div>
-                <div class="card-body"><div class="detail-label">Usuario</div><div class="fw-bold">@(Model.BuyerNickname ?? "No disponible")</div><div class="detail-label mt-3">ID de comprador</div><div>@(Model.BuyerId ?? "No disponible")</div></div>
-            </div>
-            <div class="card border-0 shadow-sm order-detail-card mb-4">
-                <div class="card-header bg-white"><h3 class="h6 fw-bold mb-0">Envío</h3></div>
-                <div class="card-body"><div class="detail-label">ID de envío</div><div class="fw-semibold">@(Model.ShippingId ?? "No disponible")</div>@if (!string.IsNullOrWhiteSpace(Model.ExternalPackId)) { <div class="detail-label mt-3">Pack</div><div>@Model.ExternalPackId</div> }</div>
-            </div>
-            <div class="card border-0 shadow-sm order-detail-card">
-                <div class="card-header bg-white"><h3 class="h6 fw-bold mb-0">Fechas</h3></div>
-                <div class="card-body"><div class="detail-label">Creado</div><div>@Model.DateCreated.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div><div class="detail-label mt-3">Actualizado</div><div>@Model.LastUpdated.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div><div class="detail-label mt-3">Sincronizado</div><div>@Model.SyncedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div></div>
-            </div>
-        </div>
+        <section class="panel" aria-labelledby="od-items">
+            <div class="panel-head"><h2 id="od-items">Productos</h2></div>
+            <ul class="od-items">
+                @foreach (var item in o.Items)
+                {
+                    <li>
+                        <span class="min-w-0">
+                            <span class="fw-semibold d-block">@(item.Title ?? item.ExternalItemId)</span>
+                            <span class="small text-muted">@item.ExternalItemId@(string.IsNullOrWhiteSpace(item.SellerSku) ? "" : " · SKU " + item.SellerSku)</span>
+                        </span>
+                        <span class="text-end text-nowrap">
+                            <span class="d-block fw-bold">@((item.UnitPrice * item.Quantity).ToString("C0", mx))</span>
+                            <span class="small text-muted">@item.Quantity × @item.UnitPrice.ToString("C0", mx)</span>
+                        </span>
+                    </li>
+                }
+            </ul>
+        </section>
     </div>
+
+    <aside class="od-side">
+        <section class="panel" aria-labelledby="od-ship">
+            <div class="panel-head"><h2 id="od-ship">Envío</h2></div>
+            <div class="panel-body">
+                <dl class="facts od-facts">
+                    <div><dt>Estado</dt><dd>@shipLabel</dd></div>
+                    @if (o.ShippingDeadline is { } d && o.NeedsShipping)
+                    {
+                        <div><dt>Despachar antes de</dt><dd class="@(late ? "text-danger" : "")">@Local(d, "dd/MM HH:mm")</dd></div>
+                    }
+                    <div><dt>Número de envío</dt><dd>@(o.ShippingId ?? "—")</dd></div>
+                </dl>
+            </div>
+        </section>
+        <section class="panel" aria-labelledby="od-pay">
+            <div class="panel-head"><h2 id="od-pay">Pago y comprador</h2></div>
+            <div class="panel-body">
+                <dl class="facts od-facts">
+                    <div><dt>Cobrado</dt><dd>@o.PaidAmount.ToString("C0", mx)</dd></div>
+                    <div><dt>Comprador</dt><dd>@(o.BuyerNickname ?? "—")</dd></div>
+                    @if (o.Items.Any(i => i.SaleFee.HasValue))
+                    {
+                        <div><dt>Comisión de ML</dt><dd>@o.Items.Sum(i => (i.SaleFee ?? 0) * i.Quantity).ToString("C0", mx)</dd></div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(o.ExternalPackId)) { <div><dt>Carrito</dt><dd>@o.ExternalPackId</dd></div> }
+                </dl>
+            </div>
+        </section>
+        @if (Model.Claims.Any(c => !c.IsOpen))
+        {
+            <section class="panel" aria-labelledby="od-claims">
+                <div class="panel-head"><h2 id="od-claims">Reclamos cerrados</h2></div>
+                <ul class="od-items">
+                    @foreach (var c in Model.Claims.Where(c => !c.IsOpen))
+                    {
+                        <li><a asp-controller="PostSale" asp-action="Claim" asp-route-id="@c.Id">@c.ReasonLabel</a><span class="small text-muted">@Local(c.LastUpdated, "dd/MM")</span></li>
+                    }
+                </ul>
+            </section>
+        }
+    </aside>
 </div>
 
-<style>
-    .order-back-link { color: var(--muted); font-size: .85rem; font-weight: 700; text-decoration: none; } .order-back-link:hover { color: var(--denim); }
-    .order-detail-total { color: var(--ink); font-size: 1.5rem; font-weight: 850; } .order-detail-card { border-radius: 16px; overflow: hidden; }
-    .order-detail-card .card-header { border-color: var(--paper-2); padding: 1rem 1.25rem; } .order-detail-card .card-body { padding: 1.25rem; }
-    .order-detail-card th { color: var(--muted); font-size: .72rem; text-transform: none; } .detail-row { display: flex; justify-content: space-between; padding: .55rem 0; }
-    .detail-row + .detail-row { border-top: 1px solid var(--paper-2); } .detail-label { color: var(--muted-2); font-size: .72rem; font-weight: 750; text-transform: none; }
-</style>
+@section Scripts {
+    <script>
+        (function () {
+            var thread = document.getElementById('thread');
+            if (thread) thread.scrollTop = thread.scrollHeight;
+            var text = document.getElementById('messageText'), count = document.getElementById('msgCount');
+            if (!text) return;
+            function update() { count.textContent = text.value.length; }
+            text.addEventListener('input', update);
+            document.querySelectorAll('[data-template]').forEach(function (b) {
+                b.addEventListener('click', function () { text.value = b.dataset.template; update(); text.focus(); });
+            });
+            var suggest = document.getElementById('suggestButton');
+            if (suggest) suggest.addEventListener('click', function () {
+                var label = suggest.innerHTML; suggest.disabled = true; suggest.textContent = 'Pensando…';
+                var data = new FormData(); data.append('orderId', '@o.Id');
+                data.append('__RequestVerificationToken', document.querySelector('#replyForm input[name=__RequestVerificationToken]').value);
+                fetch('@Url.Action("Suggest", "PostSale")', { method: 'POST', body: data, credentials: 'same-origin' })
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (d) {
+                        suggest.disabled = false; suggest.innerHTML = label;
+                        if (d && d.ok) { text.value = d.text; update(); text.focus(); }
+                        else { suggest.textContent = 'La IA no está disponible'; }
+                    });
+            });
+            document.getElementById('replyForm').addEventListener('submit', function () {
+                var b = document.getElementById('sendButton'); setTimeout(function () { b.disabled = true; b.textContent = 'Enviando…'; }, 0);
+            });
+        })();
+    </script>
+}

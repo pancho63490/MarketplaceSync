@@ -34,6 +34,18 @@
 
     // Lo que hay que hacer, en el orden en que conviene hacerlo.
     var tasks = new List<(int Count, string Title, string Detail, string Action, string Controller, string ActionName, object? Route, string Tone)>();
+    var openClaims = (ViewBag.OpenClaims as List<MarketplaceSync.Web.Models.PostSale.OrderClaim>) ?? new List<MarketplaceSync.Web.Models.PostSale.OrderClaim>();
+    var unansweredMessages = (int)(ViewBag.UnansweredMessages ?? 0);
+    if (openClaims.Count > 0)
+    {
+        var firstDue = openClaims.Where(c => c.DueDate.HasValue).Select(c => c.DueDate).OrderBy(d => d).FirstOrDefault();
+        tasks.Add((openClaims.Count, openClaims.Count == 1 ? "reclamo abierto" : "reclamos abiertos",
+            firstDue is { } fd ? $"El más próximo vence el {fd.AddHours(-7):dd/MM HH:mm}. Responder a tiempo cuida tu reputación." : "Respóndelos para que no afecten tu reputación.",
+            "Atender", "PostSale", "Index", new { tab = "claims" }, "tone-urgent"));
+    }
+    if (unansweredMessages > 0)
+        tasks.Add((unansweredMessages, unansweredMessages == 1 ? "comprador espera tu respuesta" : "compradores esperan tu respuesta",
+            "Mensajes de postventa sin contestar: dudas de envío, compatibilidad o instalación.", "Contestar", "PostSale", "Index", new { tab = "messages" }, "tone-urgent"));
     foreach (var alert in repAlerts.Where(a => a.Risk == "over"))
         tasks.Add((0, $"{alert.Metric}: {alert.RatePercent.ToString("0.##", mx)}%, arriba del límite verde ({alert.GreenLimit.ToString("0.#", mx)}%)", "Tu reputación puede bajar de color y vender menos. Revisa qué pasó y evita más casos esta semana.", "Ver reputación", "Metrics", "Index", null, "tone-urgent"));
     if (lateOrders > 0)

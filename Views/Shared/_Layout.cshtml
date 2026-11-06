@@ -9,11 +9,13 @@
     {
         "Questions" => badges.PendingQuestions,
         "Orders" => badges.OrdersToShip,
+        "PostSale" => badges.PostSale,
         _ => 0
     };
     string BadgeTitle(string controller) => controller switch
     {
         "Questions" => badges.PendingQuestions == 1 ? "1 pregunta sin responder" : $"{badges.PendingQuestions} preguntas sin responder",
+        "PostSale" => (badges.OpenClaims > 0 ? $"{badges.OpenClaims} reclamo(s) abierto(s), " : "") + $"{badges.PostSale - badges.OpenClaims} mensaje(s) sin responder",
         "Orders" => (badges.OrdersToShip == 1 ? "1 pedido por enviar" : $"{badges.OrdersToShip} pedidos por enviar") + (badges.LateOrders > 0 ? $", {badges.LateOrders} atrasado(s)" : ""),
         _ => ""
     };
@@ -33,6 +35,7 @@
             {
                 ("Orders", "Index", "receipt", "Pedidos"),
                 ("Questions", "Index", "message-circle-question", "Preguntas"),
+                ("PostSale", "Index", "message-circle", "Postventa"),
                 ("Products", "Index", "package", "Productos"),
                 ("Publications", "Index", "store", "Publicados"),
                 ("Inventory", "Index", "boxes", "Inventario"),
@@ -116,7 +119,7 @@
                         <span>@item.Label</span>
                         @if (BadgeFor(item.Controller) is > 0 and var count)
                         {
-                            <span class="nav-badge @(item.Controller == "Orders" && badges.LateOrders > 0 ? "is-bad" : "")" title="@BadgeTitle(item.Controller)">@(count > 99 ? "99+" : count.ToString())<span class="visually-hidden"> — @BadgeTitle(item.Controller)</span></span>
+                            <span class="nav-badge @(item.Controller == "Orders" && badges.LateOrders > 0 || item.Controller == "PostSale" && badges.OpenClaims > 0 ? "is-bad" : "")" title="@BadgeTitle(item.Controller)">@(count > 99 ? "99+" : count.ToString())<span class="visually-hidden"> — @BadgeTitle(item.Controller)</span></span>
                         }
                     </a>
                 }

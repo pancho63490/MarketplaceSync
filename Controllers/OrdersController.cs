@@ -179,7 +179,34 @@ public sealed class OrdersController : Controller
                 x => x.Id == id && x.OrganizationId == organizationId,
                 cancellationToken);
 
-        return order is null ? NotFound() : View(order);
+        if (order is null)
+            return NotFound();
+
+        var postSale = HttpContext.RequestServices.GetRequiredService<MarketplaceSync.Services.PostSale.PostSaleService>();
+        IReadOnlyList<MarketplaceSync.Services.PostSale.ConversationMessage> messages = Array.Empty<MarketplaceSync.Services.PostSale.ConversationMessage>();
+        string? messagesError = null;
+        try
+        {
+            (messages, messagesError) = await postSale.GetConversationAsync(organizationId, id, cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(exception, "Conversation unavailable for order {Order}.", id);
+            messagesError = "No pude cargar los mensajes ahora.";
+        }
+
+        var claims = await _dbContext.OrderClaims.AsNoTracking()
+            .Where(c => c.OrganizationId == organizationId && (c.SalesOrderId == id || c.ResourceId == order.ExternalOrderId))
+            .OrderByDescending(c => c.DateCreated)
+            .ToListAsync(cancellationToken);
+
+        return View(new MarketplaceSync.Web.ViewModels.Orders.OrderDetailsViewModel
+        {
+            Order = order,
+            Messages = messages,
+            MessagesError = messagesError,
+            Claims = claims
+        });
     }
 
     [HttpPost]

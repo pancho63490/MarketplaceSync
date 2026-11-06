@@ -1,0 +1,132 @@
+@model MarketplaceSync.Web.Controllers.PostSaleIndexViewModel
+
+@{
+    ViewData["Title"] = "Postventa";
+    string Local(DateTime utc, string f = "dd/MM HH:mm") => utc.AddHours(-7).ToString(f);
+    string Ago(DateTime utc)
+    {
+        var span = DateTime.UtcNow - utc;
+        return span.TotalMinutes < 60 ? $"hace {Math.Max(1, (int)span.TotalMinutes)} min"
+            : span.TotalHours < 24 ? $"hace {(int)span.TotalHours} h"
+            : $"hace {(int)span.TotalDays} d";
+    }
+    string? Due(DateTime? due)
+    {
+        if (due is not { } d) return null;
+        var left = d - DateTime.UtcNow;
+        return left.TotalMinutes < 0 ? "Venció: responde ya"
+            : left.TotalHours < 24 ? $"Vence en {Math.Max(1, (int)left.TotalHours)} h"
+            : $"Responde antes del {Local(d)}";
+    }
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Postventa</h1>
+        <p>Mensajes de tus compradores y reclamos en un solo lugar. Contestar rápido evita reclamos y cuida tu reputación.</p>
+    </div>
+    <div class="page-head-actions">
+        <form asp-action="Sync" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="tab" value="@Model.Tab" />
+            <button type="submit" class="btn btn-outline-secondary" disabled="@(!Model.HasAccounts)">@Html.Icon("refresh-cw") Revisar ahora</button>
+        </form>
+    </div>
+</header>
+
+@if (!Model.HasAccounts)
+{
+    <div class="alert alert-warning">Conecta tu cuenta en <a asp-controller="MercadoLibre" asp-action="Status" class="alert-link">Cuentas de Mercado Libre</a> para ver mensajes y reclamos.</div>
+}
+
+<nav class="pl-chips mb-3" aria-label="Ver">
+    <a class="pub-chip @(Model.Tab == "messages" ? "active" : "")" asp-action="Index" asp-route-tab="messages">Mensajes sin responder <span>@Model.Pending.Count</span></a>
+    <a class="pub-chip @(Model.OpenClaims.Count > 0 ? "is-bad" : "") @(Model.Tab == "claims" ? "active" : "")" asp-action="Index" asp-route-tab="claims">Reclamos abiertos <span>@Model.OpenClaims.Count</span></a>
+</nav>
+
+@if (Model.Tab == "messages")
+{
+    if (Model.Pending.Count == 0)
+    {
+        <div class="today-clear">
+            <span class="today-clear-mark" aria-hidden="true">✓</span>
+            <div>
+                <div class="fw-bold">Todos tus compradores tienen respuesta</div>
+                <div class="text-muted small">Cuando alguien te escriba lo verás aquí y te llegará a Telegram. La app revisa cada 10 minutos.</div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <ul class="ps-list panel">
+            @foreach (var c in Model.Pending)
+            {
+                <li>
+                    <a class="ps-row" href="@(c.SalesOrderId is { } id ? Url.Action("Details", "Orders", new { id }) + "#conversacion" : "#")">
+                        <span class="ps-row-main">
+                            <span class="ps-row-title">@(c.Buyer ?? "Comprador")@(c.ItemTitle is null ? "" : " · " + c.ItemTitle)</span>
+                            <span class="ps-row-text">«@c.LastText»</span>
+                        </span>
+                        <span class="ps-row-side">
+                            <span class="pill @((DateTime.UtcNow - c.LastAt).TotalHours > 12 ? "pill-bad" : "pill-warn")">@Ago(c.LastAt)</span>
+                            <span class="ps-row-action">Contestar @Html.Icon("chevron-right", "icon-xs")</span>
+                        </span>
+                    </a>
+                </li>
+            }
+        </ul>
+    }
+}
+else
+{
+    if (Model.OpenClaims.Count == 0)
+    {
+        <div class="today-clear">
+            <span class="today-clear-mark" aria-hidden="true">✓</span>
+            <div>
+                <div class="fw-bold">Sin reclamos abiertos</div>
+                <div class="text-muted small">Si un comprador abre un reclamo, te avisamos al momento con la fecha límite para responder.</div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <ul class="ps-list panel">
+            @foreach (var c in Model.OpenClaims)
+            {
+                var due = Due(c.DueDate);
+                var urgent = c.DueDate is { } d && d - DateTime.UtcNow < TimeSpan.FromHours(24);
+                <li>
+                    <a class="ps-row @(urgent ? "is-urgent" : "")" asp-action="Claim" asp-route-id="@c.Id">
+                        <span class="ps-row-main">
+                            <span class="ps-row-title">@(c.Stage == "dispute" ? "Disputa" : "Reclamo"): @c.ReasonLabel</span>
+                            <span class="ps-row-text">@(c.SalesOrderId is { } oid && Model.OrderTitles.TryGetValue(oid, out var t) ? t : "Pedido " + c.ResourceId) · abierto el @Local(c.DateCreated, "dd/MM")</span>
+                        </span>
+                        <span class="ps-row-side">
+                            @if (due is not null) { <span class="pill @(urgent ? "pill-bad" : "pill-warn")">@due</span> }
+                            <span class="ps-row-action">Atender @Html.Icon("chevron-right", "icon-xs")</span>
+                        </span>
+                    </a>
+                </li>
+            }
+        </ul>
+    }
+
+    if (Model.ClosedClaims.Count > 0)
+    {
+        <h2 class="today-section-title mt-4">Cerrados recientemente</h2>
+        <ul class="ps-list panel">
+            @foreach (var c in Model.ClosedClaims)
+            {
+                <li>
+                    <a class="ps-row" asp-action="Claim" asp-route-id="@c.Id">
+                        <span class="ps-row-main">
+                            <span class="ps-row-title">@c.ReasonLabel</span>
+                            <span class="ps-row-text">Pedido @c.ResourceId · @(c.Resolution ?? "cerrado") · @Local(c.LastUpdated, "dd/MM")</span>
+                        </span>
+                    </a>
+                </li>
+            }
+        </ul>
+    }
+}

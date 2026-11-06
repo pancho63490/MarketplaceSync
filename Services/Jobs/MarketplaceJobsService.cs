@@ -18,6 +18,7 @@ namespace MarketplaceSync.Services.Jobs
         private readonly MarketplaceSync.Services.Ai.IListingAutopilotService _autopilot;
         private readonly MarketplaceSync.Services.Notifications.TelegramNotificationService _telegram;
         private readonly ILogger<MarketplaceJobsService> _logger;
+        private readonly IServiceProvider _serviceProvider;
 
         public MarketplaceJobsService(
             IMercadoLibreAuthService authService,
@@ -30,6 +31,7 @@ namespace MarketplaceSync.Services.Jobs
             MarketplaceSync.Services.MarketInsights.CategoryDiscoveryService discovery,
             MarketplaceSync.Services.Purchasing.RadarAutoPrepareService autoPrepare,
             MarketplaceSync.Services.Agents.ImportAgentService agent,
+            IServiceProvider serviceProvider,
             MarketplaceSync.Services.Ai.IListingAutopilotService autopilot,
             MarketplaceSync.Services.Notifications.TelegramNotificationService telegram,
             ILogger<MarketplaceJobsService> logger)
@@ -44,6 +46,7 @@ namespace MarketplaceSync.Services.Jobs
             _discovery = discovery;
             _autoPrepare = autoPrepare;
             _agent = agent;
+            _serviceProvider = serviceProvider;
             _autopilot = autopilot;
             _telegram = telegram;
             _logger = logger;
@@ -220,6 +223,33 @@ namespace MarketplaceSync.Services.Jobs
         public async Task SweepTelegramNotifications()
         {
             await _telegram.SweepAllAsync();
+        }
+
+        /// <summary>Mensajes de compradores y reclamos (cada 10 min y al llegar una notificación de Mercado Libre).</summary>
+        [DisableConcurrentExecution(timeoutInSeconds: 900)]
+        public async Task SyncPostSale()
+        {
+            var postSale = _serviceProvider.GetRequiredService<MarketplaceSync.Services.PostSale.PostSaleService>();
+            foreach (var organizationId in await postSale.GetOrganizationsAsync())
+            {
+                try
+                {
+                    await postSale.SyncAsync(organizationId);
+                    await _telegram.SweepAsync(organizationId);
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogWarning(exception, "Post-sale sync failed for {OrganizationId}.", organizationId);
+                }
+            }
+        }
+
+        [AutomaticRetry(Attempts = 1)]
+        public async Task SyncPostSaleForOrganization(Guid organizationId)
+        {
+            var postSale = _serviceProvider.GetRequiredService<MarketplaceSync.Services.PostSale.PostSaleService>();
+            await postSale.SyncAsync(organizationId);
+            await _telegram.SweepAsync(organizationId);
         }
     }
 }
