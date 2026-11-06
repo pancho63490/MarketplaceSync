@@ -98,12 +98,29 @@
         </div>
     </section>
 
+    <section class="panel" aria-labelledby="au-p">
+        <div class="panel-head">
+            <h2 id="au-p">@Html.Icon("image") Fotos con fondo blanco</h2>
+            <p>Antes de publicar un producto nuevo, el piloto automático limpia la portada: fondo blanco, producto centrado, 1200×1200. Las que tienen cosas en el fondo necesitan remove.bg.</p>
+        </div>
+        <form asp-action="SavePhotos" method="post" class="panel-body au-form">
+            @Html.AntiForgeryToken()
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="pEnabled" name="enabled" value="true" checked="@s.FixPhotosOnPublish" />
+                <input type="hidden" name="enabled" value="false" />
+                <label class="form-check-label fw-bold" for="pEnabled">Poner fondo blanco al publicar</label>
+            </div>
+            <p class="small text-muted mb-0">Las fotos de lo que ya está publicado se arreglan en <a asp-controller="Photos" asp-action="Index">Fotos</a>.</p>
+            <button type="submit" class="btn btn-primary btn-sm align-self-start">Guardar</button>
+        </form>
+    </section>
+
     <section class="panel au-next" aria-labelledby="au-n">
         <div class="panel-head"><h2 id="au-n">@Html.Icon("bot") Ya corre solo</h2></div>
         <ul class="panel-body au-list">
             <li>Buscar productos en tus categorías cada día y preparar los mejores (<a asp-controller="Agent" asp-action="Index">Agente de importación</a>).</li>
             <li>Bajar el stock al vender y mandarlo a Mercado Libre.</li>
-            <li>Publicar al marcar "Recibido" una compra.</li>
+            <li>Publicar al marcar "Recibido" una compra (con la foto en fondo blanco si está prendido arriba).</li>
             <li>Avisos a Telegram de ventas, preguntas, atrasos y reclamos.</li>
         </ul>
     </section>

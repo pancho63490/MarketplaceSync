@@ -53,6 +53,7 @@ public sealed class ListingAutopilotService : IListingAutopilotService
     private readonly ClaudeClient _claude;
     private readonly ProductTitleTranslator _titleTranslator;
     private readonly ILogger<ListingAutopilotService> _logger;
+    private readonly IServiceProvider _services;
 
     public ListingAutopilotService(
         AppDbContext context,
@@ -63,8 +64,10 @@ public sealed class ListingAutopilotService : IListingAutopilotService
         IMercadoLibreAuthService authService,
         ClaudeClient claude,
         ProductTitleTranslator titleTranslator,
-        ILogger<ListingAutopilotService> logger)
+        ILogger<ListingAutopilotService> logger,
+        IServiceProvider services)
     {
+        _services = services;
         _titleTranslator = titleTranslator;
         _context = context;
         _categoryService = categoryService;
@@ -260,6 +263,29 @@ public sealed class ListingAutopilotService : IListingAutopilotService
         publication.AutopilotNotes = Truncate(ready ? "Listo para publicar." : "Falta: " + string.Join("; ", missing), 1000);
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        // 5b) Foto de portada con fondo blanco (si está prendido en Automático y aún no se publica).
+        if (string.IsNullOrWhiteSpace(publication.ExternalItemId) && !string.IsNullOrWhiteSpace(product.ImageUrl) && product.OriginalImageUrl is null)
+        {
+            var photos = _services.GetService<MarketplaceSync.Services.Photos.PhotoStudioService>();
+            var fixPhotos = await _context.AutomationSettings.AsNoTracking()
+                .Where(a => a.OrganizationId == organizationId).Select(a => (bool?)a.FixPhotosOnPublish).FirstOrDefaultAsync(cancellationToken) ?? true;
+            if (photos is { ToolAvailable: true } && fixPhotos && accountId.HasValue)
+            {
+                try
+                {
+                    var photo = await photos.FixAsync(organizationId, product.Id, updateListings: false, cancellationToken);
+                    if (photo.Error is null && product.OriginalImageUrl is not null)
+                        done.Add("Foto con fondo blanco, 1200×1200");
+                    else if (photo.Error is not null)
+                        _logger.LogInformation("Autopilot photo skipped for {Product}: {Error}", product.Id, photo.Error);
+                }
+                catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogInformation(exception, "Autopilot photo fix failed for {Product}.", product.Id);
+                }
+            }
+        }
 
         // 6) Publicar
         var published = false;

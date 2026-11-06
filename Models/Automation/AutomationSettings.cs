@@ -23,6 +23,11 @@ public sealed class AutomationSettings
     /// <summary>¿Das factura? null = no se ha dicho (las preguntas de factura no se responden solas).</summary>
     public bool? OffersInvoice { get; set; }
 
+    // ── Fotos ──
+
+    /// <summary>El piloto automático pone fondo blanco a la portada antes de publicar.</summary>
+    public bool FixPhotosOnPublish { get; set; } = true;
+
     // ── Mensaje de gracias ──
 
     public bool ThankYouEnabled { get; set; }

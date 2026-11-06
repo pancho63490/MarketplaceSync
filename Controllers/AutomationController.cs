@@ -83,6 +83,19 @@ public sealed class AutomationController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SavePhotos(bool enabled, CancellationToken cancellationToken)
+    {
+        var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var settings = await _automation.GetAsync(org, cancellationToken);
+        settings.FixPhotosOnPublish = enabled;
+        settings.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+        TempData["Success"] = enabled ? "Listo: los productos nuevos se publican con la foto en fondo blanco." : "Fondo blanco automático apagado.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveThanks(bool enabled, string? message, CancellationToken cancellationToken)
     {
         var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);

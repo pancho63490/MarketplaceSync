@@ -141,6 +141,9 @@ namespace MarketplaceSync.Web.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<bool>("FixPhotosOnPublish")
+                        .HasColumnType("boolean");
+
                     b.Property<bool?>("OffersInvoice")
                         .HasColumnType("boolean");
 
