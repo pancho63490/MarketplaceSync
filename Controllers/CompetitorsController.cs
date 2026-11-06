@@ -30,6 +30,8 @@ public sealed class CompetitorStoreViewModel
     public string? Query { get; init; }
     public int Offset { get; init; }
     public bool AiConfigured { get; init; }
+    /// <summary>false = Mercado Libre no dejó leer su catálogo y se muestra lo visto en los más vendidos.</summary>
+    public bool Live { get; init; } = true;
 }
 
 /// <summary>Competencia: tiendas líderes en tus categorías, lo que venden y copiarlo con mercancía importada.</summary>
@@ -119,8 +121,22 @@ public sealed class CompetitorsController : Controller
         var store = await _context.CompetitorStores.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id && c.OrganizationId == org, cancellationToken);
         if (store is null)
             return NotFound();
-        var (items, total, error) = await _competitors.GetItemsAsync(org, store, q, offset, cancellationToken);
-        return View(new CompetitorStoreViewModel { Store = store, Items = items, Total = total, Error = error, Query = q, Offset = offset, AiConfigured = _claude.IsConfigured });
+        var (items, total, error, live) = await _competitors.GetItemsAsync(org, store, q, offset, cancellationToken);
+        return View(new CompetitorStoreViewModel { Store = store, Items = items, Total = total, Error = error, Query = q, Offset = offset, AiConfigured = _claude.IsConfigured, Live = live });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddItem(long id, string? link, CancellationToken cancellationToken)
+    {
+        var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var store = await _context.CompetitorStores.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id && c.OrganizationId == org, cancellationToken);
+        if (store is null)
+            return NotFound();
+        var error = await _competitors.AddListingAsync(org, store, link, cancellationToken);
+        if (error is null) TempData["Success"] = "Publicación agregada.";
+        else TempData["Error"] = error;
+        return RedirectToAction(nameof(Store), new { id });
     }
 
     /// <summary>El agente revisa los productos de la tienda y busca en eBay los que convienen.</summary>

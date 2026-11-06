@@ -1629,3 +1629,5 @@ a.cp-item-title:hover { color: var(--denim); }
 .ph-actions { display: flex; flex-wrap: wrap; gap: .35rem .75rem; align-items: center; }
 .ph-help { font-size: var(--fs-sm); color: var(--muted); margin: 0; }
 .ph-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1rem; padding: .75rem 1rem; margin-bottom: 1rem; }
+
+.cp-limited { margin-bottom: 1rem; border-left: 4px solid var(--denim); }

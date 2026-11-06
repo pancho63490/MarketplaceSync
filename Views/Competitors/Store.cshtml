@@ -11,10 +11,10 @@
     <div class="page-head-text">
         <a asp-action="Index" class="pe-back">← Competencia</a>
         <h1 class="page-title">@s.Nickname</h1>
-        <p>Lo que vende ordenado por vendidos. Pide al agente que busque en eBay las mismas piezas y te importe las que dejan ganancia al precio de esta tienda.</p>
+        <p>@(Model.Live ? "Lo que vende ordenado por vendidos." : "Lo que vende y está entre los más vendidos de tus categorías.") Pide al agente que busque en eBay las mismas piezas y te importe las que dejan ganancia al precio de esta tienda.</p>
         <span class="page-head-meta">
             @if (s.TotalSales is { } sales) { <span>@sales.ToString("N0", mx) ventas · </span> }
-            @Model.Total.ToString("N0", mx) publicaciones activas
+            @if (Model.Live) { <span>@Model.Total.ToString("N0", mx) publicaciones activas</span> } else { <span>@Model.Total.ToString("N0", mx) @(Model.Total == 1 ? "producto visto" : "productos vistos")</span> }
             @if (!string.IsNullOrWhiteSpace(s.Permalink)) { <span> · <a href="@s.Permalink" target="_blank" rel="noopener noreferrer">Ver su perfil</a></span> }
         </span>
     </div>
@@ -29,6 +29,26 @@
 
 @if (!Model.AiConfigured) { <div class="alert alert-warning">Copiar con el agente necesita IA: agrega <code>Anthropic__ApiKey</code> en Render.</div> }
 @if (!string.IsNullOrWhiteSpace(Model.Error)) { <div class="alert alert-warning">@Model.Error</div> }
+@if (!Model.Live)
+{
+    <section class="panel cp-limited" aria-labelledby="cp-limited-title">
+        <div class="panel-body">
+            <h2 id="cp-limited-title" class="h6 mb-1">@Html.Icon("info") Mercado Libre no deja ver el catálogo completo de otra tienda</h2>
+            <p class="small text-muted mb-2">
+                Aquí salen las publicaciones de @s.Nickname que la app encontró en los <strong>más vendidos de tus categorías</strong> (las que más le dejan).
+                Para ver más: agrega más categorías en <a asp-controller="WatchedCategories" asp-action="Index">Categorías a vigilar</a> y pulsa “Buscar líderes”,
+                o pega aquí el link de cualquier publicación suya que te interese.
+            </p>
+            <form asp-action="AddItem" asp-route-id="@s.Id" method="post" class="d-flex flex-wrap gap-2">
+                @Html.AntiForgeryToken()
+                <label for="cpLink" class="visually-hidden">Link de una publicación</label>
+                <input id="cpLink" name="link" class="form-control form-control-sm" style="flex: 1 1 260px" placeholder="Link de una publicación de esta tienda" required />
+                <button type="submit" class="btn btn-outline-secondary btn-sm">@Html.Icon("plus") Agregar</button>
+                @if (!string.IsNullOrWhiteSpace(s.Permalink)) { <a href="@s.Permalink" target="_blank" rel="noopener noreferrer" class="btn btn-link btn-sm">Abrir su tienda en Mercado Libre</a> }
+            </form>
+        </div>
+    </section>
+}
 
 <form method="get" class="d-flex gap-2 mb-3 pub-search" role="search">
     <input type="hidden" name="id" value="@s.Id" />
@@ -38,7 +58,7 @@
 
 @if (Model.Items.Count == 0 && Model.Error is null)
 {
-    <div class="today-clear"><div><div class="fw-bold">Sin productos para mostrar</div><div class="text-muted small">Prueba sin filtro o con otra palabra.</div></div></div>
+    <div class="today-clear"><div><div class="fw-bold">Sin productos para mostrar</div><div class="text-muted small">@(Model.Live ? "Prueba sin filtro o con otra palabra." : string.IsNullOrWhiteSpace(Model.Query) ? "Todavía no aparece en los más vendidos de tus categorías. Pulsa “Buscar líderes” en Competencia o agrega links de sus publicaciones." : "Ninguno de los que conozco tiene esa palabra.")</div></div></div>
 }
 else
 {
@@ -54,6 +74,8 @@ else
                         @if (i.Sold is > 0) { <span>@i.Sold.Value.ToString("N0", mx) vendidos</span> }
                         @if (i.FreeShipping) { <span>envío gratis</span> }
                         @if (i.Condition == "used") { <span class="pill">Usado</span> }
+                        @if (i.Position is { } pos) { <span class="pill pill-signal">#@pos en @(i.CategoryName ?? "su categoría")</span> }
+                        else if (i.Source == "link") { <span class="pill">Agregado por link</span> }
                     </span>
                 </span>
                 <form asp-action="CopyItem" asp-route-id="@s.Id" method="post" class="cp-item-action">

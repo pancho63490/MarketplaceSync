@@ -538,7 +538,7 @@ public sealed class ImportAgentService
     {
         var store = await _context.CompetitorStores.AsNoTracking().FirstOrDefaultAsync(c => c.OrganizationId == org && c.SellerId == sellerId, cancellationToken)
                     ?? new Web.Models.MarketInsights.CompetitorStore { OrganizationId = org, SellerId = sellerId ?? "" };
-        var (items, total, error) = await _competitors.GetItemsAsync(org, store, query, 0, cancellationToken);
+        var (items, total, error, _) = await _competitors.GetItemsAsync(org, store, query, 0, cancellationToken);
         if (error is not null) return error;
         return JsonSerializer.Serialize(new
         {

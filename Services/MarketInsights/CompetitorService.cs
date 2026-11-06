@@ -3,13 +3,15 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using MarketplaceSync.Services.Interfaces;
+using MarketplaceSync.Services.PostSale;
 using MarketplaceSync.Web.Data;
 using MarketplaceSync.Web.Models.MarketInsights;
 using Microsoft.EntityFrameworkCore;
 
 namespace MarketplaceSync.Services.MarketInsights;
 
-public sealed record CompetitorItem(string ItemId, string Title, decimal? Price, int? Sold, string? Condition, string? Thumbnail, string? Permalink, string? CategoryId, bool FreeShipping);
+public sealed record CompetitorItem(string ItemId, string Title, decimal? Price, int? Sold, string? Condition, string? Thumbnail, string? Permalink, string? CategoryId, bool FreeShipping,
+    string? CategoryName = null, int? Position = null, string? Source = null);
 
 public sealed record CompetitorScanResult(int Categories, int Stores, IReadOnlyList<string> Errors);
 
@@ -53,6 +55,7 @@ public sealed class CompetitorService
         var mySellerIds = await _context.MarketplaceAccounts.AsNoTracking()
             .Where(a => a.OrganizationId == org && a.Marketplace == "MercadoLibre").Select(a => a.ExternalAccountId).ToListAsync(cancellationToken);
         var tally = new Dictionary<string, (int Count, int Best, HashSet<string> Cats)>();
+        var seen = new List<CompetitorListing>();
         var errors = new List<string>();
 
         foreach (var category in categories)
@@ -70,7 +73,8 @@ public sealed class CompetitorService
                 var itemIds = entries.Where(e => e.Type == "ITEM").ToList();
                 foreach (var chunk in itemIds.Chunk(20))
                 {
-                    using var multi = await GetAsync(token, "/items?ids=" + string.Join(',', chunk.Select(c => c.Id)) + "&attributes=id,seller_id", cancellationToken);
+                    using var multi = await GetAsync(token, "/items?ids=" + string.Join(',', chunk.Select(c => c.Id)) +
+                        "&attributes=id,seller_id,title,price,thumbnail,secure_thumbnail,permalink,category_id,sold_quantity", cancellationToken);
                     if (multi?.RootElement.ValueKind != JsonValueKind.Array) continue;
                     foreach (var row in multi.RootElement.EnumerateArray())
                     {
@@ -78,7 +82,9 @@ public sealed class CompetitorService
                         var id = Str(body, "id");
                         var seller = body.TryGetProperty("seller_id", out var s) ? s.ToString() : null;
                         var pos = chunk.FirstOrDefault(c => c.Id == id).Position;
-                        if (seller is not null) sellers.Add((seller, pos));
+                        if (seller is null || id is null) continue;
+                        sellers.Add((seller, pos));
+                        seen.Add(ToListing(org, seller, body, id, category.CategoryId, category.Name, pos, "highlight"));
                     }
                 }
                 foreach (var product in entries.Where(e => e.Type is "PRODUCT" or "USER_PRODUCT").Take(10))
@@ -90,7 +96,22 @@ public sealed class CompetitorService
                     var seller = root.TryGetProperty("buy_box_winner", out var bb) && bb.ValueKind == JsonValueKind.Object && bb.TryGetProperty("seller_id", out var bs)
                         ? bs.ToString()
                         : root.TryGetProperty("user_id", out var u) ? u.ToString() : null;
-                    if (seller is not null) sellers.Add((seller, product.Position));
+                    if (seller is null) continue;
+                    sellers.Add((seller, product.Position));
+                    var winner = root.TryGetProperty("buy_box_winner", out var w) && w.ValueKind == JsonValueKind.Object ? w : default;
+                    var picture = root.TryGetProperty("pictures", out var pics) && pics.ValueKind == JsonValueKind.Array && pics.GetArrayLength() > 0
+                        ? Str(pics[0], "secure_url") ?? Str(pics[0], "url") : null;
+                    seen.Add(new CompetitorListing
+                    {
+                        OrganizationId = org, SellerId = seller,
+                        ItemId = (winner.ValueKind == JsonValueKind.Object ? Str(winner, "item_id") : null) ?? product.Id!,
+                        Title = (Str(root, "name") ?? product.Id!).Truncate(300),
+                        Price = winner.ValueKind == JsonValueKind.Object ? Dec(winner, "price") : null,
+                        Thumbnail = picture?.Replace("http://", "https://").Truncate(500),
+                        Permalink = (Str(root, "permalink") ?? (product.Type == "PRODUCT" ? $"https://www.mercadolibre.com.mx/p/{product.Id}" : null))?.Truncate(500),
+                        CategoryId = category.CategoryId, CategoryName = category.Name?.Truncate(200),
+                        Position = product.Position == 0 ? null : product.Position
+                    });
                 }
 
                 foreach (var (sellerId, position) in sellers)
@@ -127,6 +148,10 @@ public sealed class CompetitorService
             await FillSellerAsync(store, token, cancellationToken);
         }
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Lo que vende cada tienda guardada o seguida, según los más vendidos que se acaban de leer.
+        var keep = stores.Where(st => st.TopAppearances > 0 || st.Followed).Select(st => st.SellerId).ToHashSet();
+        await SaveListingsAsync(org, seen.Where(l => keep.Contains(l.SellerId)), cancellationToken);
         return new CompetitorScanResult(categories.Count, tally.Count, errors);
     }
 
@@ -196,7 +221,115 @@ public sealed class CompetitorService
         store.Hidden = false;
         await FillSellerAsync(store, token, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        // Si el link era de una publicación suya, queda guardada para verla en su página.
+        foreach (var itemId in Regex.Matches(text, @"\bMLM-?(\d{6,})", RegexOptions.IgnoreCase).Select(m => "MLM" + m.Groups[1].Value).Distinct().Take(3))
+        {
+            var listing = await ReadListingAsync(org, token, itemId, cancellationToken);
+            if (listing is not null && listing.SellerId == sellerId)
+            {
+                await SaveListingsAsync(org, new[] { listing }, cancellationToken);
+                break;
+            }
+        }
         return (store, null);
+    }
+
+    /// <summary>Lo guardado de esa tienda (más vendidos y links), lo mejor posicionado primero.</summary>
+    public async Task<IReadOnlyList<CompetitorItem>> SavedItemsAsync(Guid org, string sellerId, string? query, CancellationToken cancellationToken = default)
+    {
+        var rows = await _context.CompetitorListings.AsNoTracking()
+            .Where(l => l.OrganizationId == org && l.SellerId == sellerId)
+            .ToListAsync(cancellationToken);
+        var words = (query ?? string.Empty).ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return rows
+            .Where(l => words.All(w => l.Title.ToLowerInvariant().Contains(w)))
+            .OrderBy(l => l.Position ?? 999).ThenByDescending(l => l.SoldQuantity ?? 0).ThenByDescending(l => l.SeenAt)
+            .Select(l => new CompetitorItem(l.ItemId, l.Title, l.Price, l.SoldQuantity, null, l.Thumbnail, l.Permalink, l.CategoryId, false,
+                l.CategoryName, l.Position, l.Source))
+            .ToList();
+    }
+
+    /// <summary>Agrega a la página de la tienda una publicación suya por link. Devuelve null si salió bien.</summary>
+    public async Task<string?> AddListingAsync(Guid org, CompetitorStore store, string? link, CancellationToken cancellationToken = default)
+    {
+        var token = await TokenAsync(org, cancellationToken);
+        if (token is null)
+            return "Conecta tu cuenta de Mercado Libre primero.";
+        var text = link ?? string.Empty;
+        for (var i = 0; i < 2; i++) { try { text = Uri.UnescapeDataString(text); } catch (UriFormatException) { break; } }
+        var ids = Regex.Matches(text, @"\bMLM-?(\d{6,})", RegexOptions.IgnoreCase).Select(m => "MLM" + m.Groups[1].Value).Distinct().Take(3).ToList();
+        if (ids.Count == 0)
+            return Regex.IsMatch(text, @"MLMU\d", RegexOptions.IgnoreCase)
+                ? "Ese link es de catálogo y no trae el número de la publicación. Desde la publicación toca “Compartir” y copia ese link."
+                : "Ese link no trae número de publicación (MLM…). Abre la publicación y copia el link completo.";
+        foreach (var id in ids)
+        {
+            var listing = await ReadListingAsync(org, token, id, cancellationToken);
+            if (listing is null) continue;
+            if (listing.SellerId != store.SellerId)
+                return "Esa publicación es de otra tienda.";
+            await SaveListingsAsync(org, new[] { listing }, cancellationToken);
+            return null;
+        }
+        return "Mercado Libre no me dejó leer esa publicación.";
+    }
+
+    private async Task<CompetitorListing?> ReadListingAsync(Guid org, string token, string itemId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var doc = await GetAsync(token, $"/items?ids={itemId}&attributes=id,seller_id,title,price,thumbnail,secure_thumbnail,permalink,category_id,sold_quantity", cancellationToken);
+            if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Array || doc.RootElement.GetArrayLength() == 0)
+                return null;
+            var row = doc.RootElement[0];
+            var body = row.TryGetProperty("body", out var b) ? b : row;
+            var seller = body.TryGetProperty("seller_id", out var s) ? s.ToString() : null;
+            return seller is null ? null : ToListing(org, seller, body, Str(body, "id") ?? itemId, Str(body, "category_id"), null, 0, "link");
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(exception, "Listing read failed {Item}.", itemId);
+            return null;
+        }
+    }
+
+    private static CompetitorListing ToListing(Guid org, string seller, JsonElement body, string id, string? categoryId, string? categoryName, int position, string source) => new()
+    {
+        OrganizationId = org,
+        SellerId = seller,
+        ItemId = id,
+        Title = (Str(body, "title") ?? id).Truncate(300),
+        Price = Dec(body, "price"),
+        SoldQuantity = Int(body, "sold_quantity"),
+        Thumbnail = (Str(body, "secure_thumbnail") ?? Str(body, "thumbnail"))?.Replace("http://", "https://").Truncate(500),
+        Permalink = Str(body, "permalink")?.Truncate(500),
+        CategoryId = Str(body, "category_id") ?? categoryId,
+        CategoryName = categoryName?.Truncate(200),
+        Position = position == 0 ? null : position,
+        Source = source
+    };
+
+    private async Task SaveListingsAsync(Guid org, IEnumerable<CompetitorListing> listings, CancellationToken cancellationToken)
+    {
+        var list = listings.GroupBy(l => l.ItemId).Select(g => g.OrderBy(x => x.Position ?? 999).First()).ToList();
+        if (list.Count == 0) return;
+        var ids = list.Select(l => l.ItemId).ToList();
+        var existing = await _context.CompetitorListings.Where(l => l.OrganizationId == org && ids.Contains(l.ItemId)).ToDictionaryAsync(l => l.ItemId, cancellationToken);
+        foreach (var l in list)
+        {
+            if (existing.TryGetValue(l.ItemId, out var row))
+            {
+                row.SellerId = l.SellerId; row.Title = l.Title; row.Price = l.Price ?? row.Price; row.SoldQuantity = l.SoldQuantity ?? row.SoldQuantity;
+                row.Thumbnail = l.Thumbnail ?? row.Thumbnail; row.Permalink = l.Permalink ?? row.Permalink; row.CategoryId = l.CategoryId ?? row.CategoryId;
+                row.CategoryName = l.CategoryName ?? row.CategoryName; row.SeenAt = DateTime.UtcNow;
+                if (l.Source == "highlight") { row.Position = l.Position; row.Source = "highlight"; }
+            }
+            else
+            {
+                _context.CompetitorListings.Add(l);
+            }
+        }
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>Vendedor de una publicación; si /items/{id} no responde, prueba el multiget.</summary>
@@ -227,17 +360,21 @@ public sealed class CompetitorService
     }
 
     /// <summary>Productos activos de la tienda (los que Mercado Libre devuelve en su búsqueda), con filtro de texto.</summary>
-    public async Task<(IReadOnlyList<CompetitorItem> Items, int Total, string? Error)> GetItemsAsync(Guid org, CompetitorStore store, string? query, int offset, CancellationToken cancellationToken = default)
+    public async Task<(IReadOnlyList<CompetitorItem> Items, int Total, string? Error, bool Live)> GetItemsAsync(Guid org, CompetitorStore store, string? query, int offset, CancellationToken cancellationToken = default)
     {
         var token = await TokenAsync(org, cancellationToken);
         if (token is null)
-            return (Array.Empty<CompetitorItem>(), 0, "Conecta tu cuenta de Mercado Libre primero.");
+            return (Array.Empty<CompetitorItem>(), 0, "Conecta tu cuenta de Mercado Libre primero.", false);
         var q = string.IsNullOrWhiteSpace(query) ? "" : "&q=" + Uri.EscapeDataString(query.Trim());
         try
         {
             using var doc = await GetAsync(token, $"/sites/MLM/search?seller_id={Uri.EscapeDataString(store.SellerId)}{q}&limit=50&offset={Math.Max(0, offset)}", cancellationToken);
             if (doc is null || !doc.RootElement.TryGetProperty("results", out var results))
-                return (Array.Empty<CompetitorItem>(), 0, "Mercado Libre no devolvió los productos de esta tienda.");
+            {
+                // Mercado Libre cerró la búsqueda por vendedor a apps de terceros: se usa lo que la app vio en los más vendidos.
+                var saved = await SavedItemsAsync(org, store.SellerId, query, cancellationToken);
+                return (saved, saved.Count, null, false);
+            }
             var total = doc.RootElement.TryGetProperty("paging", out var paging) ? Int(paging, "total") ?? 0 : 0;
             var items = results.EnumerateArray().Select(r => new CompetitorItem(
                 Str(r, "id") ?? "",
@@ -251,12 +388,18 @@ public sealed class CompetitorService
                 r.TryGetProperty("shipping", out var sh) && sh.TryGetProperty("free_shipping", out var fs) && fs.ValueKind == JsonValueKind.True))
                 .OrderByDescending(i => i.Sold ?? 0)
                 .ToList();
-            return (items, total, null);
+            if (items.Count == 0 && offset == 0)
+            {
+                var saved = await SavedItemsAsync(org, store.SellerId, query, cancellationToken);
+                if (saved.Count > 0) return (saved, saved.Count, null, false);
+            }
+            return (items, total, null, true);
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             _logger.LogInformation(exception, "Competitor items failed for {Seller}.", store.SellerId);
-            return (Array.Empty<CompetitorItem>(), 0, "Mercado Libre no respondió; intenta en un momento.");
+            var saved = await SavedItemsAsync(org, store.SellerId, query, cancellationToken);
+            return (saved, saved.Count, saved.Count > 0 ? null : "Mercado Libre no respondió; intenta en un momento.", false);
         }
     }
 
