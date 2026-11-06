@@ -98,6 +98,7 @@ public sealed class AssistantController : Controller
             - Costos de cruce: /CrossBorder
             - Productos: /Products  (filtros: ?stage=Draft, ?stage=NeedsReview, ?stage=Ready)
             - Publicados en Mercado Libre con ganancia y stock: /Publications  (filtros: ?filter=loss, ?filter=nocost, ?filter=mismatch)
+            - Métricas y KPIs (ventas, ganancia estimada, ticket promedio, comisiones, visitas, conversión, cancelaciones, reputación con límites de verde y MercadoLíder, tiempo de respuesta a preguntas, lo más vendido y publicaciones con visitas sin ventas): /Metrics  (periodo: ?days=7, 30 o 90)
             - Editar una publicación sin entrar a Mercado Libre (título, precio, stock, fotos, descripción, ficha técnica, garantía, tipo, pausar/activar/finalizar/republicar): Publicados → Editar (/Publications/Edit/NÚMERO); cambiar precio o pausar varias a la vez: selecciónalas en Publicados
             - Importar producto con IA: /Products/CreateFromUrl
             - Inventario (incluye caducidades por lote): /Inventory

@@ -1,0 +1,345 @@
+@model MarketplaceSync.Services.Metrics.MetricsReport
+@using System.Globalization
+@using MarketplaceSync.Services.Metrics
+
+@{
+    ViewData["Title"] = "Métricas";
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    string Mxn(decimal v) => v.ToString("C0", mx);
+    string N(decimal v) => v.ToString("N0", mx);
+    string Pct(decimal? v) => v.HasValue ? v.Value.ToString("0.##", mx) + "%" : "—";
+    string Minutes(double m) => m < 60 ? $"{Math.Round(m)} min" : m < 1440 ? $"{Math.Round(m / 60, 1).ToString("0.#", mx)} h" : $"{Math.Round(m / 1440, 1).ToString("0.#", mx)} días";
+
+    var periods = new[] { (7, "7 días"), (30, "30 días"), (90, "90 días") };
+
+    // Gráfica: barras de ventas por día.
+    const double W = 800, H = 200, PadL = 64, PadB = 26, PadT = 8;
+    var maxSales = Math.Max(1m, Model.Daily.Max(d => d.Sales));
+    var step = Math.Pow(10, Math.Floor(Math.Log10((double)maxSales)));
+    var niceMax = Math.Ceiling((double)maxSales / step) * step;
+    if (niceMax / step < 4) { step /= 2; niceMax = Math.Ceiling((double)maxSales / step) * step; }
+    var plotW = W - PadL - 4;
+    var plotH = H - PadB - PadT;
+    var slot = plotW / Model.Daily.Count;
+    var barW = Math.Min(44, Math.Max(2, slot - 2));
+    var labelEvery = Model.Daily.Count <= 7 ? 1 : Model.Daily.Count <= 31 ? 5 : 15;
+    var anySales = Model.Daily.Any(d => d.Sales > 0);
+    var yLabels = new List<(double Top, string Text)>();
+    var xLabels = new List<(double Left, string Text)>();
+}
+
+@functions {
+
+    private static Microsoft.AspNetCore.Html.HtmlString Delta(KpiValue k, bool lowerIsBetter = false)
+    {
+        if (k.ChangePercent is not { } c)
+            return new("<span class=\"mt-delta\">sin datos del periodo anterior</span>");
+        var good = lowerIsBetter ? c < 0 : c > 0;
+        var tone = c == 0 ? "" : good ? "is-up" : "is-down";
+        var arrow = c > 0 ? "▲" : c < 0 ? "▼" : "＝";
+        return new($"<span class=\"mt-delta {tone}\">{arrow} {Math.Abs(c).ToString("0.#", System.Globalization.CultureInfo.GetCultureInfo("es-MX"))}% vs. periodo anterior</span>");
+    }
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Métricas</h1>
+        <p>Cuánto vendes y ganas, tu reputación en Mercado Libre y qué publicaciones convierten mejor.</p>
+        <span class="page-head-meta">Del @Model.From.ToString("dd/MM/yyyy") al @Model.To.ToString("dd/MM/yyyy") · hora de Juárez</span>
+    </div>
+    <nav class="pl-chips" aria-label="Periodo">
+        @foreach (var (d, label) in periods)
+        {
+            <a class="pub-chip @(Model.Days == d ? "active" : "")" asp-action="Index" asp-route-days="@d">@label</a>
+        }
+    </nav>
+</header>
+
+@if (!Model.HasAccount)
+{
+    <div class="alert alert-warning">Conecta tu cuenta en <a asp-controller="MercadoLibre" asp-action="Status" class="alert-link">Cuentas de Mercado Libre</a> para ver reputación y visitas.</div>
+}
+@foreach (var w in Model.Warnings)
+{
+    <div class="alert alert-warning d-flex gap-2 align-items-start">@Html.Icon("triangle-alert") <span>@w</span></div>
+}
+
+<dl class="stats mt-stats">
+    <div class="stat"><dt>Ventas</dt><dd>@Mxn(Model.Sales.Value)</dd>@Delta(Model.Sales)</div>
+    <div class="stat @(Model.Profit is { Value: < 0 } ? "is-bad" : Model.Profit is not null ? "is-ok" : "")">
+        <dt>Ganancia estimada</dt>
+        @if (Model.Profit is { } profit)
+        {
+            <dd>@Mxn(profit.Value)</dd>
+            <span class="mt-delta">margen @Pct(Model.MarginPercent) · @Model.UnitsWithCost de @N(Model.Units.Value) piezas con costo</span>
+        }
+        else
+        {
+            <dd class="is-missing">—</dd>
+            <span class="mt-delta">Registra tus costos en <a asp-controller="Publications" asp-action="Index" asp-route-filter="nocost">Publicados</a></span>
+        }
+    </div>
+    <div class="stat"><dt>Pedidos</dt><dd>@N(Model.Orders.Value)</dd>@Delta(Model.Orders)</div>
+    <div class="stat"><dt>Ticket promedio</dt><dd>@Mxn(Model.AverageTicket.Value)</dd>@Delta(Model.AverageTicket)</div>
+</dl>
+
+<dl class="stats mt-stats">
+    <div class="stat">
+        <dt>Visitas</dt>
+        @if (Model.Visits is { } visits) { <dd>@N(visits.Value)</dd>@Delta(visits) } else { <dd class="is-missing">—</dd><span class="mt-delta">Sin datos de Mercado Libre</span> }
+    </div>
+    <div class="stat">
+        <dt>Conversión</dt>
+        <dd>@Pct(Model.ConversionPercent)</dd>
+        <span class="mt-delta">piezas vendidas por cada 100 visitas</span>
+    </div>
+    <div class="stat"><dt>Comisiones de Mercado Libre</dt><dd>@Mxn(Model.Fees.Value)</dd>@Delta(Model.Fees, lowerIsBetter: true)</div>
+    <div class="stat @(Model.Cancelled > 0 ? "is-warn" : "")"><dt>Cancelaciones</dt><dd>@Model.Cancelled</dd><span class="mt-delta">@(Model.Cancelled == 0 ? "ninguna en el periodo" : "revisa por qué se cancelaron en Pedidos")</span></div>
+</dl>
+
+<section class="panel mt-chart-panel" aria-labelledby="mt-daily">
+    <div class="panel-head">
+        <h2 id="mt-daily">Ventas por día</h2>
+        <p>Pasa el dedo o el mouse sobre una barra para ver el día.</p>
+    </div>
+    <div class="panel-body">
+        @if (!anySales)
+        {
+            <div class="today-clear">
+                <div>
+                    <div class="fw-bold">Sin ventas en este periodo</div>
+                    <div class="text-muted small">Las ventas llegan solas desde Mercado Libre. Si acabas de conectar tu cuenta, sincroniza en <a asp-controller="Orders" asp-action="Index">Pedidos</a>.</div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="mt-chart" id="dailyChart">
+                <svg viewBox="0 0 @W @H" role="img" aria-label="Ventas por día del @Model.From.ToString("dd/MM") al @Model.To.ToString("dd/MM")" preserveAspectRatio="none">
+                    @for (var g = 0d; g <= niceMax + 0.001; g += step)
+                    {
+                        var y = PadT + plotH - g / niceMax * plotH;
+                        <line x1="@PadL" x2="@W" y1="@y.ToString(CultureInfo.InvariantCulture)" y2="@y.ToString(CultureInfo.InvariantCulture)" class="mt-grid" vector-effect="non-scaling-stroke" />
+                        yLabels.Add((y / H * 100, g >= 1000 ? (g / 1000).ToString("0.#", mx) + "k" : g.ToString("0", mx)));
+                    }
+                    @for (var i = 0; i < Model.Daily.Count; i++)
+                    {
+                        var d = Model.Daily[i];
+                        var x = PadL + i * slot + (slot - barW) / 2;
+                        var h = (double)d.Sales / niceMax * plotH;
+                        var top = PadT + plotH - h;
+                        var r = Math.Min(4, Math.Min(barW / 2, h));
+                        var inv = CultureInfo.InvariantCulture;
+                        if (h > 0)
+                        {
+                            <path class="mt-bar" d="M@(x.ToString(inv)),@((PadT + plotH).ToString(inv)) V@((top + r).ToString(inv)) Q@(x.ToString(inv)),@(top.ToString(inv)) @((x + r).ToString(inv)),@(top.ToString(inv)) H@((x + barW - r).ToString(inv)) Q@((x + barW).ToString(inv)),@(top.ToString(inv)) @((x + barW).ToString(inv)),@((top + r).ToString(inv)) V@((PadT + plotH).ToString(inv)) Z" />
+                        }
+                        <rect class="mt-hit" x="@((PadL + i * slot).ToString(inv))" y="@PadT" width="@slot.ToString(inv)" height="@plotH.ToString(inv)"
+                              data-day="@d.Day.ToString("ddd dd/MM", mx)" data-sales="@Mxn(d.Sales)" data-orders="@d.Orders" data-visits="@(d.Visits?.ToString("N0", mx) ?? "")" />
+                        if (i % labelEvery == 0 || i == Model.Daily.Count - 1)
+                        {
+                            xLabels.Add(((PadL + i * slot + slot / 2) / W * 100, d.Day.ToString("dd/MM")));
+                        }
+                    }
+                    <line x1="@PadL" x2="@W" y1="@(PadT + plotH)" y2="@(PadT + plotH)" class="mt-baseline" vector-effect="non-scaling-stroke" />
+                </svg>
+                @foreach (var (top, text) in yLabels)
+                {
+                    <span class="mt-ylabel" style="top: @top.ToString("0.##", CultureInfo.InvariantCulture)%">@text</span>
+                }
+                @for (var xi = 0; xi < xLabels.Count; xi++)
+                {
+                    var (left, text) = xLabels[xi];
+                    <span class="mt-xlabel @(xi % 2 == 1 && xi != xLabels.Count - 1 ? "is-minor" : "")" style="left: @left.ToString("0.##", CultureInfo.InvariantCulture)%">@text</span>
+                }
+                <div class="mt-tip" id="dailyTip" hidden></div>
+            </div>
+            <details class="mt-table">
+                <summary>Ver como tabla</summary>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead><tr><th>Día</th><th class="text-end">Ventas</th><th class="text-end">Pedidos</th><th class="text-end">Visitas</th></tr></thead>
+                        <tbody>
+                            @foreach (var d in Model.Daily.AsEnumerable().Reverse())
+                            {
+                                <tr><td>@d.Day.ToString("ddd dd/MM", mx)</td><td class="text-end">@Mxn(d.Sales)</td><td class="text-end">@d.Orders</td><td class="text-end">@(d.Visits?.ToString("N0", mx) ?? "—")</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        }
+    </div>
+</section>
+
+<div class="mt-grid-2">
+    <section class="panel" aria-labelledby="mt-rep">
+        <div class="panel-head">
+            <h2 id="mt-rep">Reputación en Mercado Libre</h2>
+            <p>Para seguir en verde no pases los límites de Mercado Libre México.</p>
+        </div>
+        <div class="panel-body">
+            @if (Model.Reputation.Count == 0)
+            {
+                <p class="text-muted mb-0">Sin datos de reputación todavía. Mercado Libre la calcula cuando tienes al menos 10 ventas completadas.</p>
+            }
+            @foreach (var rep in Model.Reputation)
+            {
+                <div class="mt-rep">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <strong>@rep.AccountName</strong>
+                        @if (!string.IsNullOrWhiteSpace(rep.PowerSeller))
+                        {
+                            <span class="pill pill-signal">MercadoLíder @(rep.PowerSeller switch { "platinum" => "Platinum", "gold" => "Gold", "silver" => "Silver", _ => rep.PowerSeller })</span>
+                        }
+                    </div>
+                    <div class="mt-thermo" role="img" aria-label="Termómetro: nivel @(rep.Level?.ToString() ?? "sin calcular") de 5">
+                        @for (var i = 1; i <= 5; i++)
+                        {
+                            <span class="mt-thermo-seg seg-@i @(rep.Level == i ? "is-current" : "")"></span>
+                        }
+                    </div>
+                    <div class="small text-muted mb-2">
+                        @(rep.Level switch { 5 => "Verde: la mejor reputación.", 4 => "Verde claro: cerca del verde.", 3 => "Amarillo: cuida reclamos y demoras.", 2 => "Naranja: tus publicaciones salen menos.", 1 => "Rojo: Mercado Libre limita tus ventas.", _ => "Aún sin color: faltan ventas para calcularla." })
+                        @if (rep.Protected) { <span>Ahora estás protegido: un problema reciente no te baja el color todavía.</span> }
+                    </div>
+                    <ul class="mt-limits">
+                        @foreach (var m in rep.Metrics)
+                        {
+                            var scale = (double)m.GreenLimit * 1.5;
+                            var fill = m.RatePercent is { } rp ? Math.Min(100, (double)rp / scale * 100) : 0;
+                            <li>
+                                <div class="d-flex justify-content-between gap-2">
+                                    <span><strong>@m.Label</strong> <span class="text-muted small">@m.Help</span></span>
+                                    <span class="mt-limit-value tone-@m.Tone">@Pct(m.RatePercent)@(m.Value.HasValue ? $" · {m.Value}" : "")</span>
+                                </div>
+                                <div class="mt-meter" aria-hidden="true">
+                                    <span class="mt-meter-fill tone-@m.Tone" style="width: @fill.ToString("0.#", CultureInfo.InvariantCulture)%"></span>
+                                    <span class="mt-meter-mark" style="left: @(((double)m.LeaderLimit / scale * 100).ToString("0.#", CultureInfo.InvariantCulture))%" title="MercadoLíder"></span>
+                                    <span class="mt-meter-mark is-green" style="left: @(((double)m.GreenLimit / scale * 100).ToString("0.#", CultureInfo.InvariantCulture))%" title="Límite verde"></span>
+                                </div>
+                                <div class="mt-limit-legend">Límite verde @Pct(m.GreenLimit) · MercadoLíder @Pct(m.LeaderLimit)</div>
+                            </li>
+                        }
+                    </ul>
+                    <div class="small text-muted">
+                        @if (rep.CompletedSales.HasValue) { <span>@N(rep.CompletedSales.Value) ventas completadas@(rep.SalesPeriod is null ? "" : $" ({rep.SalesPeriod.Replace("days", "días").Replace("months", "meses")})")</span> }
+                        @if (rep.PositivePercent.HasValue) { <span> · @rep.PositivePercent% calificaciones positivas</span> }
+                    </div>
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="panel" aria-labelledby="mt-q">
+        <div class="panel-head">
+            <h2 id="mt-q">Preguntas</h2>
+            <p>Contestar rápido vende más: la mayoría compra en la primera hora.</p>
+        </div>
+        <div class="panel-body">
+            <dl class="facts mt-facts">
+                <div><dt>Recibidas</dt><dd>@Model.QuestionsReceived</dd></div>
+                <div><dt>Respondidas</dt><dd>@(Model.QuestionsReceived == 0 ? "—" : Pct(Math.Round(Model.QuestionsAnswered * 100m / Model.QuestionsReceived, 0)))</dd></div>
+                <div><dt>Tiempo de respuesta</dt><dd class="@(Model.MedianAnswerMinutes is null ? "is-missing" : "")">@(Model.MedianAnswerMinutes is { } med ? Minutes(med) : "—")</dd></div>
+                <div><dt>Sin responder ahora</dt><dd>@Model.QuestionsPending</dd></div>
+            </dl>
+            <p class="small text-muted mt-3 mb-0">El tiempo de respuesta es la mediana: la mitad de tus preguntas se contestó en menos de eso.</p>
+            @if (Model.QuestionsPending > 0)
+            {
+                <a asp-controller="Questions" asp-action="Index" class="btn btn-outline-secondary btn-sm mt-3">Responder @Model.QuestionsPending @(Model.QuestionsPending == 1 ? "pregunta" : "preguntas")</a>
+            }
+        </div>
+    </section>
+</div>
+
+<section class="panel" aria-labelledby="mt-top">
+    <div class="panel-head">
+        <h2 id="mt-top">Lo que más vendes</h2>
+        <p>Conversión = piezas vendidas por cada 100 visitas de esa publicación.</p>
+    </div>
+    @if (Model.TopProducts.Count == 0)
+    {
+        <div class="panel-body"><p class="text-muted mb-0">Todavía no hay ventas en este periodo.</p></div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="data-table mt-top">
+                <thead><tr><th>Publicación</th><th class="text-end">Piezas</th><th class="text-end">Ventas</th><th class="text-end">Ganancia</th><th class="text-end">Visitas</th><th class="text-end">Conversión</th></tr></thead>
+                <tbody>
+                    @foreach (var p in Model.TopProducts)
+                    {
+                        <tr>
+                            <td>
+                                <span class="mt-prod">
+                                    <span class="recent-thumb">@if (!string.IsNullOrWhiteSpace(p.ImageUrl)) { <img src="@p.ImageUrl" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" /> }</span>
+                                    <span class="min-w-0">
+                                        @if (p.PublicationId is { } pid) { <a asp-controller="Publications" asp-action="Edit" asp-route-id="@pid" class="mt-prod-title">@p.Title</a> } else { <span class="mt-prod-title">@p.Title</span> }
+                                        <span class="d-block small text-muted">@p.ItemId</span>
+                                    </span>
+                                </span>
+                            </td>
+                            <td class="text-end">@p.Units</td>
+                            <td class="text-end">@Mxn(p.Sales)</td>
+                            <td class="text-end @(p.Profit < 0 ? "text-danger" : "")">@(p.Profit.HasValue ? Mxn(p.Profit.Value) : "sin costo")</td>
+                            <td class="text-end">@(p.Visits?.ToString("N0", mx) ?? "—")</td>
+                            <td class="text-end">@Pct(p.ConversionPercent)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@if (Model.VisitsNoSales.Count > 0)
+{
+    <section class="panel mt-3" aria-labelledby="mt-nosale">
+        <div class="panel-head">
+            <h2 id="mt-nosale">Visitas sin ventas</h2>
+            <p>La gente las ve pero no compra: revisa precio, fotos, título y envío.</p>
+        </div>
+        <ul class="mt-nosale">
+            @foreach (var p in Model.VisitsNoSales)
+            {
+                <li>
+                    <span class="recent-thumb">@if (!string.IsNullOrWhiteSpace(p.ImageUrl)) { <img src="@p.ImageUrl" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" /> }</span>
+                    <span class="min-w-0 flex-grow-1"><span class="mt-prod-title">@p.Title</span><span class="d-block small text-muted">@N(p.Visits ?? 0) visitas · 0 ventas</span></span>
+                    @if (p.PublicationId is { } pid) { <a asp-controller="Publications" asp-action="Edit" asp-route-id="@pid" class="btn btn-outline-secondary btn-sm">@Html.Icon("pencil") Mejorar</a> }
+                </li>
+            }
+        </ul>
+    </section>
+}
+
+@section Scripts {
+    <script>
+        (function () {
+            var chart = document.getElementById('dailyChart');
+            if (!chart) return;
+            var tip = document.getElementById('dailyTip');
+            function show(rect) {
+                var d = rect.dataset;
+                tip.innerHTML = '';
+                var day = document.createElement('div'); day.className = 'mt-tip-day'; day.textContent = d.day;
+                var s = document.createElement('div'); s.textContent = d.sales + ' · ' + d.orders + (d.orders === '1' ? ' pedido' : ' pedidos');
+                tip.append(day, s);
+                if (d.visits) { var v = document.createElement('div'); v.textContent = d.visits + ' visitas'; tip.append(v); }
+                tip.hidden = false;
+                var box = chart.getBoundingClientRect(), r = rect.getBoundingClientRect();
+                var left = r.left - box.left + r.width / 2;
+                tip.style.left = Math.max(70, Math.min(box.width - 70, left)) + 'px';
+                chart.querySelectorAll('.mt-hit.is-hover').forEach(function (x) { x.classList.remove('is-hover'); });
+                rect.classList.add('is-hover');
+            }
+            chart.querySelectorAll('.mt-hit').forEach(function (rect) {
+                rect.addEventListener('mouseenter', function () { show(rect); });
+                rect.addEventListener('click', function () { show(rect); });
+            });
+            chart.addEventListener('mouseleave', function () {
+                tip.hidden = true;
+                chart.querySelectorAll('.mt-hit.is-hover').forEach(function (x) { x.classList.remove('is-hover'); });
+            });
+        })();
+    </script>
+}
