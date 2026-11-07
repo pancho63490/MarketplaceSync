@@ -340,6 +340,23 @@ public sealed class ListingAutopilotService : IListingAutopilotService
             }
             else
             {
+                // Solo un tipo de publicación que la cuenta pueda usar en esta categoría.
+                if (string.IsNullOrWhiteSpace(publication.ExternalItemId) && accountId is not null)
+                {
+                    var sellerId = await _context.MarketplaceAccounts
+                        .Where(x => x.Id == accountId && x.OrganizationId == organizationId)
+                        .Select(x => x.ExternalAccountId)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    var types = string.IsNullOrWhiteSpace(sellerId)
+                        ? null
+                        : await _listingClient.GetAvailableListingTypesAsync(accessToken, sellerId, publication.CategoryId!, cancellationToken);
+                    if (types is { Count: > 0 } && types.All(t => t.Id != (publication.ListingTypeId ?? "gold_special")))
+                    {
+                        done.Add($"Tipo de publicación: {types[0].Name} (el elegido no está disponible en esta categoría)");
+                        publication.ListingTypeId = types[0].Id;
+                    }
+                }
+
                 var attributes = chosen.ToList();
                 var sku = activeVariants.FirstOrDefault()?.Sku;
                 if (!string.IsNullOrWhiteSpace(sku) && attributes.All(a => a.Id != "SELLER_SKU"))

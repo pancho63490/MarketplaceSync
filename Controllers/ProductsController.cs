@@ -47,6 +47,59 @@ namespace MarketplaceSync.Web.Controllers
 
             if (!request.MarketplaceAccountId.HasValue && request.Accounts.Count > 0)
                 request.MarketplaceAccountId = int.Parse(request.Accounts[0].Value!);
+
+            await LoadListingTypesAsync(request, organizationId);
+        }
+
+        /// <summary>
+        /// Deja en el formulario solo los tipos de publicación que la cuenta puede usar en la categoría
+        /// y, si el elegido no está, selecciona el primero disponible (Clásica antes que Premium).
+        /// </summary>
+        private async Task LoadListingTypesAsync(PublishToMercadoLibreRequest request, Guid organizationId)
+        {
+            if (!request.MarketplaceAccountId.HasValue ||
+                string.IsNullOrWhiteSpace(request.CategoryId) ||
+                !Regex.IsMatch(request.CategoryId.Trim(), @"^MLM\d+$", RegexOptions.IgnoreCase))
+                return;
+
+            var sellerId = await _context.MarketplaceAccounts
+                .Where(x => x.Id == request.MarketplaceAccountId.Value && x.OrganizationId == organizationId)
+                .Select(x => x.ExternalAccountId)
+                .FirstOrDefaultAsync();
+            if (string.IsNullOrWhiteSpace(sellerId))
+                return;
+
+            string accessToken;
+            try
+            {
+                accessToken = await _mercadoLibreAuthService.GetValidAccessTokenAsync(organizationId, request.MarketplaceAccountId.Value);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(exception, "No token to read listing types for account {AccountId}.", request.MarketplaceAccountId);
+                return;
+            }
+
+            var options = await _listingClient.GetAvailableListingTypesAsync(
+                accessToken, sellerId, request.CategoryId.Trim().ToUpperInvariant());
+            if (options is null)
+                return;
+
+            request.ListingTypeOptions = options;
+            if (options.Count == 0)
+            {
+                request.ListingTypeNote = "Mercado Libre no ofrece ningún tipo de publicación para tu cuenta en esta categoría. " +
+                                          "Puede ser una restricción de la cuenta o de la categoría: revisa los avisos en tu cuenta de Mercado Libre o prueba otra categoría.";
+                return;
+            }
+
+            if (options.All(x => x.Id != request.ListingTypeId))
+            {
+                var previous = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.ListingTypeName(request.ListingTypeId);
+                request.ListingTypeId = options[0].Id;
+                ModelState.Remove(nameof(request.ListingTypeId));
+                request.ListingTypeNote = $"{previous} no está disponible para tu cuenta en esta categoría; dejé seleccionada {options[0].Name}.";
+            }
         }
 
         private async Task<MarketplacePublication> GetOrCreateMarketplacePublicationAsync(
@@ -907,6 +960,9 @@ var token = await _context.MercadoLibreTokens
 
     if (!response.IsSuccessStatusCode)
     {
+        _logger.LogWarning("Mercado Libre rejected product {ProductId} in {CategoryId} ({ListingType}): {Body}",
+            product.Id, input.CategoryId, input.ListingTypeId, content.Length > 2000 ? content[..2000] : content);
+        input.MercadoLibreRawError = content.Length > 4000 ? content[..4000] : content;
         // Lo que Mercado Libre reclamó se agrega al formulario y se marca para que se vea qué llenar.
         var missing = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.ParseMissingAttributes(content);
         await PopulateMarketplaceAccountsAsync(input, organizationId);

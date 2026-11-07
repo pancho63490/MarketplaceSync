@@ -9,6 +9,15 @@ namespace MarketplaceSync.Web.ViewModels
         /// <summary>De dónde salió el código de barras prellenado (para mostrarlo bajo el campo).</summary>
         public string? GtinSource { get; set; }
 
+        /// <summary>Tipos de publicación que la cuenta puede usar en la categoría (null = no se pudo consultar).</summary>
+        public List<MarketplaceSync.Services.MercadoLibre.ListingTypeOption>? ListingTypeOptions { get; set; }
+
+        /// <summary>Aviso cuando se cambió el tipo elegido porque no estaba disponible.</summary>
+        public string? ListingTypeNote { get; set; }
+
+        /// <summary>Respuesta original de Mercado Libre al rechazar (se muestra plegada).</summary>
+        public string? MercadoLibreRawError { get; set; }
+
         public int ProductId { get; set; }
 
         [Required(ErrorMessage = "Selecciona la cuenta de Mercado Libre.")]

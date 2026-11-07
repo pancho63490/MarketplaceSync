@@ -72,6 +72,17 @@
         {
             <div>@errorParts.FirstOrDefault()</div>
         }
+        @if (!string.IsNullOrWhiteSpace(Model.ListingTypeNote))
+        {
+            <div class="mt-2 fw-semibold">@Model.ListingTypeNote Vuelve a pulsar Publicar.</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.MercadoLibreRawError))
+        {
+            <details class="mt-2 small">
+                <summary>Ver mensaje original de Mercado Libre</summary>
+                <pre class="mb-0 mt-1 text-wrap small">@Model.MercadoLibreRawError</pre>
+            </details>
+        }
     </div>
 }
 
@@ -401,11 +412,29 @@
                         <div class="col-md-6">
                             <label asp-for="ListingTypeId" class="form-label fw-semibold">Tipo de publicación</label>
                             <select asp-for="ListingTypeId" class="form-select">
-                                <option value="gold_special">Clásica</option>
-                                <option value="gold_pro">Premium</option>
-                                <option value="free">Gratuita</option>
+                                @if (Model.ListingTypeOptions is { Count: > 0 } listingTypes)
+                                {
+                                    foreach (var type in listingTypes)
+                                    {
+                                        <option value="@type.Id">@type.Name@(type.Remaining is > 0 ? $" (te quedan {type.Remaining})" : "")</option>
+                                    }
+                                }
+                                else
+                                {
+                                    <option value="gold_special">Clásica</option>
+                                    <option value="gold_pro">Premium</option>
+                                    <option value="free">Gratuita</option>
+                                }
                             </select>
                             <span asp-validation-for="ListingTypeId" class="text-danger small"></span>
+                            @if (!string.IsNullOrWhiteSpace(Model.ListingTypeNote))
+                            {
+                                <div class="small mt-1"><span class="pill pill-warn">Ajustado</span> @Model.ListingTypeNote</div>
+                            }
+                            else if (Model.ListingTypeOptions is { Count: > 0 })
+                            {
+                                <div class="form-text">Solo se muestran los tipos que tu cuenta puede usar en esta categoría.</div>
+                            }
                         </div>
                     </div>
 

@@ -9,6 +9,9 @@ namespace MarketplaceSync.Services.MercadoLibre;
 /// <summary>Valor elegido para un atributo de Mercado Libre (se guarda en la publicación).</summary>
 public sealed record SavedAttributeValue(string Id, string? ValueId, string? ValueName);
 
+/// <summary>Tipo de publicación que la cuenta puede usar en una categoría.</summary>
+public sealed record ListingTypeOption(string Id, string Name, int? Remaining);
+
 public sealed record ListingPublishResult(
     bool Success,
     string? ItemId,
@@ -144,6 +147,78 @@ public sealed class MercadoLibreListingClient
             .ThenBy(x => x.index)
             .Select(x => x.attribute)
             .ToList();
+    }
+
+    /// <summary>Nombres en español de los tipos de publicación de México.</summary>
+    public static string ListingTypeName(string? id) => id switch
+    {
+        "gold_special" => "Clásica",
+        "gold_pro" => "Premium",
+        "gold_premium" => "Premium",
+        "gold" => "Oro",
+        "silver" => "Plata",
+        "bronze" => "Bronce",
+        "free" => "Gratuita",
+        null or "" => "sin tipo",
+        _ => id
+    };
+
+    /// <summary>
+    /// Tipos de publicación que esta cuenta puede usar en la categoría (GET /users/{id}/available_listing_types).
+    /// Regresa null si Mercado Libre no respondió (se deja la lista fija de siempre).
+    /// </summary>
+    public async Task<List<ListingTypeOption>?> GetAvailableListingTypesAsync(
+        string accessToken,
+        string sellerId,
+        string categoryId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"{ApiBase}/users/{Uri.EscapeDataString(sellerId)}/available_listing_types?category_id={Uri.EscapeDataString(categoryId)}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            using var response = await client.SendAsync(request, cancellationToken);
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("available_listing_types for {Category} returned {Status}: {Body}",
+                    categoryId, (int)response.StatusCode, content.Length > 300 ? content[..300] : content);
+                return null;
+            }
+
+            var root = JsonNode.Parse(content);
+            var list = root as JsonArray ?? root?["available"] as JsonArray;
+            if (list is null)
+                return null;
+
+            var result = new List<ListingTypeOption>();
+            foreach (var node in list)
+            {
+                var id = node?["id"]?.GetValue<string>();
+                if (string.IsNullOrWhiteSpace(id))
+                    continue;
+                int? remaining = null;
+                try { remaining = node?["remaining_listings"]?.GetValue<int>(); }
+                catch (InvalidOperationException) { }
+                catch (FormatException) { }
+                if (remaining is 0)
+                    continue; // ya se acabaron las de ese tipo (pasa con Gratuita)
+                result.Add(new ListingTypeOption(id, ListingTypeName(id), remaining));
+            }
+
+            // Primero Clásica, luego Premium, luego el resto.
+            return result
+                .OrderBy(x => x.Id switch { "gold_special" => 0, "gold_pro" => 1, "free" => 3, _ => 2 })
+                .ToList();
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(exception, "Could not read available listing types for {Category}.", categoryId);
+            return null;
+        }
     }
 
     /// <summary>Compara nombres sin acentos, mayúsculas ni signos ("¿Es bebida sin alcohol?" = "es bebida sin alcohol").</summary>
@@ -443,17 +518,18 @@ public sealed class MercadoLibreListingClient
             {
                 messages.Add("El precio está por debajo del mínimo que acepta esta categoría.");
             }
+            else if (lower.Contains("seller.unable_to_list") || lower.Contains("unable to list") || lower.Contains("seller.forbidden"))
+            {
+                messages.Add($"Tu cuenta de Mercado Libre no puede publicar ahora. Revisa avisos o datos pendientes en tu cuenta. (Mercado Libre: {text})");
+            }
             else if (lower.Contains("listing_type") || lower.Contains("listing type"))
             {
-                messages.Add("Ese tipo de publicación no está disponible para tu cuenta en esta categoría. Prueba con Clásica.");
+                // Se deja el texto original: este error tiene muchas causas (tipo, cupo de gratuitas, cuenta nueva…).
+                messages.Add($"Mercado Libre no aceptó el tipo de publicación: {text}");
             }
             else if (lower.Contains("category") && (lower.Contains("not a leaf") || lower.Contains("leaf") || lower.Contains("invalid")))
             {
                 messages.Add("La categoría no sirve para publicar: elige la más específica (la última del árbol).");
-            }
-            else if (lower.Contains("seller.unable_to_list") || lower.Contains("unable to list"))
-            {
-                messages.Add("Tu cuenta de Mercado Libre no puede publicar ahora. Revisa avisos o datos pendientes en tu cuenta.");
             }
             else if (lower.Contains("attribute") && (lower.Contains("invalid") || lower.Contains("not valid")))
             {
