@@ -65,7 +65,7 @@ private readonly IMercadoLibreAuthService _authService;
                 available_quantity = publication.Stock,
                 buying_mode = "buy_it_now",
                 condition = "new",
-                listing_type_id = "gold_special",
+                listing_type_id = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DefaultListingTypeId,
                 category_id = publication.CategoryId
             };
 

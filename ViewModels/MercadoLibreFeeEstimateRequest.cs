@@ -17,5 +17,5 @@ public sealed class MercadoLibreFeeEstimateRequest
     public string CurrencyId { get; set; } = "MXN";
 
     [Required]
-    public string ListingTypeId { get; set; } = "gold_special";
+    public string ListingTypeId { get; set; } = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DefaultListingTypeId;
 }

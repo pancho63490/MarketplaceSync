@@ -365,7 +365,7 @@ public sealed class MarketInsightsController : Controller
                     Stock = 1,
                     CurrencyId = rankedItem.CurrencyId ?? "MXN",
                     CategoryId = categoryId,
-                    ListingTypeId = "gold_special",
+                    ListingTypeId = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DefaultListingTypeId,
                     Condition = "new",
                     Status = "Draft",
                     IsPublished = false,

@@ -49,19 +49,19 @@ public class CrossBorderSettings
     /// Costo de Mercado Envíos asumido por el vendedor en productos >= $299 MXN (ej. $110.00 MXN).
     /// </summary>
     [Column(TypeName = "numeric(10,2)")]
-    public decimal EstimatedShippingMxn { get; set; } = 110.00m;
+    public decimal EstimatedShippingMxn { get; set; } = 122.50m;
 
     /// <summary>
     /// Comisión de Mercado Libre predeterminada para autopartes si no se conoce la categoría exacta (ej. 14.50%).
     /// </summary>
     [Column(TypeName = "numeric(6,2)")]
-    public decimal DefaultMarketplaceFeePercent { get; set; } = 14.50m;
+    public decimal DefaultMarketplaceFeePercent { get; set; } = 15.50m;
 
     /// <summary>
     /// Porcentaje de retención de impuestos de Mercado Libre (1% ISR + 8% IVA = 9% para persona física con RFC).
     /// </summary>
     [Column(TypeName = "numeric(6,2)")]
-    public decimal PlatformTaxWithholdingPercent { get; set; } = 9.00m;
+    public decimal PlatformTaxWithholdingPercent { get; set; } = 31.03m;
 
     /// <summary>
     /// Si está habilitado, los productos extraídos que cumplan atributos y margen se publican automáticamente.

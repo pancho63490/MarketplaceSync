@@ -720,13 +720,19 @@ var product = await _context.Products
         CurrencyId = "MXN",
         CategoryId = "",
         Condition = "new",
-        ListingTypeId = "gold_special",
+        ListingTypeId = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DefaultListingTypeId,
         ImageUrl = product.ImageUrl,
         Brand = product.Brand,
         Model = product.Model,
         MarketplaceAccountId = marketplaceAccountId,
         UnitCost = initialUnitCost
     };
+
+    // La calculadora arranca con lo que cobra Mercado Libre según Costos de cruce (retención y envío).
+    var sellingSettings = await _crossBorderPricingService.GetOrCreateSettingsAsync(organizationId);
+    model.TaxRate = sellingSettings.PlatformTaxWithholdingPercent;
+    if (model.Price >= 299m)
+        model.ShippingCost = sellingSettings.EstimatedShippingMxn;
 
     await PopulateMarketplaceAccountsAsync(model, organizationId);
 
@@ -1692,7 +1698,7 @@ public async Task<IActionResult> PrepareForMercadoLibre(int id)
     var publication = await GetOrCreateMarketplacePublicationAsync(product);
     publication.CurrencyId = "MXN";
     publication.Condition = "new";
-    publication.ListingTypeId = "gold_special";
+    publication.ListingTypeId = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DefaultListingTypeId;
 
     if (product.SourceStock.HasValue)
     {

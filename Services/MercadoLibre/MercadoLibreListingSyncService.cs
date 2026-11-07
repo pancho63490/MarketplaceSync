@@ -288,7 +288,7 @@ public sealed class MercadoLibreListingSyncService : IMercadoLibreListingSyncSer
                 {
                     var fee = await _feeService.EstimateAsync(
                         token, publication.CategoryId!, price.Value, "MXN",
-                        publication.ListingTypeId ?? "gold_special", cancellationToken);
+                        publication.ListingTypeId ?? MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DefaultListingTypeId, cancellationToken);
                     publication.SaleFeeMxn = fee.SaleFeeAmount;
                     publication.SaleFeeForPrice = price;
                 }

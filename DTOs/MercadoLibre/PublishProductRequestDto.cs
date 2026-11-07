@@ -14,6 +14,6 @@ namespace MarketplaceSync.Web.DTOs.MercadoLibre
 
         public string Condition { get; set; } = "new";
 
-        public string ListingTypeId { get; set; } = "gold_special";
+        public string ListingTypeId { get; set; } = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DefaultListingTypeId;
     }
 }

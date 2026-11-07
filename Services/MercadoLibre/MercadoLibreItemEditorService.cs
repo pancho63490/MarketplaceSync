@@ -437,7 +437,7 @@ public sealed class MercadoLibreItemEditorService
         var (publication, token) = await LoadAsync(organizationId, publicationId, cancellationToken);
         var client = _httpClientFactory.CreateClient();
         using var request = Request(token, HttpMethod.Post, $"/items/{Esc(publication.ExternalItemId!)}/relist",
-            new { price, quantity, listing_type_id = publication.ListingTypeId ?? "gold_special" });
+            new { price, quantity, listing_type_id = publication.ListingTypeId ?? MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DefaultListingTypeId });
         using var response = await client.SendAsync(request, cancellationToken);
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
@@ -571,7 +571,7 @@ public sealed class MercadoLibreItemEditorService
         {
             try
             {
-                var fee = await _feeService.EstimateAsync(token, publication.CategoryId!, price.Value, "MXN", publication.ListingTypeId ?? "gold_special", cancellationToken);
+                var fee = await _feeService.EstimateAsync(token, publication.CategoryId!, price.Value, "MXN", publication.ListingTypeId ?? MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DefaultListingTypeId, cancellationToken);
                 publication.SaleFeeMxn = fee.SaleFeeAmount;
                 publication.SaleFeeForPrice = price;
             }

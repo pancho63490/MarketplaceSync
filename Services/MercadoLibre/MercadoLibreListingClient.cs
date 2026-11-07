@@ -43,6 +43,9 @@ public sealed class MercadoLibreListingClient
     /// <summary>Base de la API (MercadoLibre:ApiBaseUrl solo para pruebas).</summary>
     public string ApiBase { get; }
 
+    /// <summary>Tipo de publicación con el que se publica si no se elige otro (Premium: meses sin intereses).</summary>
+    public const string DefaultListingTypeId = "gold_pro";
+
     public const string GtinId = "GTIN";
     public const string EmptyGtinReasonId = "EMPTY_GTIN_REASON";
 
@@ -209,9 +212,9 @@ public sealed class MercadoLibreListingClient
                 result.Add(new ListingTypeOption(id, ListingTypeName(id), remaining));
             }
 
-            // Primero Clásica, luego Premium, luego el resto.
+            // Primero Premium, luego Clásica, luego el resto.
             return result
-                .OrderBy(x => x.Id switch { "gold_special" => 0, "gold_pro" => 1, "free" => 3, _ => 2 })
+                .OrderBy(x => x.Id switch { "gold_pro" => 0, "gold_special" => 1, "free" => 3, _ => 2 })
                 .ToList();
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)

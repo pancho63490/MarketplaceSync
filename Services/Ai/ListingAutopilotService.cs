@@ -122,7 +122,7 @@ public sealed class ListingAutopilotService : IListingAutopilotService
             Marketplace = "MercadoLibre",
             MarketplaceAccountId = accountId,
             CurrencyId = "MXN",
-            ListingTypeId = "gold_special",
+            ListingTypeId = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DefaultListingTypeId,
             Condition = "new",
             Status = "Draft",
             IsPublished = false,
@@ -350,7 +350,7 @@ public sealed class ListingAutopilotService : IListingAutopilotService
                     var types = string.IsNullOrWhiteSpace(sellerId)
                         ? null
                         : await _listingClient.GetAvailableListingTypesAsync(accessToken, sellerId, publication.CategoryId!, cancellationToken);
-                    if (types is { Count: > 0 } && types.All(t => t.Id != (publication.ListingTypeId ?? "gold_special")))
+                    if (types is { Count: > 0 } && types.All(t => t.Id != (publication.ListingTypeId ?? MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DefaultListingTypeId)))
                     {
                         done.Add($"Tipo de publicación: {types[0].Name} (el elegido no está disponible en esta categoría)");
                         publication.ListingTypeId = types[0].Id;
@@ -370,7 +370,7 @@ public sealed class ListingAutopilotService : IListingAutopilotService
                     publication.Price!.Value,
                     publication.Stock!.Value,
                     publication.Condition ?? "new",
-                    publication.ListingTypeId ?? "gold_special",
+                    publication.ListingTypeId ?? MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DefaultListingTypeId,
                     product.ImageUrl,
                     attributes,
                     product.Description,

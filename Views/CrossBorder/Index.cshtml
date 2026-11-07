@@ -65,24 +65,28 @@
                 <div>
                     <label asp-for="DefaultMarketplaceFeePercent" class="form-label">Comisión</label>
                     <div class="input-group">
-                        <input asp-for="DefaultMarketplaceFeePercent" class="form-control" type="number" step="0.5" min="5" max="30" placeholder="14.5" />
+                        <input asp-for="DefaultMarketplaceFeePercent" class="form-control" type="number" step="0.01" min="5" max="30" placeholder="15.5" />
                         <span class="input-group-text">%</span>
                     </div>
-                    <div class="form-text">En autopartes suele ir de 12% a 16.5%. Se usa la real cuando Mercado Libre la da.</div>
+                    <div class="form-text">Premium (con meses sin intereses), la que usa la app al publicar: 15.5% en tus ventas. Varía por categoría; en Publicar se usa la real cuando Mercado Libre la da.</div>
                 </div>
                 <div>
                     <label asp-for="PlatformTaxWithholdingPercent" class="form-label">Retención de impuestos</label>
                     <div class="input-group">
-                        <input asp-for="PlatformTaxWithholdingPercent" class="form-control" type="number" step="0.5" min="0" max="36" placeholder="9" />
+                        <input asp-for="PlatformTaxWithholdingPercent" class="form-control" type="number" step="0.01" min="0" max="36" placeholder="31.03" />
                         <span class="input-group-text">%</span>
                     </div>
-                    <div class="form-text">9% con RFC registrado (1% ISR + 8% IVA); 0% si eres persona moral.</div>
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-withholding="31.03">Sin RFC · 31.03%</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-withholding="9.05">Con RFC · 9.05%</button>
+                    </div>
+                    <div class="form-text">Porcentaje del precio de venta. Sin RFC en Mercado Libre: 20% ISR + 16% IVA sobre el precio sin IVA. Con RFC (2026): 2.5% ISR + 8% IVA. Revísalo cada enero: la tasa de ISR la fija la Ley de Ingresos de cada año.</div>
                 </div>
                 <div>
                     <label asp-for="EstimatedShippingMxn" class="form-label">Envío que pagas</label>
                     <div class="input-group">
                         <span class="input-group-text">$</span>
-                        <input asp-for="EstimatedShippingMxn" class="form-control" type="number" step="1" min="0" placeholder="110" />
+                        <input asp-for="EstimatedShippingMxn" class="form-control" type="number" step="0.01" min="0" placeholder="122.50" />
                         <span class="input-group-text">MXN</span>
                     </div>
                     <div class="form-text">Promedio de la guía en ventas de $299 o más (envío gratis para el comprador).</div>
@@ -153,7 +157,7 @@
                     <div><dt>Pieza en pesos</dt><dd id="simProductCostMxn">@M(sample?.ProductCostMxn, "$700.00")</dd></div>
                     <div><dt>Impuestos o comercializadora</dt><dd id="simImportTaxesMxn">+@M(sample?.ImportTaxesMxn, "$105.00")</dd></div>
                     <div class="cb-subtotal"><dt>Te cuesta en Juárez</dt><dd id="simLandedCostMxn">@M(sample?.LandedCostJuarezMxn, "$805.00")</dd></div>
-                    <div><dt>Envío</dt><dd id="simShippingMxn">+@M(sample?.EstimatedShippingMxn, "$110.00")</dd></div>
+                    <div><dt>Envío</dt><dd id="simShippingMxn">+@M(sample?.EstimatedShippingMxn, "$122.50")</dd></div>
                     <div><dt>Comisión (<span id="simMeliFeePct">@(sample?.MarketplaceFeePercent.ToString("0.#", mx) ?? "14.5")</span>%)</dt><dd id="simMarketplaceFeeMxn">−@M(sample?.MarketplaceFeeMxn, "$217.50")</dd></div>
                     <div><dt>Retención (<span id="simTaxPct">@(sample?.TaxWithholdingPercent.ToString("0.#", mx) ?? "9")</span>%)</dt><dd id="simTaxMxn">−@M(sample?.TaxWithholdingMxn, "$135.00")</dd></div>
                 </dl>
@@ -174,6 +178,12 @@
 
 @section Scripts {
     <script>
+        document.querySelectorAll('[data-withholding]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                var field = document.getElementById('PlatformTaxWithholdingPercent');
+                if (field) { field.value = button.dataset.withholding; field.dispatchEvent(new Event('change')); }
+            });
+        });
         (function () {
             var input = document.getElementById('simUsdPrice');
             var money = function (v, digits) { return v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: digits, maximumFractionDigits: digits }); };

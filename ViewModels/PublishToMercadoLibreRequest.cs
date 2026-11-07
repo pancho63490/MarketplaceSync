@@ -49,7 +49,7 @@ namespace MarketplaceSync.Web.ViewModels
         public string Condition { get; set; } = "new";
 
         [Required(ErrorMessage = "El tipo de publicación es requerido.")]
-        public string ListingTypeId { get; set; } = "gold_special";
+        public string ListingTypeId { get; set; } = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DefaultListingTypeId;
 
         public string? ImageUrl { get; set; }
 

@@ -32,9 +32,9 @@ public sealed class CrossBorderPricingService : ICrossBorderPricingService
             AdditionalHandlingFeeUsd = 0.00m,
             TargetProfitMarginPercent = 25.00m,
             MinProfitAmountMxn = 150.00m,
-            EstimatedShippingMxn = 110.00m,
-            DefaultMarketplaceFeePercent = 14.50m,
-            PlatformTaxWithholdingPercent = 9.00m,
+            EstimatedShippingMxn = 122.50m,
+            DefaultMarketplaceFeePercent = 15.50m,
+            PlatformTaxWithholdingPercent = 31.03m,
             AutoPublishEnabled = false,
             UpdatedAt = DateTime.UtcNow
         };
