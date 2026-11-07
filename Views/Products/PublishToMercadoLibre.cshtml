@@ -476,6 +476,7 @@
                         <input type="hidden" asp-for="Attributes[i].Required" />
                         <input type="hidden" asp-for="Attributes[i].Conditional" />
                         <input type="hidden" asp-for="Attributes[i].Flagged" />
+                        <input type="hidden" asp-for="Attributes[i].AutoFilled" />
                         <input type="hidden" asp-for="Attributes[i].ValueType" />
 
                         <label class="form-label fw-semibold d-flex flex-wrap align-items-center gap-2" for="@(isGtin || attr.Values.Count == 0 ? $"Attributes_{i}__ValueName" : $"Attributes_{i}__ValueId")">
@@ -487,6 +488,10 @@
                             @if (attr.Flagged)
                             {
                                 <span class="pill pill-warn">Mercado Libre lo pidió</span>
+                            }
+                            @if (attr.AutoFilled)
+                            {
+                                <span class="pill pill-signal" title="Lo llenó la IA con los datos del producto. Revísalo.">IA</span>
                             }
                         </label>
 
@@ -506,6 +511,26 @@
                             {
                                 <input type="hidden" asp-for="GtinSource" />
                                 <div class="small mt-1"><span class="pill pill-ok">Encontrado</span> @Model.GtinSource</div>
+                            }
+                            @if (Model.GtinCandidates.Count > 0 && string.IsNullOrWhiteSpace(attr.ValueName))
+                            {
+                                <div class="ml-gtin-candidates mt-2">
+                                    <div class="small fw-semibold mb-1">Posibles códigos en internet (ninguno coincide del todo; elige solo si es tu producto exacto):</div>
+                                    @foreach (var candidate in Model.GtinCandidates)
+                                    {
+                                        <div class="ml-gtin-candidate">
+                                            @if (!string.IsNullOrWhiteSpace(candidate.ImageUrl))
+                                            {
+                                                <img src="@candidate.ImageUrl" alt="" loading="lazy" referrerpolicy="no-referrer" />
+                                            }
+                                            <div class="flex-grow-1 small">
+                                                <div>@candidate.Title</div>
+                                                <div class="text-muted">@candidate.Gtin@(string.IsNullOrWhiteSpace(candidate.Brand) ? "" : $" · {candidate.Brand}")</div>
+                                            </div>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" data-use-gtin="@candidate.Gtin">Usar</button>
+                                        </div>
+                                    }
+                                </div>
                             }
                             <div class="form-text">
                                 Son los números debajo de las barras (UPC de 12 dígitos o EAN de 13) en la lata, caja o empaque.
@@ -710,6 +735,17 @@
                 });
                 button.classList.add('selected');
                 categoryInput.focus();
+            });
+        });
+
+        document.querySelectorAll('[data-use-gtin]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                var field = document.querySelector('.ml-gtin');
+                if (!field) return;
+                field.value = button.dataset.useGtin;
+                field.dispatchEvent(new Event('input'));
+                var list = button.closest('.ml-gtin-candidates');
+                if (list) list.hidden = true;
             });
         });
 

@@ -17,7 +17,8 @@ public sealed record ListingPublishResult(
     string? ItemId,
     string? Permalink,
     string? Status,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    string? RawError = null);
 
 /// <summary>
 /// Llamadas a Mercado Libre para publicar: atributos obligatorios de una categoría,
@@ -321,7 +322,7 @@ public sealed class MercadoLibreListingClient
         using var response = await client.SendAsync(request, cancellationToken);
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
-            return new ListingPublishResult(false, existingItemId, null, null, DescribeError(content));
+            return new ListingPublishResult(false, existingItemId, null, null, DescribeError(content), content);
 
         using var document = JsonDocument.Parse(content);
         var root = document.RootElement;

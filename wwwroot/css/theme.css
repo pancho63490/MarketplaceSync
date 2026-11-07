@@ -2113,3 +2113,9 @@ body {
 .ml-attr-extra[open] > summary::before { transform: rotate(90deg); }
 .ml-gtin { font-variant-numeric: tabular-nums; letter-spacing: .04em; }
 .ml-gtin-camera { max-height: 240px; object-fit: cover; background: #000; }
+
+.ml-gtin-candidates { border: 1px solid var(--line); border-radius: 12px; padding: .6rem .75rem; background: var(--surface-2, transparent); }
+.ml-gtin-candidate { display: flex; align-items: center; gap: .6rem; padding: .4rem 0; border-top: 1px solid var(--line); }
+.ml-gtin-candidate:first-of-type { border-top: 0; }
+.ml-gtin-candidate img { width: 40px; height: 40px; object-fit: contain; border-radius: 8px; background: #fff; flex-shrink: 0; }
+.ml-gtin-candidate .flex-grow-1 { min-width: 0; overflow-wrap: anywhere; }

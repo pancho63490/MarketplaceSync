@@ -166,6 +166,8 @@ builder.Services.AddScoped<ProductExtractorService>();
 
 builder.Services.AddScoped<EbayApiService>();
 builder.Services.AddScoped<MarketplaceSync.Services.Products.SourceBarcodeService>();
+builder.Services.AddScoped<MarketplaceSync.Services.Products.BarcodeLookupService>();
+builder.Services.AddScoped<MarketplaceSync.Services.Products.AttributeAutoFillService>();
 
 builder.Services.AddScoped<MercadoLibreCategoryService>();
 

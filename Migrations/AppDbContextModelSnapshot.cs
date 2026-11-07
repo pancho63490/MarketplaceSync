@@ -1520,6 +1520,10 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<DateTime?>("SourceGtinCheckedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("SourceGtinOrigin")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
                     b.Property<string>("SourceMarketplace")
                         .IsRequired()
                         .HasMaxLength(100)

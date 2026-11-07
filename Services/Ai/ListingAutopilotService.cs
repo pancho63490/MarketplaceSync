@@ -216,6 +216,7 @@ public sealed class ListingAutopilotService : IListingAutopilotService
             var sourceBarcodes = _services.GetService<MarketplaceSync.Services.Products.SourceBarcodeService>();
             if (sourceBarcodes is not null)
                 barcode = await sourceBarcodes.EnsureAsync(product, cancellationToken);
+            barcode ??= await FindBarcodeOnlineAsync(product, cancellationToken);
         }
         if (barcode is not null && schema.Any(a => a.Id == MercadoLibreListingClient.GtinId))
             done.Add($"Código de barras {barcode} (del anuncio de origen o de la variante)");
@@ -362,7 +363,7 @@ public sealed class ListingAutopilotService : IListingAutopilotService
                 if (!string.IsNullOrWhiteSpace(sku) && attributes.All(a => a.Id != "SELLER_SKU"))
                     attributes.Add(new SavedAttributeValue("SELLER_SKU", null, sku));
 
-                var result = await _listingClient.PublishSimpleItemAsync(
+                Task<ListingPublishResult> PublishAsync() => _listingClient.PublishSimpleItemAsync(
                     accessToken,
                     publication.ExternalItemId,
                     product.Title!.Length > 60 ? product.Title[..60] : product.Title,
@@ -376,6 +377,19 @@ public sealed class ListingAutopilotService : IListingAutopilotService
                     product.Description,
                     cancellationToken);
 
+                var result = await PublishAsync();
+
+                // Mercado Libre pidió atributos que no venían en el esquema: se llenan y se reintenta una vez.
+                if (!result.Success && result.RawError is not null)
+                {
+                    var added = await FillRequestedAttributesAsync(product, publication.CategoryId!, accessToken, result.RawError, attributes, cancellationToken);
+                    if (added.Count > 0)
+                    {
+                        done.Add("Mercado Libre pidió más datos y los completé: " + string.Join(", ", added));
+                        result = await PublishAsync();
+                    }
+                }
+
                 if (result.Success)
                 {
                     published = true;
@@ -386,6 +400,7 @@ public sealed class ListingAutopilotService : IListingAutopilotService
                     publication.IsPublished = true;
                     publication.PublishedAt ??= DateTime.UtcNow;
                     publication.AutopilotNotes = "Publicado por el piloto automático.";
+                    publication.AttributesJson = JsonSerializer.Serialize(attributes.Where(a => a.Id != "SELLER_SKU"));
                     product.LastErrorMessage = null;
                     done.Add("Publicado en Mercado Libre");
                 }
@@ -421,6 +436,99 @@ public sealed class ListingAutopilotService : IListingAutopilotService
     }
 
     /// <summary>Elige la opción oficial si existe (value_id); si no, usa el texto como value_name.</summary>
+    /// <summary>
+    /// Busca el código en la base pública de códigos y lo usa solo si coincide marca, tamaño y piezas.
+    /// Se busca una vez por producto.
+    /// </summary>
+    private async Task<string?> FindBarcodeOnlineAsync(Product product, CancellationToken cancellationToken)
+    {
+        const string noMatch = "internet: sin coincidencia";
+        var lookup = _services.GetService<MarketplaceSync.Services.Products.BarcodeLookupService>();
+        var fill = _services.GetService<MarketplaceSync.Services.Products.AttributeAutoFillService>();
+        if (lookup is null || fill is null || product.SourceGtinOrigin == noMatch || !string.IsNullOrWhiteSpace(product.SourceGtin))
+            return product.SourceGtin;
+
+        var facts = new MarketplaceSync.Services.Products.ProductFacts(product.Title, product.Description, product.Brand, product.Model, product.SourceUrl);
+        var query = (await fill.FillAsync(facts, new List<MercadoLibreAttributeInput>(), true, null, cancellationToken)).BarcodeQuery;
+        var best = (await lookup.SearchAsync(query, product.Brand, cancellationToken)).FirstOrDefault(c => c.Strong);
+        if (best is null)
+        {
+            product.SourceGtinOrigin = noMatch;
+            return null;
+        }
+
+        product.SourceGtin = best.Gtin;
+        product.SourceGtinOrigin = MarketplaceSync.Services.Products.BarcodeLookupService.OriginName;
+        product.SourceGtinCheckedAt = DateTime.UtcNow;
+        return best.Gtin;
+    }
+
+    /// <summary>
+    /// Lee qué atributos reclamó Mercado Libre, los pide al esquema, los llena (IA o código real) y los agrega.
+    /// Regresa "Nombre = valor" de lo agregado; vacío si no se pudo llenar todo lo que pidió.
+    /// </summary>
+    private async Task<List<string>> FillRequestedAttributesAsync(
+        Product product,
+        string categoryId,
+        string accessToken,
+        string rawError,
+        List<SavedAttributeValue> attributes,
+        CancellationToken cancellationToken)
+    {
+        var added = new List<string>();
+        var requested = MercadoLibreListingClient.ParseMissingAttributes(rawError);
+        if (!requested.Any)
+            return added;
+
+        List<MercadoLibreAttributeInput> schema;
+        try
+        {
+            schema = await _listingClient.GetRequiredAttributesAsync(categoryId, accessToken, cancellationToken, requested.All);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(exception, "Autopilot could not reload attributes for {CategoryId}.", categoryId);
+            return added;
+        }
+
+        var names = requested.Names.Select(MercadoLibreListingClient.NormalizeName).ToHashSet();
+        var asked = schema
+            .Where(a => requested.Ids.Contains(a.Id, StringComparer.OrdinalIgnoreCase) || names.Contains(MercadoLibreListingClient.NormalizeName(a.Name)))
+            .Where(a => attributes.All(x => !x.Id.Equals(a.Id, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        if (asked.Count == 0)
+            return added;
+
+        var gtin = asked.FirstOrDefault(a => a.Id == MercadoLibreListingClient.GtinId);
+        if (gtin is not null)
+        {
+            var code = await FindBarcodeOnlineAsync(product, cancellationToken);
+            if (code is null)
+                return added; // sin código real no se inventa: queda para que el vendedor lo escanee
+            gtin.ValueName = code;
+        }
+
+        var fill = _services.GetService<MarketplaceSync.Services.Products.AttributeAutoFillService>();
+        if (fill is not null)
+        {
+            var facts = new MarketplaceSync.Services.Products.ProductFacts(product.Title, product.Description, product.Brand, product.Model, product.SourceUrl);
+            await fill.FillAsync(facts, asked, false, null, cancellationToken);
+        }
+
+        var unresolved = asked.Where(a => a.Id != MercadoLibreListingClient.EmptyGtinReasonId &&
+                                          string.IsNullOrWhiteSpace(a.ValueId) && string.IsNullOrWhiteSpace(a.ValueName)).ToList();
+        if (unresolved.Count > 0)
+            return added;
+
+        foreach (var attribute in asked.Where(a => !string.IsNullOrWhiteSpace(a.ValueId) || !string.IsNullOrWhiteSpace(a.ValueName)))
+        {
+            var isName = attribute.ValueId?.StartsWith("name:", StringComparison.Ordinal) == true;
+            attributes.Add(new SavedAttributeValue(attribute.Id, isName ? null : attribute.ValueId, isName ? attribute.ValueId![5..] : attribute.ValueName));
+            added.Add($"{(attribute.Id == MercadoLibreListingClient.GtinId ? "código de barras" : attribute.Name)} = {attribute.ValueName}");
+        }
+        return added;
+    }
+
     private static SavedAttributeValue? ResolveAttribute(MercadoLibreAttributeInput attribute, string? value)
     {
         if (string.IsNullOrWhiteSpace(value))

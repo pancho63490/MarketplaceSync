@@ -169,6 +169,8 @@ public ProductsController(
     MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient listingClient,
     MarketplaceSync.Services.Ai.ProductTitleTranslator titleTranslator,
     MarketplaceSync.Services.Products.SourceBarcodeService sourceBarcodes,
+    MarketplaceSync.Services.Products.AttributeAutoFillService autoFill,
+    MarketplaceSync.Services.Products.BarcodeLookupService barcodeLookup,
     ILogger<ProductsController> logger
 )
 {
@@ -187,7 +189,12 @@ public ProductsController(
     _listingClient = listingClient;
     _logger = logger;
     _sourceBarcodes = sourceBarcodes;
+    _autoFill = autoFill;
+    _barcodeLookup = barcodeLookup;
 }
+
+private readonly MarketplaceSync.Services.Products.AttributeAutoFillService _autoFill;
+private readonly MarketplaceSync.Services.Products.BarcodeLookupService _barcodeLookup;
 
 private readonly MarketplaceSync.Services.Products.SourceBarcodeService _sourceBarcodes;
         
@@ -208,14 +215,36 @@ private readonly MarketplaceSync.Services.Products.SourceBarcodeService _sourceB
 }
 
 /// <summary>
-/// Prellena el GTIN con un código real: el de una variante o el del anuncio de origen (eBay/Walmart).
-/// Nunca se genera uno.
+/// Completa solo lo que se puede: atributos que la IA deduce con seguridad y el código de barras real
+/// (variante → anuncio de origen → base pública de códigos, solo si coincide). <paramref name="onlyIds"/> limita los atributos.
 /// </summary>
-private async Task PrefillGtinAsync(PublishToMercadoLibreRequest request, Product product, Guid organizationId)
+private async Task AutoCompleteAsync(
+    PublishToMercadoLibreRequest request,
+    Product product,
+    Guid organizationId,
+    IReadOnlyCollection<string>? onlyIds = null)
+{
+    var needsBarcode = await PrefillGtinAsync(request, product, organizationId);
+    var facts = new MarketplaceSync.Services.Products.ProductFacts(
+        string.IsNullOrWhiteSpace(request.Title) ? product.Title : request.Title,
+        product.Description,
+        string.IsNullOrWhiteSpace(request.Brand) ? product.Brand : request.Brand,
+        string.IsNullOrWhiteSpace(request.Model) ? product.Model : request.Model,
+        product.SourceUrl);
+    var fill = await _autoFill.FillAsync(facts, request.Attributes, needsBarcode, onlyIds);
+    if (needsBarcode)
+        await PrefillGtinFromInternetAsync(request, product, facts.Brand, fill.BarcodeQuery);
+}
+
+/// <summary>
+/// Prellena el GTIN con un código real: el de una variante o el del anuncio de origen (eBay/Walmart, o uno
+/// encontrado antes en internet). Nunca se genera uno. Regresa true si el campo existe y sigue vacío.
+/// </summary>
+private async Task<bool> PrefillGtinAsync(PublishToMercadoLibreRequest request, Product product, Guid organizationId)
 {
     var gtin = request.Attributes.FirstOrDefault(a => a.Id == MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId);
     if (gtin is null || !string.IsNullOrWhiteSpace(gtin.ValueName) || !string.IsNullOrWhiteSpace(gtin.ValueId))
-        return;
+        return false;
 
     var barcodes = await _context.ProductVariants
         .AsNoTracking()
@@ -228,7 +257,7 @@ private async Task PrefillGtinAsync(PublishToMercadoLibreRequest request, Produc
         {
             gtin.ValueName = digits;
             request.GtinSource = "Tomado del código de barras de tu inventario.";
-            return;
+            return false;
         }
     }
 
@@ -236,11 +265,46 @@ private async Task PrefillGtinAsync(PublishToMercadoLibreRequest request, Produc
     var fromSource = await _sourceBarcodes.EnsureAsync(product);
     if (product.SourceGtinCheckedAt != checkedBefore)
         await _context.SaveChangesAsync();
-    if (fromSource is not null)
+    if (fromSource is null)
+        return true;
+
+    gtin.ValueName = fromSource;
+    request.GtinSource = product.SourceGtinOrigin == MarketplaceSync.Services.Products.BarcodeLookupService.OriginName
+        ? "Encontrado en internet (UPCitemdb). Revisa que coincida con la etiqueta antes de publicar."
+        : $"Tomado del anuncio de {(product.SourceGtinOrigin ?? (string.IsNullOrWhiteSpace(product.SourceMarketplace) ? "origen" : product.SourceMarketplace))}. Revisa que coincida con la etiqueta.";
+    return false;
+}
+
+/// <summary>
+/// Busca el código en la base pública de códigos. Solo lo pone si coincide marca, tamaño y piezas;
+/// si no, deja los candidatos para que el vendedor elija. Se busca una vez por producto.
+/// </summary>
+private async Task PrefillGtinFromInternetAsync(PublishToMercadoLibreRequest request, Product product, string? brand, string? query)
+{
+    const string noMatch = "internet: sin coincidencia";
+    if (product.SourceGtinOrigin == noMatch || string.IsNullOrWhiteSpace(query))
+        return;
+    var gtin = request.Attributes.FirstOrDefault(a => a.Id == MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId);
+    if (gtin is null)
+        return;
+
+    var candidates = await _barcodeLookup.SearchAsync(query, brand);
+    var best = candidates.FirstOrDefault(c => c.Strong);
+    if (best is not null)
     {
-        gtin.ValueName = fromSource;
-        request.GtinSource = $"Tomado del anuncio de {(string.IsNullOrWhiteSpace(product.SourceMarketplace) ? "origen" : product.SourceMarketplace)}. Revisa que coincida con la etiqueta.";
+        gtin.ValueName = best.Gtin;
+        product.SourceGtin = best.Gtin;
+        product.SourceGtinOrigin = MarketplaceSync.Services.Products.BarcodeLookupService.OriginName;
+        product.SourceGtinCheckedAt = DateTime.UtcNow;
+        request.GtinSource = $"Encontrado en internet (UPCitemdb): “{best.Title}”. Revisa que coincida con la etiqueta antes de publicar.";
     }
+    else
+    {
+        request.GtinCandidates = candidates;
+        if (candidates.Count == 0)
+            product.SourceGtinOrigin = noMatch;
+    }
+    await _context.SaveChangesAsync();
 }
 
 private static void ApplySavedAttributes(PublishToMercadoLibreRequest request, string? attributesJson)
@@ -318,7 +382,7 @@ public async Task<IActionResult> LoadMercadoLibreAttributes(PublishToMercadoLibr
         var productForGtin = await _context.Products
             .FirstOrDefaultAsync(x => x.Id == request.ProductId && x.OrganizationId == organizationId);
         if (productForGtin is not null)
-            await PrefillGtinAsync(request, productForGtin, organizationId);
+            await AutoCompleteAsync(request, productForGtin, organizationId);
         if (!request.Attributes.Any())
             TempData["Success"] = "La categoría es válida y no reportó atributos obligatorios adicionales.";
     }
@@ -443,7 +507,7 @@ public async Task<IActionResult> RefreshProduct(int id)
 
         product.SourceMarketplace = extracted.SourceMarketplace ?? product.SourceMarketplace;
         product.SourceProductId = extracted.SourceProductId ?? product.SourceProductId;
-        if (extracted.Gtin is not null) { product.SourceGtin = extracted.Gtin; product.SourceGtinCheckedAt = DateTime.UtcNow; }
+        if (extracted.Gtin is not null) { product.SourceGtin = extracted.Gtin; product.SourceGtinOrigin = extracted.SourceMarketplace; product.SourceGtinCheckedAt = DateTime.UtcNow; }
 
         // No pisa títulos editados o generados con IA: solo se completa si está vacío.
         if (string.IsNullOrWhiteSpace(product.Title)) product.Title = extracted.Title;
@@ -500,7 +564,7 @@ public async Task<IActionResult> RefreshSource(int id)
 
         product.SourceMarketplace = extracted.SourceMarketplace ?? product.SourceMarketplace;
         product.SourceProductId = extracted.SourceProductId ?? product.SourceProductId;
-        if (extracted.Gtin is not null) { product.SourceGtin = extracted.Gtin; product.SourceGtinCheckedAt = DateTime.UtcNow; }
+        if (extracted.Gtin is not null) { product.SourceGtin = extracted.Gtin; product.SourceGtinOrigin = extracted.SourceMarketplace; product.SourceGtinCheckedAt = DateTime.UtcNow; }
 
         // No pisa títulos editados o generados con IA: solo se completa si está vacío.
         if (string.IsNullOrWhiteSpace(product.Title)) product.Title = extracted.Title;
@@ -590,7 +654,7 @@ public async Task<IActionResult> RefreshAllSourceInfo()
 
             product.SourceMarketplace = extracted.SourceMarketplace ?? product.SourceMarketplace;
             product.SourceProductId = extracted.SourceProductId ?? product.SourceProductId;
-            if (extracted.Gtin is not null) { product.SourceGtin = extracted.Gtin; product.SourceGtinCheckedAt = DateTime.UtcNow; }
+            if (extracted.Gtin is not null) { product.SourceGtin = extracted.Gtin; product.SourceGtinOrigin = extracted.SourceMarketplace; product.SourceGtinCheckedAt = DateTime.UtcNow; }
 
             // No pisa títulos editados o generados con IA: solo se completa si está vacío.
         if (string.IsNullOrWhiteSpace(product.Title)) product.Title = extracted.Title;
@@ -762,7 +826,7 @@ var product = await _context.Products
             model.AttributesLoaded = true;
             PrefillKnownAttributes(model);
             ApplySavedAttributes(model, publication?.AttributesJson);
-            await PrefillGtinAsync(model, product, organizationId);
+            await AutoCompleteAsync(model, product, organizationId);
         }
         catch (Exception exception)
         {
@@ -897,80 +961,106 @@ var token = await _context.MercadoLibreTokens
         return View(input);
     }
 
-    var payload = new Dictionary<string, object?>
+    Dictionary<string, object?> BuildPayload()
     {
-        ["title"] = input.Title,
-        ["category_id"] = input.CategoryId,
-        ["currency_id"] = input.CurrencyId,
-        ["buying_mode"] = "buy_it_now",
-        ["condition"] = input.Condition,
-        ["listing_type_id"] = input.ListingTypeId,
-        ["pictures"] = string.IsNullOrWhiteSpace(input.ImageUrl)
-            ? Array.Empty<object>()
-            : new object[] { new { source = input.ImageUrl } },
-        ["attributes"] = BuildMercadoLibreAttributes(input)
-    };
-
-    if (variants.Count > 0)
-    {
-        var variantLinksById = publicationVariantLinks.ToDictionary(x => x.ProductVariantId);
-        payload["variations"] = variants.Select(variant =>
+        var payload = new Dictionary<string, object?>
         {
-            var variation = new Dictionary<string, object?>
+            ["title"] = input.Title,
+            ["category_id"] = input.CategoryId,
+            ["currency_id"] = input.CurrencyId,
+            ["buying_mode"] = "buy_it_now",
+            ["condition"] = input.Condition,
+            ["listing_type_id"] = input.ListingTypeId,
+            ["pictures"] = string.IsNullOrWhiteSpace(input.ImageUrl)
+                ? Array.Empty<object>()
+                : new object[] { new { source = input.ImageUrl } },
+            ["attributes"] = BuildMercadoLibreAttributes(input)
+        };
+
+        if (variants.Count > 0)
+        {
+            var variantLinksById = publicationVariantLinks.ToDictionary(x => x.ProductVariantId);
+            payload["variations"] = variants.Select(variant =>
             {
-                ["attribute_combinations"] = JsonSerializer
-                    .Deserialize<Dictionary<string, string>>(variant.AttributesJson)!
-                    .Select(attribute => new
-                    {
-                        id = attribute.Key,
-                        name = attribute.Key,
-                        value_name = attribute.Value
-                    })
-                    .ToArray(),
-                ["price"] = variant.Price ?? input.Price,
-                ["available_quantity"] = variant.Stock,
-                ["seller_custom_field"] = variant.Sku
-            };
+                var variation = new Dictionary<string, object?>
+                {
+                    ["attribute_combinations"] = JsonSerializer
+                        .Deserialize<Dictionary<string, string>>(variant.AttributesJson)!
+                        .Select(attribute => new
+                        {
+                            id = attribute.Key,
+                            name = attribute.Key,
+                            value_name = attribute.Value
+                        })
+                        .ToArray(),
+                    ["price"] = variant.Price ?? input.Price,
+                    ["available_quantity"] = variant.Stock,
+                    ["seller_custom_field"] = variant.Sku
+                };
 
-            if (variantLinksById.TryGetValue(variant.Id, out var link) &&
-                long.TryParse(link.ExternalVariationId, out var externalVariationId))
-                variation["id"] = externalVariationId;
+                if (variantLinksById.TryGetValue(variant.Id, out var link) &&
+                    long.TryParse(link.ExternalVariationId, out var externalVariationId))
+                    variation["id"] = externalVariationId;
 
-            return variation;
-        }).ToArray();
-    }
-    else
-    {
-        payload["price"] = input.Price;
-        payload["available_quantity"] = input.Stock;
+                return variation;
+            }).ToArray();
+        }
+        else
+        {
+            payload["price"] = input.Price;
+            payload["available_quantity"] = input.Stock;
+        }
+        return payload;
     }
 
     var client = _httpClientFactory.CreateClient();
     var targetUrl = updatingExistingItem
         ? $"{_listingClient.ApiBase}/items/{Uri.EscapeDataString(publication!.ExternalItemId!)}"
         : $"{_listingClient.ApiBase}/items";
+    var content = string.Empty;
+    var autoFilledByRetry = new List<string>();
 
-    using var request = new HttpRequestMessage(
-        updatingExistingItem ? HttpMethod.Put : HttpMethod.Post,
-        targetUrl);
-    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
-
-    request.Content = new StringContent(
-        JsonSerializer.Serialize(payload),
-        Encoding.UTF8,
-        "application/json"
-    );
-
-    using var response = await client.SendAsync(request);
-    var content = await response.Content.ReadAsStringAsync();
-
-    if (!response.IsSuccessStatusCode)
+    // Si Mercado Libre rechaza por atributos que faltan, se llenan con IA y se reintenta una vez.
+    for (var attempt = 1; ; attempt++)
     {
-        _logger.LogWarning("Mercado Libre rejected product {ProductId} in {CategoryId} ({ListingType}): {Body}",
-            product.Id, input.CategoryId, input.ListingTypeId, content.Length > 2000 ? content[..2000] : content);
+        using var request = new HttpRequestMessage(
+            updatingExistingItem ? HttpMethod.Put : HttpMethod.Post,
+            targetUrl);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
+        request.Content = new StringContent(JsonSerializer.Serialize(BuildPayload()), Encoding.UTF8, "application/json");
+
+        using var response = await client.SendAsync(request);
+        content = await response.Content.ReadAsStringAsync();
+        if (response.IsSuccessStatusCode)
+            break;
+
+        _logger.LogWarning("Mercado Libre rejected product {ProductId} in {CategoryId} ({ListingType}), attempt {Attempt}: {Body}",
+            product.Id, input.CategoryId, input.ListingTypeId, attempt, content.Length > 2000 ? content[..2000] : content);
+        var missing = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.ParseMissingAttributes(content);
+
+        if (attempt == 1 && missing.Any)
+        {
+            await RepopulateMercadoLibreAttributeOptionsAsync(input, missing.All);
+            FlagMissingAttributes(input, missing);
+            var askedIds = input.Attributes.Where(a => a.Flagged).Select(a => a.Id).ToList();
+            await AutoCompleteAsync(input, product, organizationId, askedIds);
+            var reasonChosen = input.Attributes.Any(a =>
+                a.Id == MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.EmptyGtinReasonId &&
+                (!string.IsNullOrWhiteSpace(a.ValueId) || !string.IsNullOrWhiteSpace(a.ValueName)));
+            var stillMissing = input.Attributes.Any(a => a.Flagged &&
+                string.IsNullOrWhiteSpace(a.ValueId) && string.IsNullOrWhiteSpace(a.ValueName) &&
+                !(a.Id == MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId && reasonChosen));
+            if (!stillMissing)
+            {
+                autoFilledByRetry.AddRange(input.Attributes
+                    .Where(a => a.Flagged)
+                    .Select(a => $"{(a.Id == MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId ? "código de barras" : a.Name)} = {a.ValueName ?? a.ValueId}"));
+                continue;
+            }
+        }
+
         input.MercadoLibreRawError = content.Length > 4000 ? content[..4000] : content;
         // Lo que Mercado Libre reclamó se agrega al formulario y se marca para que se vea qué llenar.
-        var missing = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.ParseMissingAttributes(content);
         await PopulateMarketplaceAccountsAsync(input, organizationId);
         await RepopulateMercadoLibreAttributeOptionsAsync(input, missing.All);
         var flagged = FlagMissingAttributes(input, missing);
@@ -1075,9 +1165,10 @@ var token = await _context.MercadoLibreTokens
     }
 
     await _context.SaveChangesAsync();
-    TempData["Success"] = updatingExistingItem
+    TempData["Success"] = (updatingExistingItem
         ? "Publicación actualizada en Mercado Libre."
-        : "Publicado en Mercado Libre.";
+        : "Publicado en Mercado Libre.") +
+        (autoFilledByRetry.Count > 0 ? " Mercado Libre pidió más datos y los completé sola: " + string.Join(", ", autoFilledByRetry) + "." : "");
     return RedirectToAction(nameof(Details), new { id = product.Id });
 }
 private static object[] BuildMercadoLibreAttributes(PublishToMercadoLibreRequest model)
@@ -1769,6 +1860,7 @@ public async Task<IActionResult> CreateFromUrl(CreateProductFromUrlViewModel mod
         Brand = extracted.Brand,
         Model = extracted.Model,
         SourceGtin = extracted.Gtin,
+        SourceGtinOrigin = extracted.Gtin is null ? null : extracted.SourceMarketplace,
         SourceGtinCheckedAt = MarketplaceSync.Services.Products.SourceBarcodeService.WasRead(extracted) ? DateTime.UtcNow : null,
 
         SourceStatus = extracted.SourceStatus,

@@ -18,6 +18,9 @@ namespace MarketplaceSync.Web.ViewModels
         /// <summary>Respuesta original de Mercado Libre al rechazar (se muestra plegada).</summary>
         public string? MercadoLibreRawError { get; set; }
 
+        /// <summary>Códigos de barras posibles encontrados en internet cuando ninguno coincidió del todo.</summary>
+        public List<MarketplaceSync.Services.Products.BarcodeCandidate> GtinCandidates { get; set; } = new();
+
         public int ProductId { get; set; }
 
         [Required(ErrorMessage = "Selecciona la cuenta de Mercado Libre.")]
@@ -93,6 +96,9 @@ namespace MarketplaceSync.Web.ViewModels
 
         /// <summary>Mercado Libre lo pidió al rechazar la publicación.</summary>
         public bool Flagged { get; set; }
+
+        /// <summary>Lo llenó la IA (se muestra para que el vendedor lo revise).</summary>
+        public bool AutoFilled { get; set; }
 
         public string? ValueType { get; set; }
 

@@ -45,6 +45,7 @@ public sealed class SourceBarcodeService
             cancellationToken.ThrowIfCancellationRequested();
             var item = await _ebay.GetItemByLegacyIdAsync(legacyId, product.SourceUrl);
             product.SourceGtin = item.Gtin;
+            product.SourceGtinOrigin = item.Gtin is null ? null : "eBay";
             product.SourceGtinCheckedAt = DateTime.UtcNow;
             return item.Gtin;
         }

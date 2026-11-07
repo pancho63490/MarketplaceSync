@@ -167,6 +167,7 @@ public sealed partial class TelegramNotificationService
                 SourceMarketplace = extracted.SourceMarketplace ?? "UNKNOWN",
                 SourceProductId = extracted.SourceProductId,
                 SourceGtin = extracted.Gtin,
+                SourceGtinOrigin = extracted.Gtin is null ? null : extracted.SourceMarketplace,
                 SourceGtinCheckedAt = MarketplaceSync.Services.Products.SourceBarcodeService.WasRead(extracted) ? DateTime.UtcNow : null,
                 Title = await _titleTranslator.ToSpanishAsync(extracted.Title, cancellationToken),
                 Description = extracted.Description,

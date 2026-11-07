@@ -43,6 +43,10 @@ namespace MarketplaceSync.Web.Models
         /// <summary>Cuándo se buscó el código en el anuncio de origen (aunque no lo trajera).</summary>
         public DateTime? SourceGtinCheckedAt { get; set; }
 
+        /// <summary>De dónde salió <see cref="SourceGtin"/>: eBay, Walmart o internet (UPCitemdb).</summary>
+        [MaxLength(80)]
+        public string? SourceGtinOrigin { get; set; }
+
         [MaxLength(300)]
         public string? Title { get; set; }
 
