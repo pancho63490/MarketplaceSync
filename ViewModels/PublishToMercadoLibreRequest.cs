@@ -76,6 +76,12 @@ namespace MarketplaceSync.Web.ViewModels
 
         public bool Required { get; set; }
 
+        /// <summary>Mercado Libre puede pedirlo según el producto (conditional_required / catalog_required).</summary>
+        public bool Conditional { get; set; }
+
+        /// <summary>Mercado Libre lo pidió al rechazar la publicación.</summary>
+        public bool Flagged { get; set; }
+
         public string? ValueType { get; set; }
 
         public string? ValueId { get; set; }

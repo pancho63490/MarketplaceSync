@@ -136,7 +136,8 @@ public ProductsController(
         
         private async Task<List<MercadoLibreAttributeInput>> GetRequiredAttributesAsync(
             string categoryId,
-            int? marketplaceAccountId)
+            int? marketplaceAccountId,
+            IEnumerable<string>? alsoInclude = null)
 {
     var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync();
     var token = await _context.MercadoLibreTokens
@@ -146,7 +147,29 @@ public ProductsController(
         .OrderByDescending(x => x.CreatedAt)
         .FirstOrDefaultAsync();
 
-    return await _listingClient.GetRequiredAttributesAsync(categoryId, token?.AccessToken);
+    return await _listingClient.GetRequiredAttributesAsync(categoryId, token?.AccessToken, alsoInclude: alsoInclude);
+}
+
+/// <summary>Si el producto tiene un código de barras válido en su variante, lo usa como GTIN.</summary>
+private async Task PrefillGtinFromBarcodeAsync(PublishToMercadoLibreRequest request, int productId, Guid organizationId)
+{
+    var gtin = request.Attributes.FirstOrDefault(a => a.Id == MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId);
+    if (gtin is null || !string.IsNullOrWhiteSpace(gtin.ValueName) || !string.IsNullOrWhiteSpace(gtin.ValueId))
+        return;
+
+    var barcodes = await _context.ProductVariants
+        .AsNoTracking()
+        .Where(v => v.ProductId == productId && v.OrganizationId == organizationId && v.IsActive && v.Barcode != null)
+        .Select(v => v.Barcode!)
+        .ToListAsync();
+    foreach (var barcode in barcodes)
+    {
+        if (MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.ValidateGtin(barcode, out var digits) is null)
+        {
+            gtin.ValueName = digits;
+            return;
+        }
+    }
 }
 
 private static void ApplySavedAttributes(PublishToMercadoLibreRequest request, string? attributesJson)
@@ -655,6 +678,7 @@ var product = await _context.Products
             model.AttributesLoaded = true;
             PrefillKnownAttributes(model);
             ApplySavedAttributes(model, publication?.AttributesJson);
+            await PrefillGtinFromBarcodeAsync(model, product.Id, organizationId);
         }
         catch (Exception exception)
         {
@@ -839,8 +863,8 @@ var token = await _context.MercadoLibreTokens
 
     var client = _httpClientFactory.CreateClient();
     var targetUrl = updatingExistingItem
-        ? $"https://api.mercadolibre.com/items/{Uri.EscapeDataString(publication!.ExternalItemId!)}"
-        : "https://api.mercadolibre.com/items";
+        ? $"{_listingClient.ApiBase}/items/{Uri.EscapeDataString(publication!.ExternalItemId!)}"
+        : $"{_listingClient.ApiBase}/items";
 
     using var request = new HttpRequestMessage(
         updatingExistingItem ? HttpMethod.Put : HttpMethod.Post,
@@ -858,10 +882,18 @@ var token = await _context.MercadoLibreTokens
 
     if (!response.IsSuccessStatusCode)
     {
-        input.ErrorMessage = "Mercado Libre rechazó la publicación: " +
-            MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DescribeError(content);
+        // Lo que Mercado Libre reclamó se agrega al formulario y se marca para que se vea qué llenar.
+        var missing = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.ParseMissingAttributes(content);
         await PopulateMarketplaceAccountsAsync(input, organizationId);
-        await RepopulateMercadoLibreAttributeOptionsAsync(input);
+        await RepopulateMercadoLibreAttributeOptionsAsync(input, missing.All);
+        var flagged = FlagMissingAttributes(input, missing);
+        input.ErrorMessage = "Mercado Libre rechazó la publicación: " +
+            MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.DescribeError(
+                content,
+                input.Attributes.GroupBy(a => a.Id).ToDictionary(g => g.Key, g => g.First().Name, StringComparer.OrdinalIgnoreCase));
+        ModelState.Clear();
+        foreach (var index in flagged)
+            ModelState.AddModelError($"Attributes[{index}].ValueName", "Mercado Libre pide este dato para publicar.");
         return View(input);
     }
 
@@ -897,6 +929,11 @@ var token = await _context.MercadoLibreTokens
             x.ValueId?.StartsWith("name:", StringComparison.Ordinal) == true ? null : x.ValueId,
             x.ValueId?.StartsWith("name:", StringComparison.Ordinal) == true ? x.ValueId[5..] : x.ValueName)));
     product.Status = "ReadyToPublish";
+
+    // El código de barras capturado aquí se guarda en la única variante si aún no tenía.
+    var publishedGtin = input.Attributes.FirstOrDefault(a => a.Id == MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId)?.ValueName;
+    if (!string.IsNullOrWhiteSpace(publishedGtin) && variants.Count == 1 && string.IsNullOrWhiteSpace(variants[0].Barcode))
+        variants[0].Barcode = publishedGtin;
 
     await _context.SaveChangesAsync();
 
@@ -959,10 +996,16 @@ var token = await _context.MercadoLibreTokens
 private static object[] BuildMercadoLibreAttributes(PublishToMercadoLibreRequest model)
 {
     var attributes = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+    var hasGtin = model.Attributes.Any(a =>
+        a.Id == MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId &&
+        !string.IsNullOrWhiteSpace(a.ValueName));
 
     foreach (var attribute in model.Attributes)
     {
         if (string.IsNullOrWhiteSpace(attribute.Id))
+            continue;
+        // Con código de barras no se manda el motivo de "no tiene".
+        if (hasGtin && attribute.Id == MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.EmptyGtinReasonId)
             continue;
 
         var selectedOption = attribute.Values.FirstOrDefault(option =>
@@ -1018,15 +1061,24 @@ private static object[] BuildMercadoLibreAttributes(PublishToMercadoLibreRequest
     return attributes.Values.ToArray();
 }
 
-private async Task RepopulateMercadoLibreAttributeOptionsAsync(PublishToMercadoLibreRequest model)
+private async Task RepopulateMercadoLibreAttributeOptionsAsync(
+    PublishToMercadoLibreRequest model,
+    IEnumerable<string>? alsoInclude = null)
 {
     if (string.IsNullOrWhiteSpace(model.CategoryId))
         return;
 
     try
     {
-        var submittedAttributes = model.Attributes.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
-        var refreshedAttributes = await GetRequiredAttributesAsync(model.CategoryId, model.MarketplaceAccountId);
+        var submittedAttributes = model.Attributes
+            .Where(x => !string.IsNullOrWhiteSpace(x.Id))
+            .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        // Se piden también los que ya estaban en el formulario para no perder lo que Mercado Libre reclamó antes.
+        var refreshedAttributes = await GetRequiredAttributesAsync(
+            model.CategoryId,
+            model.MarketplaceAccountId,
+            submittedAttributes.Keys.Concat(alsoInclude ?? Array.Empty<string>()));
 
         foreach (var refreshedAttribute in refreshedAttributes)
         {
@@ -1035,7 +1087,19 @@ private async Task RepopulateMercadoLibreAttributeOptionsAsync(PublishToMercadoL
 
             refreshedAttribute.ValueId = submittedAttribute.ValueId;
             refreshedAttribute.ValueName = submittedAttribute.ValueName;
+            if (submittedAttribute.Flagged)
+            {
+                refreshedAttribute.Flagged = true;
+                refreshedAttribute.Required = true;
+                refreshedAttribute.Conditional = false;
+            }
         }
+
+        // Un GTIN que Mercado Libre pidió pero que la categoría no trae en su esquema se conserva.
+        var gtinId = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId;
+        if (refreshedAttributes.All(a => a.Id != gtinId) &&
+            submittedAttributes.TryGetValue(gtinId, out var submittedGtin) && submittedGtin.Flagged)
+            refreshedAttributes.Insert(0, submittedGtin);
 
         model.Attributes = refreshedAttributes;
         model.AttributesLoaded = true;
@@ -1046,11 +1110,95 @@ private async Task RepopulateMercadoLibreAttributeOptionsAsync(PublishToMercadoL
     }
 }
 
-private void ValidateRequiredMercadoLibreAttributes(PublishToMercadoLibreRequest model)
+/// <summary>Marca como obligatorios los atributos que Mercado Libre reclamó. Regresa sus posiciones.</summary>
+private static List<int> FlagMissingAttributes(
+    PublishToMercadoLibreRequest model,
+    MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.MissingAttributes missing)
 {
+    var flagged = new List<int>();
+    if (!missing.Any)
+        return flagged;
+
+    var ids = missing.Ids.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var names = missing.Names
+        .Select(MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.NormalizeName)
+        .ToHashSet();
+
+    // Si pidió el GTIN y la categoría no lo trae en el esquema, se agrega a mano.
+    if (ids.Contains(MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId) &&
+        model.Attributes.All(a => a.Id != MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId))
+    {
+        model.Attributes.Insert(0, new MercadoLibreAttributeInput
+        {
+            Id = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId,
+            Name = "Código universal de producto",
+            ValueType = "string"
+        });
+    }
+
     for (var index = 0; index < model.Attributes.Count; index++)
     {
         var attribute = model.Attributes[index];
+        var asked = ids.Contains(attribute.Id) ||
+                    names.Contains(MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.NormalizeName(attribute.Name));
+        if (!asked)
+            continue;
+
+        attribute.Flagged = true;
+        attribute.Required = true;
+        attribute.Conditional = false;
+        if (string.IsNullOrWhiteSpace(attribute.ValueId) && string.IsNullOrWhiteSpace(attribute.ValueName))
+            flagged.Add(index);
+    }
+
+    // Con el GTIN reclamado, la razón de "no tiene" cuenta como respuesta.
+    var gtinIndex = model.Attributes.FindIndex(a => a.Id == MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId);
+    var hasReason = model.Attributes.Any(a =>
+        a.Id == MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.EmptyGtinReasonId &&
+        (!string.IsNullOrWhiteSpace(a.ValueId) || !string.IsNullOrWhiteSpace(a.ValueName)));
+    if (gtinIndex >= 0 && hasReason)
+        flagged.Remove(gtinIndex);
+
+    return flagged;
+}
+
+private void ValidateRequiredMercadoLibreAttributes(PublishToMercadoLibreRequest model)
+{
+    const string gtinId = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId;
+    const string reasonId = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.EmptyGtinReasonId;
+    static bool Filled(MercadoLibreAttributeInput a) =>
+        !string.IsNullOrWhiteSpace(a.ValueId) || !string.IsNullOrWhiteSpace(a.ValueName);
+
+    var reason = model.Attributes.FirstOrDefault(a => a.Id == reasonId);
+    for (var index = 0; index < model.Attributes.Count; index++)
+    {
+        var attribute = model.Attributes[index];
+
+        if (attribute.Id == gtinId)
+        {
+            if (Filled(attribute))
+            {
+                // Nunca se publica un código inventado o mal copiado: se revisa el dígito verificador.
+                var problem = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.ValidateGtin(attribute.ValueName, out var digits);
+                if (problem is not null)
+                    ModelState.AddModelError($"Attributes[{index}].ValueName", problem);
+                else
+                    attribute.ValueName = digits;
+            }
+            else if (attribute.Required && (reason is null || !Filled(reason)))
+            {
+                ModelState.AddModelError(
+                    $"Attributes[{index}].ValueName",
+                    reason is null
+                        ? "Escanea o escribe el código de barras del producto."
+                        : "Escanea o escribe el código de barras, o abajo elige por qué no tiene.");
+            }
+            continue;
+        }
+
+        if (attribute.Id == reasonId)
+            continue;
+
         if (!attribute.Required)
             continue;
 

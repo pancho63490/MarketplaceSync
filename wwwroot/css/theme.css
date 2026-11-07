@@ -2103,3 +2103,13 @@ body {
 .kpi-chart > :not(.kpi-spark) { position: relative; z-index: 1; }
 .kpi-spark { position: absolute !important; left: 0; right: 0; bottom: 0; height: 56px; margin: 0 !important; z-index: 0; }
 @media (max-width: 575.98px) { .kpi { min-height: 0; } .kpi-chart { min-height: 150px; } }
+
+/* Publicar: atributos que Mercado Libre reclamó y los que puede pedir */
+.ml-attr-flagged { padding: .75rem .9rem; border-radius: var(--radius, 12px); background: var(--warn-soft); box-shadow: inset 3px 0 0 var(--warn); }
+.ml-attr-extra { border-top: 1px solid var(--line, rgba(0,0,0,.08)); padding-top: .9rem; }
+.ml-attr-extra > summary { cursor: pointer; list-style: none; }
+.ml-attr-extra > summary::-webkit-details-marker { display: none; }
+.ml-attr-extra > summary::before { content: "▸"; display: inline-block; margin-right: .4rem; transition: transform .2s; }
+.ml-attr-extra[open] > summary::before { transform: rotate(90deg); }
+.ml-gtin { font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.ml-gtin-camera { max-height: 240px; object-fit: cover; background: #000; }

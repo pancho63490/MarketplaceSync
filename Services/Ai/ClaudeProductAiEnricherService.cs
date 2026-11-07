@@ -87,6 +87,10 @@ public sealed class ClaudeProductAiEnricherService : IProductAiEnricherService
             5. 'attributes': Diccionario cuya clave es el Id de cada atributo requerido (ej. "BRAND", "PART_NUMBER").
                Si el atributo tiene AllowedValues, el valor debe ser EXACTAMENTE uno de esos nombres.
                Si no puedes saber el valor con los datos dados, OMITE ese atributo (no inventes, no pongas "No aplica").
+               Incluye también los atributos con Required=false del esquema cuando el valor sea claro: Mercado Libre los pide según el producto.
+               Atributos de Sí/No (ValueType "boolean"): responde "Sí" o "No" solo si se deduce del tipo de producto
+               (ej. una bebida energética o un refresco → "Es bebida sin alcohol" = "Sí"; una cerveza → "No").
+               NUNCA pongas códigos de barras, GTIN, UPC ni EAN: esos se escanean de la etiqueta real.
             6. 'highRiskIntellectualProperty': true si parece una réplica no autorizada o violación de marca; false si es refacción aftermarket legítima.
             7. 'confidenceScore': 0 a 100 de acuerdo a la completitud de los datos.
 

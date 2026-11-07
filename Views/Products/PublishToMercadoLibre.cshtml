@@ -12,8 +12,11 @@
     var hasStock = Model.Stock > 0;
     var attributesLoaded = Model.AttributesLoaded;
     var requiredAttributes = Model.Attributes?.Where(x => x.Required).ToList() ?? new();
+    var gtinReasonChosen = Model.Attributes?.Any(x => x.Id == MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.EmptyGtinReasonId &&
+        (!string.IsNullOrWhiteSpace(x.ValueId) || !string.IsNullOrWhiteSpace(x.ValueName))) == true;
     var completedAttributeCount = requiredAttributes.Count(x =>
-        !string.IsNullOrWhiteSpace(x.ValueId) || !string.IsNullOrWhiteSpace(x.ValueName));
+        !string.IsNullOrWhiteSpace(x.ValueId) || !string.IsNullOrWhiteSpace(x.ValueName) ||
+        (x.Id == MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId && gtinReasonChosen));
     var attributesComplete = attributesLoaded && completedAttributeCount == requiredAttributes.Count;
     var readinessChecks = new[] { hasCategory, hasPrice, hasStock, hasImage, attributesComplete };
     var readinessPercent = readinessChecks.Count(x => x) * 100 / readinessChecks.Length;
@@ -48,8 +51,27 @@
 @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
 {
     <div class="alert alert-danger shadow-sm">
-        <div class="fw-bold mb-1">Error Mercado Libre</div>
-        <pre class="mb-0 small text-wrap">@Model.ErrorMessage</pre>
+        @{
+            var errorText = Model.ErrorMessage!;
+            const string rejectedPrefix = "Mercado Libre rechazó la publicación: ";
+            var rejected = errorText.StartsWith(rejectedPrefix, StringComparison.Ordinal);
+            var errorParts = (rejected ? errorText[rejectedPrefix.Length..] : errorText)
+                .Split(" · ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
+        <div class="fw-bold mb-1">@(rejected ? "Mercado Libre no aceptó la publicación" : "Error Mercado Libre")</div>
+        @if (errorParts.Length > 1)
+        {
+            <ul class="mb-0 ps-3">
+                @foreach (var part in errorParts)
+                {
+                    <li>@part</li>
+                }
+            </ul>
+        }
+        else
+        {
+            <div>@errorParts.FirstOrDefault()</div>
+        }
     </div>
 }
 
@@ -406,65 +428,135 @@
 
             @if (Model.Attributes != null && Model.Attributes.Any())
             {
+                const string gtinId = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId;
+                const string reasonId = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.EmptyGtinReasonId;
+                var mainIndexes = Enumerable.Range(0, Model.Attributes.Count)
+                    .Where(i => Model.Attributes[i].Required || Model.Attributes[i].Flagged || Model.Attributes[i].Id is gtinId or reasonId)
+                    .ToList();
+                var extraIndexes = Enumerable.Range(0, Model.Attributes.Count).Except(mainIndexes).ToList();
+                var flaggedCount = Model.Attributes.Count(a => a.Flagged);
+
+                async Task AttributeRow(int i)
+                {
+                    var attr = Model.Attributes[i];
+                    var isGtin = attr.Id == gtinId;
+                    var isReason = attr.Id == reasonId;
+                    <div class="ml-attr mb-3 @(attr.Flagged ? "ml-attr-flagged" : "")" data-attr-id="@attr.Id">
+                        <input type="hidden" asp-for="Attributes[i].Id" />
+                        <input type="hidden" asp-for="Attributes[i].Name" />
+                        <input type="hidden" asp-for="Attributes[i].Required" />
+                        <input type="hidden" asp-for="Attributes[i].Conditional" />
+                        <input type="hidden" asp-for="Attributes[i].Flagged" />
+                        <input type="hidden" asp-for="Attributes[i].ValueType" />
+
+                        <label class="form-label fw-semibold d-flex flex-wrap align-items-center gap-2" for="@(isGtin || attr.Values.Count == 0 ? $"Attributes_{i}__ValueName" : $"Attributes_{i}__ValueId")">
+                            <span>@(isGtin ? "Código de barras (GTIN)" : isReason ? "Sin código de barras: ¿por qué?" : attr.Name)</span>
+                            @if (attr.Required && !isReason)
+                            {
+                                <span class="text-danger">*</span>
+                            }
+                            @if (attr.Flagged)
+                            {
+                                <span class="pill pill-warn">Mercado Libre lo pidió</span>
+                            }
+                        </label>
+
+                        @if (isGtin)
+                        {
+                            <div class="input-group">
+                                <input asp-for="Attributes[i].ValueName"
+                                       class="form-control ml-gtin"
+                                       inputmode="numeric"
+                                       autocomplete="off"
+                                       placeholder="Ej. 070847898412" />
+                                <button type="button" class="btn btn-outline-secondary ml-gtin-scan" hidden>Escanear</button>
+                            </div>
+                            <video class="ml-gtin-camera mt-2 rounded w-100" playsinline muted hidden></video>
+                            <span asp-validation-for="Attributes[i].ValueName" class="text-danger small"></span>
+                            <div class="form-text">
+                                Son los números debajo de las barras (UPC de 12 dígitos o EAN de 13) en la lata, caja o empaque.
+                                Se revisa el último dígito para no mandar un código mal copiado.
+                            </div>
+                        }
+                        else
+                        {
+                            @if (attr.Values != null && attr.Values.Any())
+                            {
+                                <select asp-for="Attributes[i].ValueId"
+                                        class="form-select ml-attribute-select"
+                                        data-value-name-target="Attributes_@(i)__ValueName">
+                                    <option value="">@(isReason ? "Sí tiene código (déjalo así)" : "Selecciona una opción")</option>
+
+                                    @foreach (var option in attr.Values)
+                                    {
+                                        var optionValue = string.IsNullOrWhiteSpace(option.Id)
+                                            ? $"name:{option.Name}"
+                                            : option.Id;
+                                        <option value="@optionValue" data-value-name="@option.Name">@option.Name</option>
+                                    }
+                                </select>
+                                <input type="hidden" asp-for="Attributes[i].ValueName" />
+                            }
+                            else
+                            {
+                                <input asp-for="Attributes[i].ValueName"
+                                       class="form-control"
+                                       placeholder="Ingresa valor" />
+                            }
+
+                            <span asp-validation-for="Attributes[i].ValueName" class="text-danger small"></span>
+
+                            <div class="form-text">
+                                @if (isReason)
+                                {
+                                    <text>Elígelo solo si el producto de verdad no trae código de barras (por ejemplo, una pieza suelta o hecha a mano).</text>
+                                }
+                                else
+                                {
+                                    <text>ID atributo: @attr.Id</text>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
                 <div class="card border-0 shadow-sm mb-4">
                     <div class="card-header bg-white border-0 py-3">
                         <h5 class="fw-bold mb-0">Atributos requeridos</h5>
                         <div class="small text-muted">
-                            Completa los atributos que Mercado Libre pide para esta categoría.
+                            @if (flaggedCount > 0)
+                            {
+                                <text>Mercado Libre pidió @flaggedCount @(flaggedCount == 1 ? "dato" : "datos") más: están marcados abajo.</text>
+                            }
+                            else
+                            {
+                                <text>Completa los atributos que Mercado Libre pide para esta categoría.</text>
+                            }
                         </div>
                     </div>
 
                     <div class="card-body">
-
-                        @for (var i = 0; i < Model.Attributes!.Count; i++)
+                        @foreach (var i in mainIndexes)
                         {
-                            <input type="hidden" asp-for="Attributes[i].Id" />
-                            <input type="hidden" asp-for="Attributes[i].Name" />
-                            <input type="hidden" asp-for="Attributes[i].Required" />
-                            <input type="hidden" asp-for="Attributes[i].ValueType" />
-
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold">
-                                    @Model.Attributes[i].Name
-
-                                    @if (Model.Attributes[i].Required)
-                                    {
-                                        <span class="text-danger">*</span>
-                                    }
-                                </label>
-
-                                @if (Model.Attributes[i].Values != null && Model.Attributes[i].Values.Any())
-                                {
-                                    <select asp-for="Attributes[i].ValueId"
-                                            class="form-select ml-attribute-select"
-                                            data-value-name-target="Attributes_@(i)__ValueName">
-                                        <option value="">Selecciona una opción</option>
-
-                                        @foreach (var option in Model.Attributes[i].Values)
-                                        {
-                                            var optionValue = string.IsNullOrWhiteSpace(option.Id)
-                                                ? $"name:{option.Name}"
-                                                : option.Id;
-                                            <option value="@optionValue" data-value-name="@option.Name">@option.Name</option>
-                                        }
-                                    </select>
-                                    <input type="hidden" asp-for="Attributes[i].ValueName" />
-                                }
-                                else
-                                {
-                                    <input asp-for="Attributes[i].ValueName"
-                                           class="form-control"
-                                           placeholder="Ingresa valor" />
-                                }
-
-                                <span asp-validation-for="Attributes[i].ValueName" class="text-danger small"></span>
-
-                                <div class="form-text">
-                                    ID atributo: @Model.Attributes[i].Id
-                                </div>
-                            </div>
+                            await AttributeRow(i);
                         }
 
+                        @if (extraIndexes.Count > 0)
+                        {
+                            var extraFilled = extraIndexes.Count(i => !string.IsNullOrWhiteSpace(Model.Attributes[i].ValueId) || !string.IsNullOrWhiteSpace(Model.Attributes[i].ValueName));
+                            <details class="ml-attr-extra" @(mainIndexes.Count == 0 ? "open" : "")>
+                                <summary class="fw-semibold">
+                                    Puede pedirlos según el producto (@extraFilled/@extraIndexes.Count)
+                                    <span class="small text-muted fw-normal d-block">Llénalos si aplican; así Mercado Libre no rechaza la publicación.</span>
+                                </summary>
+                                <div class="pt-3">
+                                    @foreach (var i in extraIndexes)
+                                    {
+                                        await AttributeRow(i);
+                                    }
+                                </div>
+                            </details>
+                        }
                     </div>
                 </div>
             }
@@ -586,6 +678,47 @@
                 categoryInput.focus();
             });
         });
+
+        // Código de barras: cámara del celular (Chrome en Android) con el detector del navegador.
+        (function () {
+            var input = document.querySelector('.ml-gtin');
+            if (!input) return;
+            var button = document.querySelector('.ml-gtin-scan');
+            var video = document.querySelector('.ml-gtin-camera');
+            var reason = document.querySelector('[data-attr-id="EMPTY_GTIN_REASON"] select');
+            input.addEventListener('input', function () {
+                if (input.value.trim() && reason) { reason.value = ''; reason.dispatchEvent(new Event('change')); }
+            });
+            if (!('BarcodeDetector' in window) || !navigator.mediaDevices) return;
+            var stream = null;
+            function stop() {
+                if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+                stream = null; video.hidden = true; button.textContent = 'Escanear';
+            }
+            button.hidden = false;
+            button.addEventListener('click', function () {
+                if (stream) { stop(); return; }
+                var detector = new BarcodeDetector({ formats: ['ean_13', 'upc_a', 'upc_e', 'ean_8', 'itf'] });
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function (s) {
+                    stream = s; video.srcObject = s; video.hidden = false; video.play(); button.textContent = 'Cerrar cámara';
+                    (function tick() {
+                        if (!stream) return;
+                        detector.detect(video).then(function (codes) {
+                            if (codes.length) {
+                                input.value = codes[0].rawValue;
+                                input.dispatchEvent(new Event('input'));
+                                if (window.msToast) window.msToast('success', 'Código leído: ' + codes[0].rawValue);
+                                stop();
+                                return;
+                            }
+                            requestAnimationFrame(tick);
+                        }).catch(function () { requestAnimationFrame(tick); });
+                    })();
+                }).catch(function () {
+                    if (window.msToast) window.msToast('error', 'No me dieron permiso para usar la cámara.');
+                });
+            });
+        })();
 
         document.querySelectorAll('.ml-attribute-select').forEach(function (select) {
             select.addEventListener('change', function () {

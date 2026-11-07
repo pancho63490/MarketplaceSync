@@ -185,7 +185,9 @@ public sealed class ListingAutopilotService : IListingAutopilotService
             SourceMarketplace: product.SourceMarketplace,
             CategoryId: publication.CategoryId ?? string.Empty,
             CategoryName: categoryName,
+            // El código de barras nunca lo pone la IA: sale de la etiqueta real.
             RequiredAttributes: schema
+                .Where(a => a.Id is not (MercadoLibreListingClient.GtinId or MercadoLibreListingClient.EmptyGtinReasonId))
                 .Select(a => new CategoryAttributeSchema(
                     a.Id, a.Name, a.Required, a.ValueType,
                     a.Values.Select(v => new CategoryAttributeAllowedValue(v.Id ?? string.Empty, v.Name)).ToList()))
@@ -204,21 +206,48 @@ public sealed class ListingAutopilotService : IListingAutopilotService
         // Atributos: valor de la IA, marca/modelo conocidos o valor ya guardado.
         var saved = ReadSavedAttributes(publication.AttributesJson);
         var chosen = new List<SavedAttributeValue>();
+        var barcode = product.Variants
+            .Where(v => v.IsActive && !string.IsNullOrWhiteSpace(v.Barcode))
+            .Select(v => MercadoLibreListingClient.ValidateGtin(v.Barcode, out var digits) is null ? digits : null)
+            .FirstOrDefault(d => d is not null);
         foreach (var attribute in schema)
         {
+            if (attribute.Id == MercadoLibreListingClient.EmptyGtinReasonId)
+            {
+                // El motivo de "no tiene código" solo lo elige el usuario.
+                var reason = saved.FirstOrDefault(x => x.Id == attribute.Id);
+                if (reason is not null && barcode is null)
+                    chosen.Add(reason);
+                continue;
+            }
+
+            if (attribute.Id == MercadoLibreListingClient.GtinId)
+            {
+                var gtin = barcode is not null
+                    ? new SavedAttributeValue(attribute.Id, null, barcode)
+                    : saved.FirstOrDefault(x => x.Id == attribute.Id);
+                var hasReason = saved.Any(x => x.Id == MercadoLibreListingClient.EmptyGtinReasonId);
+                if (gtin is not null)
+                    chosen.Add(gtin);
+                else if (attribute.Required && !hasReason)
+                    missing.Add("Código de barras (GTIN): escanéalo en Publicar o marca que no tiene");
+                continue;
+            }
+
             var value = enrichment.Attributes.GetValueOrDefault(attribute.Id)
                         ?? (attribute.Id.Equals("BRAND", StringComparison.OrdinalIgnoreCase) ? product.Brand : null)
                         ?? (attribute.Id is "MODEL" or "PART_NUMBER" or "MPN" ? product.Model : null);
 
             var resolved = ResolveAttribute(attribute, value)
                            ?? saved.FirstOrDefault(x => x.Id.Equals(attribute.Id, StringComparison.OrdinalIgnoreCase));
-            if (resolved is null)
-                missing.Add($"Atributo obligatorio: {attribute.Name}");
-            else
+            if (resolved is not null)
                 chosen.Add(resolved);
+            else if (attribute.Required)
+                missing.Add($"Atributo obligatorio: {attribute.Name}");
         }
-        if (schema.Count > 0 && chosen.Count == schema.Count)
-            done.Add($"{chosen.Count} atributos obligatorios completos");
+        var requiredCount = schema.Count(a => a.Required);
+        if (requiredCount > 0 && schema.Where(a => a.Required).All(a => chosen.Any(c => c.Id == a.Id)))
+            done.Add($"{requiredCount} atributos obligatorios completos");
         publication.AttributesJson = JsonSerializer.Serialize(chosen);
 
         // 4) Precio y stock
