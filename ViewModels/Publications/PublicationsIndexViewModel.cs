@@ -5,6 +5,9 @@ namespace MarketplaceSync.Web.ViewModels.Publications;
 public sealed class PublicationRow
 {
     public int PublicationId { get; init; }
+
+    /// <summary>Precio para ganar lo de Costos de cruce (solo cuando el actual no llega a la ganancia mínima).</summary>
+    public decimal? SuggestedPriceMxn { get; init; }
     public int ProductId { get; init; }
     public string ItemId { get; init; } = string.Empty;
     public string Title { get; init; } = string.Empty;

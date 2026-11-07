@@ -156,6 +156,19 @@ else
                     {
                         <div class="pl-value @(profit.NetProfitMxn < 0 ? "text-danger" : profit.IsProfitable ? "text-success" : "")">@Mxn(profit.NetProfitMxn)</div>
                         <div class="pl-sub">margen @profit.NetMarginPercent.ToString("0.#", mx)%</div>
+                        @if (r.SuggestedPriceMxn is { } suggestedPrice)
+                        {
+                            <form method="post" asp-action="Bulk" class="pl-suggest"
+                                  data-confirm="Cambiar el precio en Mercado Libre de @Mxn(r.Price) a @Mxn(suggestedPrice)?">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="ids" value="@r.PublicationId" />
+                                <input type="hidden" name="bulkAction" value="suggested" />
+                                <input type="hidden" name="filter" value="@Model.Filter" />
+                                <button type="submit" class="btn btn-sm btn-outline-primary" title="Precio para ganar lo que pide Costos de cruce">
+                                    Subir a @Mxn(suggestedPrice)
+                                </button>
+                            </form>
+                        }
                     }
                     else
                     {
@@ -196,6 +209,7 @@ else
         <strong id="bulkCount">0 seleccionadas</strong>
         <select name="bulkAction" id="bulkAction" class="form-select form-select-sm" aria-label="Qué hacer">
             <option value="price">Cambiar precio</option>
+            <option value="suggested">Precio sugerido (solo las que no ganan lo mínimo)</option>
             <option value="paused">Pausar</option>
             <option value="active">Activar</option>
         </select>
@@ -228,6 +242,12 @@ else
             document.getElementById('bulkClear').addEventListener('click', function () { boxes.forEach(function (b) { b.checked = false; }); refresh(); });
             var action = document.getElementById('bulkAction'), price = document.getElementById('bulkPrice');
             action.addEventListener('change', function () { price.hidden = action.value !== 'price'; });
+            document.querySelectorAll('form[data-confirm]').forEach(function (f) {
+                f.addEventListener('submit', function (e) {
+                    if (!confirm(f.dataset.confirm)) { e.preventDefault(); return; }
+                    var b = f.querySelector('button'); setTimeout(function () { b.disabled = true; b.textContent = 'Cambiando…'; }, 0);
+                });
+            });
             bar.addEventListener('submit', function () {
                 var b = document.getElementById('bulkButton'); setTimeout(function () { b.disabled = true; b.textContent = 'Aplicando…'; }, 0);
             });

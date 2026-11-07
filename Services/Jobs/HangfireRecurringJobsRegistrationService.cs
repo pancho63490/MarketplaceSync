@@ -35,6 +35,12 @@ public sealed class HangfireRecurringJobsRegistrationService : BackgroundService
                     job => job.SyncMercadoLibreOrders(),
                     "*/5 * * * *");
 
+                // Tipo de cambio: 11:00 y 18:00 UTC (5:00 y 12:00 en Juárez; el FIX sale después de mediodía)
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "update-exchange-rate",
+                    job => job.UpdateExchangeRate(),
+                    "0 11,18 * * *");
+
                 _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
                     "capture-mercadolibre-ranking-history",
                     job => job.CaptureMercadoLibreRankingHistory(),

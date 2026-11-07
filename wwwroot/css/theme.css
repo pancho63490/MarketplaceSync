@@ -2119,3 +2119,6 @@ body {
 .ml-gtin-candidate:first-of-type { border-top: 0; }
 .ml-gtin-candidate img { width: 40px; height: 40px; object-fit: contain; border-radius: 8px; background: #fff; flex-shrink: 0; }
 .ml-gtin-candidate .flex-grow-1 { min-width: 0; overflow-wrap: anywhere; }
+
+.pl-suggest { margin-top: .35rem; }
+.pl-suggest .btn { white-space: nowrap; font-size: .75rem; padding: .15rem .5rem; }

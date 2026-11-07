@@ -20,6 +20,24 @@ public class CrossBorderSettings
     [Column(TypeName = "numeric(10,4)")]
     public decimal UsdToMxnRate { get; set; } = 20.0000m;
 
+    /// <summary>Actualizar el tipo de cambio solo todos los días (oficial + el margen de abajo).</summary>
+    public bool AutoExchangeRate { get; set; } = true;
+
+    /// <summary>
+    /// Cuánto más caro que el oficial te cuesta el dólar (tarjeta o casa de cambio). Ej. 2.00 = 2% arriba.
+    /// </summary>
+    [Column(TypeName = "numeric(5,2)")]
+    public decimal ExchangeRateMarkupPercent { get; set; } = 0.00m;
+
+    /// <summary>Tipo de cambio oficial de la última actualización (sin margen).</summary>
+    [Column(TypeName = "numeric(10,4)")]
+    public decimal? OfficialUsdToMxnRate { get; set; }
+
+    public DateTime? ExchangeRateUpdatedAt { get; set; }
+
+    [MaxLength(60)]
+    public string? ExchangeRateSource { get; set; }
+
     /// <summary>
     /// Porcentaje estimado de cruce e importación (arancel + DTA + IVA fronterizo o comisión de comercializadora).
     /// Ejemplo: 15.00 para 15%.

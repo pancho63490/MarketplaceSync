@@ -3,6 +3,8 @@ using MarketplaceSync.Services.Interfaces;
 using MarketplaceSync.Services.MercadoLibre;
 using MarketplaceSync.Web.Data;
 using MarketplaceSync.Web.Models;
+using MarketplaceSync.Web.Models.CrossBorder;
+using MarketplaceSync.Web.Models.Marketplace;
 using MarketplaceSync.Web.Services.Tenancy;
 using MarketplaceSync.Web.ViewModels.Publications;
 using Microsoft.AspNetCore.Authorization;
@@ -69,9 +71,18 @@ public sealed class PublicationsController : Controller
                     p.SaleFeeForPrice == p.Price ? p.SaleFeeMxn : null)
                 : null;
 
+            decimal? suggested = null;
+            if (landed.HasValue && profit is { IsProfitable: false })
+            {
+                var price = SuggestedPrice(landed.Value, p, settings);
+                if (price > (p.Price ?? 0))
+                    suggested = price;
+            }
+
             return new PublicationRow
             {
                 PublicationId = p.Id,
+                SuggestedPriceMxn = suggested,
                 ProductId = product.Id,
                 ItemId = p.ExternalItemId!,
                 Title = product.Title ?? p.ExternalItemId!,
@@ -364,6 +375,9 @@ public sealed class PublicationsController : Controller
             return RedirectToAction(nameof(Index), new { filter });
         }
 
+        if (bulkAction == "suggested")
+            return await ApplySuggestedPricesAsync(organizationId, ids, filter, cancellationToken);
+
         decimal? value = null;
         if (bulkAction == "price")
         {
@@ -383,6 +397,83 @@ public sealed class PublicationsController : Controller
         }
         if (result.Errors.Count > 0)
             TempData["Error"] = string.Join(" · ", result.Errors.Take(5)) + (result.Errors.Count > 5 ? $" (y {result.Errors.Count - 5} más)" : "");
+        return RedirectToAction(nameof(Index), new { filter });
+    }
+
+    /// <summary>
+    /// Precio sugerido con la comisión real de la publicación cuando se conoce (Premium o Clásica).
+    /// </summary>
+    private decimal SuggestedPrice(decimal landed, MarketplacePublication publication, CrossBorderSettings settings)
+    {
+        decimal? feePercent = publication.SaleFeeMxn is > 0 && publication.SaleFeeForPrice is >= 299m
+            ? Math.Round(publication.SaleFeeMxn.Value / publication.SaleFeeForPrice.Value * 100m, 2)
+            : null;
+        return _pricing.SuggestPriceFromLandedCost(landed, settings, feePercent);
+    }
+
+    /// <summary>
+    /// Sube al precio sugerido las publicaciones que no llegan a la ganancia mínima.
+    /// Nunca baja un precio y deja igual las que ya ganan lo mínimo.
+    /// </summary>
+    private static readonly CultureInfo Mx = CultureInfo.GetCultureInfo("es-MX");
+
+    private async Task<IActionResult> ApplySuggestedPricesAsync(Guid organizationId, int[] ids, string? filter, CancellationToken cancellationToken)
+    {
+        var settings = await _pricing.GetOrCreateSettingsAsync(organizationId, cancellationToken);
+        var publications = await _context.MarketplacePublications
+            .AsNoTracking()
+            .Include(p => p.Product)
+            .Where(p => ids.Contains(p.Id) && p.Product.OrganizationId == organizationId && p.ExternalItemId != null)
+            .Take(100)
+            .ToListAsync(cancellationToken);
+
+        var changed = new List<string>();
+        var skipped = new List<string>();
+        var errors = new List<string>();
+        foreach (var publication in publications)
+        {
+            var product = publication.Product;
+            var label = product.Title is { Length: > 40 } t ? t[..40] + "…" : product.Title ?? publication.ExternalItemId!;
+            var costKnown = product.SourcePrice is > 0 && product.SourceMarketplace is not ("MercadoLibre" or "MercadoLibreInsights");
+            if (!costKnown || publication.Price is not > 0)
+            {
+                skipped.Add($"{label}: sin costo");
+                continue;
+            }
+
+            var landed = _pricing.LandedCostMxn(product.SourcePrice!.Value, product.SourceCurrency, settings);
+            var current = _pricing.CalculateProfitFromLandedCost(landed, publication.Price.Value, settings,
+                publication.SaleFeeForPrice == publication.Price ? publication.SaleFeeMxn : null);
+            var target = SuggestedPrice(landed, publication, settings);
+            if (current.IsProfitable || target <= publication.Price.Value)
+            {
+                skipped.Add($"{label}: ya gana lo mínimo");
+                continue;
+            }
+
+            try
+            {
+                var result = await _editor.UpdateAsync(organizationId, publication.Id,
+                    new ItemEdit { Price = target.ToString(System.Globalization.CultureInfo.InvariantCulture) }, cancellationToken);
+                if (result.Ok)
+                    changed.Add($"{label}: {publication.Price.Value.ToString("C0", Mx)} → {target.ToString("C0", Mx)}");
+                else
+                    errors.Add($"{label}: {string.Join(" ", result.Errors)}");
+            }
+            catch (MercadoLibreEditException exception)
+            {
+                errors.Add($"{label}: {exception.Message}");
+            }
+        }
+
+        if (changed.Count > 0)
+            TempData["Success"] = string.Format(Mx, "{0} con precio sugerido: {1}.",
+                changed.Count == 1 ? "1 publicación" : $"{changed.Count} publicaciones",
+                string.Join(" · ", changed.Take(5)) + (changed.Count > 5 ? $" (y {changed.Count - 5} más)" : ""));
+        else if (errors.Count == 0)
+            TempData["Warning"] = "No cambié nada: " + string.Join(" · ", skipped.Take(5));
+        if (errors.Count > 0)
+            TempData["Error"] = string.Join(" · ", errors.Take(5)) + (errors.Count > 5 ? $" (y {errors.Count - 5} más)" : "");
         return RedirectToAction(nameof(Index), new { filter });
     }
 

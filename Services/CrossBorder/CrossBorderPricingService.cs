@@ -172,6 +172,25 @@ public sealed class CrossBorderPricingService : ICrossBorderPricingService
         return Math.Round(productCostMxn * (1 + importFeeRate) + settings.AdditionalHandlingFeeUsd * exchangeRate, 2);
     }
 
+    /// <summary>
+    /// Precio para ganar lo que pide Costos de cruce (margen objetivo o ganancia mínima, lo que sea mayor)
+    /// partiendo del costo ya puesto en Juárez. <paramref name="feePercent"/> es la comisión real de la publicación si se conoce.
+    /// </summary>
+    public decimal SuggestPriceFromLandedCost(decimal landedCostMxn, CrossBorderSettings settings, decimal? feePercent = null)
+    {
+        var target = Math.Max(
+            Math.Round(landedCostMxn * (Math.Max(0m, settings.TargetProfitMarginPercent) / 100m), 2),
+            settings.MinProfitAmountMxn);
+        var deductionRate = Math.Clamp(
+            ((feePercent ?? settings.DefaultMarketplaceFeePercent) + settings.PlatformTaxWithholdingPercent) / 100m,
+            0.05m, 0.85m);
+
+        var price = (landedCostMxn + settings.EstimatedShippingMxn + target) / (1m - deductionRate);
+        if (price < 299m)
+            price = (landedCostMxn + 25m + target) / (1m - deductionRate);
+        return Math.Ceiling(price);
+    }
+
     public CrossBorderProfitEstimate CalculateProfitFromLandedCost(
         decimal landedCostMxn,
         decimal listingPriceMxn,

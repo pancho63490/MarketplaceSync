@@ -40,6 +40,35 @@ public sealed class CrossBorderController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RefreshRate(
+        [FromServices] MarketplaceSync.Services.CrossBorder.ExchangeRateService rates,
+        CancellationToken cancellationToken)
+    {
+        var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var settings = await _pricingService.GetOrCreateSettingsAsync(organizationId, cancellationToken);
+        if (!settings.AutoExchangeRate)
+        {
+            settings.AutoExchangeRate = true;
+            await _pricingService.SaveSettingsAsync(settings, cancellationToken);
+        }
+
+        var updated = await rates.UpdateAllAsync(organizationId, cancellationToken);
+        if (updated == 0)
+        {
+            TempData["Error"] = "No pude leer el tipo de cambio ahorita. Se queda el que tenías; vuelve a intentar en un rato.";
+        }
+        else
+        {
+            settings = await _pricingService.GetOrCreateSettingsAsync(organizationId, cancellationToken);
+            TempData["Success"] = $"Tipo de cambio actualizado: {settings.UsdToMxnRate:0.00} por dólar " +
+                                  $"({settings.ExchangeRateSource}: {settings.OfficialUsdToMxnRate:0.00}" +
+                                  (settings.ExchangeRateMarkupPercent > 0 ? $" + {settings.ExchangeRateMarkupPercent:0.#}%" : "") + ").";
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Save(
         CrossBorderSettings input,
         CancellationToken cancellationToken)
@@ -77,7 +106,13 @@ public sealed class CrossBorderController : Controller
             var existing = await _pricingService
                 .GetOrCreateSettingsAsync(organizationId, cancellationToken);
 
-            existing.UsdToMxnRate = input.UsdToMxnRate;
+            // Con el automático, el tipo de cambio lo pone la actualización diaria (oficial + margen).
+            existing.AutoExchangeRate = input.AutoExchangeRate;
+            existing.ExchangeRateMarkupPercent = Math.Clamp(input.ExchangeRateMarkupPercent, 0m, 15m);
+            if (input.AutoExchangeRate && existing.OfficialUsdToMxnRate is > 0)
+                existing.UsdToMxnRate = Math.Round(existing.OfficialUsdToMxnRate.Value * (1 + existing.ExchangeRateMarkupPercent / 100m), 4);
+            else
+                existing.UsdToMxnRate = input.UsdToMxnRate;
             existing.ImportFeePercent = input.ImportFeePercent;
             existing.AdditionalHandlingFeeUsd = input.AdditionalHandlingFeeUsd;
             existing.TargetProfitMarginPercent = input.TargetProfitMarginPercent;

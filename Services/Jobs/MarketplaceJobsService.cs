@@ -52,6 +52,16 @@ namespace MarketplaceSync.Services.Jobs
             _logger = logger;
         }
 
+        /// <summary>Tipo de cambio del día para las cuentas que lo tienen en automático.</summary>
+        [DisableConcurrentExecution(timeoutInSeconds: 120)]
+        public async Task UpdateExchangeRate()
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var rates = scope.ServiceProvider.GetRequiredService<MarketplaceSync.Services.CrossBorder.ExchangeRateService>();
+            var updated = await rates.UpdateAllAsync();
+            _logger.LogInformation("Exchange rate updated for {Count} organization(s).", updated);
+        }
+
         public async Task RefreshMercadoLibreToken()
         {
             await _authService.RefreshExpiringTokensAsync();

@@ -183,6 +183,9 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<decimal>("AdditionalHandlingFeeUsd")
                         .HasColumnType("numeric(10,2)");
 
+                    b.Property<bool>("AutoExchangeRate")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("AutoPrepareWeekly")
                         .HasColumnType("integer");
 
@@ -195,6 +198,16 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<decimal>("EstimatedShippingMxn")
                         .HasColumnType("numeric(10,2)");
 
+                    b.Property<decimal>("ExchangeRateMarkupPercent")
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("ExchangeRateSource")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<DateTime?>("ExchangeRateUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("ImportAgentEnabled")
                         .HasColumnType("boolean");
 
@@ -203,6 +216,9 @@ namespace MarketplaceSync.Web.Migrations
 
                     b.Property<decimal>("MinProfitAmountMxn")
                         .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal?>("OfficialUsdToMxnRate")
+                        .HasColumnType("numeric(10,4)");
 
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
