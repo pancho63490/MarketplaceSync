@@ -265,11 +265,11 @@
             var values = el.dataset.values.split(',').map(Number), labels = el.dataset.labels.split(',');
             var money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
             var chart = new ApexCharts(el, {
-                chart: { type: 'area', height: 64, sparkline: { enabled: true }, animations: { speed: 450 } },
+                chart: { type: 'area', height: 56, sparkline: { enabled: true }, animations: { speed: 450 } },
                 series: [{ name: 'Ventas', data: values }],
                 labels: labels,
                 stroke: { curve: 'smooth', width: 2 },
-                colors: ['#f5a30a'],
+                colors: [getComputedStyle(document.documentElement).getPropertyValue('--signal').trim()],
                 fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: .32, opacityTo: 0, stops: [0, 95] } },
                 tooltip: { theme: document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light', x: { show: true }, y: { formatter: function (v) { return money.format(v); }, title: { formatter: function () { return ''; } } } }
             });

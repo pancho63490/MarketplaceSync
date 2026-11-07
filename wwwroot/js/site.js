@@ -134,3 +134,35 @@ document.querySelectorAll('script[data-toast]').forEach(function (s) {
     list.addEventListener('mousemove', function (e) { var a = e.target.closest('.cmdk-item'); if (a && Number(a.dataset.i) !== active) { active = Number(a.dataset.i); mark(); } });
     dialog.addEventListener('click', function (e) { if (e.target === dialog) dialog.close(); });
 })();
+
+// ── Movimiento: entrada escalonada de tarjetas y filas ──
+(function () {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var lists = '.kpis, .task-list, .stats, .ph-grid, .order-cards, .numbers, .ps-list, .cp-list, .au-grid, .q-list, .pub-list, .table > tbody, .setup-steps, .ag-runs, .rt-lines, .au-recent';
+    document.querySelectorAll(lists).forEach(function (list) {
+        var kids = Array.prototype.slice.call(list.children, 0, 24);
+        if (!kids.length) return;
+        list.classList.add('stagger');
+        kids.forEach(function (el, i) { el.style.setProperty('--i', i); });
+    });
+})();
+
+// ── Cifras que cuentan (CountUp) en las tarjetas de Hoy y los resúmenes ──
+(function () {
+    if (!window.countUp || !window.countUp.CountUp) return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    document.querySelectorAll('.kpi-value, .stat strong, .stats strong, .mt-kpi-value').forEach(function (el) {
+        if (el.children.length) return;
+        var text = el.textContent.trim();
+        var m = text.match(/^(-?)(\$|US\$)?\s?([\d,]+(?:\.\d+)?)(%)?$/);
+        if (!m) return;
+        var value = parseFloat(m[3].replace(/,/g, ''));
+        if (!isFinite(value) || value === 0) return;
+        var decimals = (m[3].split('.')[1] || '').length;
+        var prefix = (m[1] || '') + (m[2] || '');
+        var counter = new window.countUp.CountUp(el, value, {
+            duration: 1.1, decimalPlaces: decimals, prefix: prefix, suffix: m[4] || '', separator: ',', decimal: '.', useEasing: true
+        });
+        if (!counter.error) counter.start(); else el.textContent = text;
+    });
+})();

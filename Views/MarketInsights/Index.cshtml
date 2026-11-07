@@ -389,7 +389,7 @@
                         var dark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
                         var dates = series[0].points.map(function (p) { return p.date.slice(8, 10) + '/' + p.date.slice(5, 7); });
                         var options = {
-                            chart: { type: 'line', height: 260, fontFamily: 'Inter, system-ui, sans-serif', foreColor: tok('--muted-2'), toolbar: { show: false }, zoom: { enabled: false }, animations: { speed: 450 } },
+                            chart: { type: 'line', height: 260, fontFamily: 'Geist, system-ui, sans-serif', foreColor: tok('--muted-2'), toolbar: { show: false }, zoom: { enabled: false }, animations: { speed: 450 } },
                             series: series.map(function (item) { return { name: item.name, data: item.points.map(function (p) { return p.position; }) }; }),
                             labels: dates,
                             colors: [tok('--signal'), tok('--denim'), tok('--ok'), tok('--ink-2'), tok('--bad')],

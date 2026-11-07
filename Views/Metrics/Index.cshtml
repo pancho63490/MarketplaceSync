@@ -296,13 +296,14 @@
                 css = getComputedStyle(document.documentElement);
                 var dark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
                 return {
-                    chart: { type: 'line', height: 300, fontFamily: 'Inter, system-ui, sans-serif', foreColor: tok('--muted-2'), toolbar: { show: true, tools: { download: false, selection: true, zoom: true, zoomin: true, zoomout: true, pan: false, reset: true } }, zoom: { enabled: true, type: 'x' }, animations: { speed: 500 } },
+                    chart: { type: 'line', height: 300, fontFamily: 'Geist, system-ui, sans-serif', foreColor: tok('--muted-2'), toolbar: { show: true, tools: { download: false, selection: true, zoom: true, zoomin: true, zoomout: true, pan: false, reset: true } }, zoom: { enabled: true, type: 'x' }, animations: { speed: 500 } },
                     series: [
                         { name: 'Ventas', type: 'column', data: d.sales },
                         { name: 'Pedidos', type: 'line', data: d.orders }
                     ],
                     labels: d.days,
-                    colors: [tok('--signal'), tok('--denim')],
+                    colors: [tok('--signal'), tok('--ink-2')],
+                    fill: { type: ['gradient', 'solid'], gradient: { type: 'vertical', shade: 'light', gradientToColors: [tok('--signal-2')], stops: [0, 100], opacityFrom: 1, opacityTo: .85 } },
                     stroke: { width: [0, 2.5], curve: 'monotoneCubic' },
                     plotOptions: { bar: { columnWidth: '62%', borderRadius: 4, borderRadiusApplication: 'end' } },
                     markers: { size: 0, hover: { size: 5 } },
