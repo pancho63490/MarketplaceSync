@@ -148,10 +148,32 @@ namespace MarketplaceSync.Web.Controllers
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error()
         {
-            return View(new ErrorViewModel
+            var model = new ErrorViewModel
             {
                 RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier
-            });
+            };
+
+            // Al dueño de la cuenta se le muestra qué falló para poder corregirlo; a visitantes sin sesión, nada.
+            var feature = HttpContext.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerPathFeature>();
+            if (feature?.Error is { } error && User.Identity?.IsAuthenticated == true)
+            {
+                var root = error;
+                while (root.InnerException is not null)
+                    root = root.InnerException;
+                model.Path = feature.Path;
+                model.Detail = root == error
+                    ? $"{error.GetType().Name}: {error.Message}"
+                    : $"{error.GetType().Name}: {error.Message} → {root.GetType().Name}: {root.Message}";
+                if (model.Detail.Length > 1200)
+                    model.Detail = model.Detail[..1200];
+                model.Where = string.Join("\n", (error.StackTrace ?? string.Empty)
+                    .Split('\n')
+                    .Select(line => line.Trim())
+                    .Where(line => line.Contains("MarketplaceSync", StringComparison.Ordinal))
+                    .Take(4));
+            }
+
+            return View(model);
         }
     }
 }
