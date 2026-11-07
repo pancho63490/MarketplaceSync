@@ -36,6 +36,13 @@ namespace MarketplaceSync.Web.Models
         [MaxLength(200)]
         public string? SourceProductId { get; set; }
 
+        /// <summary>Código de barras (UPC/EAN/GTIN) que trae el anuncio de origen, ya validado. Nunca se inventa.</summary>
+        [MaxLength(14)]
+        public string? SourceGtin { get; set; }
+
+        /// <summary>Cuándo se buscó el código en el anuncio de origen (aunque no lo trajera).</summary>
+        public DateTime? SourceGtinCheckedAt { get; set; }
+
         [MaxLength(300)]
         public string? Title { get; set; }
 

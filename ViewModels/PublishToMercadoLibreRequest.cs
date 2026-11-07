@@ -6,6 +6,9 @@ namespace MarketplaceSync.Web.ViewModels
 {
     public class PublishToMercadoLibreRequest
     {
+        /// <summary>De dónde salió el código de barras prellenado (para mostrarlo bajo el campo).</summary>
+        public string? GtinSource { get; set; }
+
         public int ProductId { get; set; }
 
         [Required(ErrorMessage = "Selecciona la cuenta de Mercado Libre.")]

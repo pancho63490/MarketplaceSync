@@ -1513,6 +1513,13 @@ namespace MarketplaceSync.Web.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<string>("SourceGtin")
+                        .HasMaxLength(14)
+                        .HasColumnType("character varying(14)");
+
+                    b.Property<DateTime?>("SourceGtinCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("SourceMarketplace")
                         .IsRequired()
                         .HasMaxLength(100)

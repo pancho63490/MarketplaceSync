@@ -210,6 +210,15 @@ public sealed class ListingAutopilotService : IListingAutopilotService
             .Where(v => v.IsActive && !string.IsNullOrWhiteSpace(v.Barcode))
             .Select(v => MercadoLibreListingClient.ValidateGtin(v.Barcode, out var digits) is null ? digits : null)
             .FirstOrDefault(d => d is not null);
+        if (barcode is null && schema.Any(a => a.Id == MercadoLibreListingClient.GtinId))
+        {
+            // Código real del anuncio de origen (eBay); se guarda junto con el resto del producto.
+            var sourceBarcodes = _services.GetService<MarketplaceSync.Services.Products.SourceBarcodeService>();
+            if (sourceBarcodes is not null)
+                barcode = await sourceBarcodes.EnsureAsync(product, cancellationToken);
+        }
+        if (barcode is not null && schema.Any(a => a.Id == MercadoLibreListingClient.GtinId))
+            done.Add($"Código de barras {barcode} (del anuncio de origen o de la variante)");
         foreach (var attribute in schema)
         {
             if (attribute.Id == MercadoLibreListingClient.EmptyGtinReasonId)

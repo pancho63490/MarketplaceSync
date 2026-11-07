@@ -27,5 +27,8 @@ public string? SourceAvailabilityText { get; set; }
         public string? Model { get; set; }
 
         public string? Condition { get; set; }
+
+        /// <summary>Código de barras del anuncio de origen (solo si es válido).</summary>
+        public string? Gtin { get; set; }
     }
 }

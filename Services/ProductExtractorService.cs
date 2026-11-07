@@ -260,7 +260,7 @@ namespace MarketplaceSync.Web.Services
                     return result;
                 }
 
-                string? name = null, brand = null, image = null, description = null, availability = null, model = null;
+                string? name = null, brand = null, image = null, description = null, availability = null, model = null, gtin = null;
                 decimal? price = null;
 
                 var nextData = Regex.Match(html, @"<script[^>]*id=""__NEXT_DATA__""[^>]*>(.*?)</script>", RegexOptions.Singleline);
@@ -272,6 +272,7 @@ namespace MarketplaceSync.Web.Services
                         name = GetString(product, "name");
                         brand = GetString(product, "brand");
                         model = GetString(product, "model");
+                        gtin = GetString(product, "upc") ?? GetString(product, "gtin13") ?? GetString(product, "gtin");
                         description = GetString(product, "shortDescription");
                         availability = GetString(product, "availabilityStatus");
                         if (TryGetPath(product, out var current, "priceInfo", "currentPrice") &&
@@ -285,7 +286,7 @@ namespace MarketplaceSync.Web.Services
                 }
 
                 // Respaldo: JSON-LD de tipo Product y metadatos sociales.
-                if (name is null || price is null)
+                if (name is null || price is null || gtin is null)
                 {
                     foreach (Match script in Regex.Matches(html, @"<script\b[^>]*type=""application/ld\+json""[^>]*>(.*?)</script>", RegexOptions.IgnoreCase | RegexOptions.Singleline))
                     {
@@ -299,6 +300,8 @@ namespace MarketplaceSync.Web.Services
                                 continue;
                             name ??= GetString(root, "name");
                             description ??= GetString(root, "description");
+                            gtin ??= GetString(root, "gtin13") ?? GetString(root, "gtin12") ?? GetString(root, "gtin")
+                                     ?? GetString(root, "gtin14") ?? GetString(root, "gtin8");
                             if (root.TryGetProperty("brand", out var b))
                                 brand ??= b.ValueKind == System.Text.Json.JsonValueKind.Object ? GetString(b, "name") : b.ValueKind == System.Text.Json.JsonValueKind.String ? b.GetString() : null;
                             if (root.TryGetProperty("image", out var img))
@@ -322,6 +325,9 @@ namespace MarketplaceSync.Web.Services
                 if (!string.IsNullOrWhiteSpace(name)) result.Title = CleanText(name) ?? result.Title;
                 result.Brand = brand;
                 result.Model = model;
+                result.Gtin = MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.ValidateGtin(gtin, out var gtinDigits) is null
+                    ? gtinDigits
+                    : null;
                 result.ImageUrl = string.IsNullOrWhiteSpace(image) ? null : NormalizeImageUrl(image, url);
                 result.Description = CleanText(description) is { } d && d.Length > 1000 ? d[..1000] : CleanText(description);
                 result.SourcePrice = price;

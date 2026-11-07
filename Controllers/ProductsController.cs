@@ -115,6 +115,7 @@ public ProductsController(
     MarketplaceSync.Services.Ai.IListingAutopilotService autopilot,
     MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient listingClient,
     MarketplaceSync.Services.Ai.ProductTitleTranslator titleTranslator,
+    MarketplaceSync.Services.Products.SourceBarcodeService sourceBarcodes,
     ILogger<ProductsController> logger
 )
 {
@@ -132,7 +133,10 @@ public ProductsController(
     _autopilot = autopilot;
     _listingClient = listingClient;
     _logger = logger;
+    _sourceBarcodes = sourceBarcodes;
 }
+
+private readonly MarketplaceSync.Services.Products.SourceBarcodeService _sourceBarcodes;
         
         private async Task<List<MercadoLibreAttributeInput>> GetRequiredAttributesAsync(
             string categoryId,
@@ -150,8 +154,11 @@ public ProductsController(
     return await _listingClient.GetRequiredAttributesAsync(categoryId, token?.AccessToken, alsoInclude: alsoInclude);
 }
 
-/// <summary>Si el producto tiene un código de barras válido en su variante, lo usa como GTIN.</summary>
-private async Task PrefillGtinFromBarcodeAsync(PublishToMercadoLibreRequest request, int productId, Guid organizationId)
+/// <summary>
+/// Prellena el GTIN con un código real: el de una variante o el del anuncio de origen (eBay/Walmart).
+/// Nunca se genera uno.
+/// </summary>
+private async Task PrefillGtinAsync(PublishToMercadoLibreRequest request, Product product, Guid organizationId)
 {
     var gtin = request.Attributes.FirstOrDefault(a => a.Id == MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.GtinId);
     if (gtin is null || !string.IsNullOrWhiteSpace(gtin.ValueName) || !string.IsNullOrWhiteSpace(gtin.ValueId))
@@ -159,7 +166,7 @@ private async Task PrefillGtinFromBarcodeAsync(PublishToMercadoLibreRequest requ
 
     var barcodes = await _context.ProductVariants
         .AsNoTracking()
-        .Where(v => v.ProductId == productId && v.OrganizationId == organizationId && v.IsActive && v.Barcode != null)
+        .Where(v => v.ProductId == product.Id && v.OrganizationId == organizationId && v.IsActive && v.Barcode != null)
         .Select(v => v.Barcode!)
         .ToListAsync();
     foreach (var barcode in barcodes)
@@ -167,8 +174,19 @@ private async Task PrefillGtinFromBarcodeAsync(PublishToMercadoLibreRequest requ
         if (MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.ValidateGtin(barcode, out var digits) is null)
         {
             gtin.ValueName = digits;
+            request.GtinSource = "Tomado del código de barras de tu inventario.";
             return;
         }
+    }
+
+    var checkedBefore = product.SourceGtinCheckedAt;
+    var fromSource = await _sourceBarcodes.EnsureAsync(product);
+    if (product.SourceGtinCheckedAt != checkedBefore)
+        await _context.SaveChangesAsync();
+    if (fromSource is not null)
+    {
+        gtin.ValueName = fromSource;
+        request.GtinSource = $"Tomado del anuncio de {(string.IsNullOrWhiteSpace(product.SourceMarketplace) ? "origen" : product.SourceMarketplace)}. Revisa que coincida con la etiqueta.";
     }
 }
 
@@ -244,6 +262,10 @@ public async Task<IActionResult> LoadMercadoLibreAttributes(PublishToMercadoLibr
         request.AttributesLoaded = true;
         request.AttributeLoadError = null;
         PrefillKnownAttributes(request);
+        var productForGtin = await _context.Products
+            .FirstOrDefaultAsync(x => x.Id == request.ProductId && x.OrganizationId == organizationId);
+        if (productForGtin is not null)
+            await PrefillGtinAsync(request, productForGtin, organizationId);
         if (!request.Attributes.Any())
             TempData["Success"] = "La categoría es válida y no reportó atributos obligatorios adicionales.";
     }
@@ -368,6 +390,7 @@ public async Task<IActionResult> RefreshProduct(int id)
 
         product.SourceMarketplace = extracted.SourceMarketplace ?? product.SourceMarketplace;
         product.SourceProductId = extracted.SourceProductId ?? product.SourceProductId;
+        if (extracted.Gtin is not null) { product.SourceGtin = extracted.Gtin; product.SourceGtinCheckedAt = DateTime.UtcNow; }
 
         // No pisa títulos editados o generados con IA: solo se completa si está vacío.
         if (string.IsNullOrWhiteSpace(product.Title)) product.Title = extracted.Title;
@@ -424,6 +447,7 @@ public async Task<IActionResult> RefreshSource(int id)
 
         product.SourceMarketplace = extracted.SourceMarketplace ?? product.SourceMarketplace;
         product.SourceProductId = extracted.SourceProductId ?? product.SourceProductId;
+        if (extracted.Gtin is not null) { product.SourceGtin = extracted.Gtin; product.SourceGtinCheckedAt = DateTime.UtcNow; }
 
         // No pisa títulos editados o generados con IA: solo se completa si está vacío.
         if (string.IsNullOrWhiteSpace(product.Title)) product.Title = extracted.Title;
@@ -513,6 +537,7 @@ public async Task<IActionResult> RefreshAllSourceInfo()
 
             product.SourceMarketplace = extracted.SourceMarketplace ?? product.SourceMarketplace;
             product.SourceProductId = extracted.SourceProductId ?? product.SourceProductId;
+            if (extracted.Gtin is not null) { product.SourceGtin = extracted.Gtin; product.SourceGtinCheckedAt = DateTime.UtcNow; }
 
             // No pisa títulos editados o generados con IA: solo se completa si está vacío.
         if (string.IsNullOrWhiteSpace(product.Title)) product.Title = extracted.Title;
@@ -678,7 +703,7 @@ var product = await _context.Products
             model.AttributesLoaded = true;
             PrefillKnownAttributes(model);
             ApplySavedAttributes(model, publication?.AttributesJson);
-            await PrefillGtinFromBarcodeAsync(model, product.Id, organizationId);
+            await PrefillGtinAsync(model, product, organizationId);
         }
         catch (Exception exception)
         {
@@ -1681,6 +1706,8 @@ public async Task<IActionResult> CreateFromUrl(CreateProductFromUrlViewModel mod
         ImageUrl = extracted.ImageUrl,
         Brand = extracted.Brand,
         Model = extracted.Model,
+        SourceGtin = extracted.Gtin,
+        SourceGtinCheckedAt = MarketplaceSync.Services.Products.SourceBarcodeService.WasRead(extracted) ? DateTime.UtcNow : null,
 
         SourceStatus = extracted.SourceStatus,
         LastSourceCheckAt = DateTime.UtcNow,

@@ -473,6 +473,11 @@
                             </div>
                             <video class="ml-gtin-camera mt-2 rounded w-100" playsinline muted hidden></video>
                             <span asp-validation-for="Attributes[i].ValueName" class="text-danger small"></span>
+                            @if (!string.IsNullOrWhiteSpace(Model.GtinSource))
+                            {
+                                <input type="hidden" asp-for="GtinSource" />
+                                <div class="small mt-1"><span class="pill pill-ok">Encontrado</span> @Model.GtinSource</div>
+                            }
                             <div class="form-text">
                                 Son los números debajo de las barras (UPC de 12 dígitos o EAN de 13) en la lata, caja o empaque.
                                 Se revisa el último dígito para no mandar un código mal copiado.

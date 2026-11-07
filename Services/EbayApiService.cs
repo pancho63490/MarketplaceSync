@@ -260,6 +260,7 @@ namespace MarketplaceSync.Web.Services
                 ImageUrl = item.Image?.ImageUrl,
                 Brand = GetAspectValue(item, "Brand", "Marca"),
                 Model = GetAspectValue(item, "Model", "Modelo", "Manufacturer Part Number", "MPN"),
+                Gtin = PickGtin(item),
                 SourceStatus = "ExtractedByEbayApi",
                 LastSourceCheckAt = DateTime.UtcNow
             };
@@ -386,6 +387,26 @@ namespace MarketplaceSync.Web.Services
                     out var result))
             {
                 return result;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Código de barras del anuncio: el campo gtin de eBay o los detalles UPC / EAN / GTIN.
+        /// "Does not apply" o un número que no pasa el dígito verificador no se usan.
+        /// </summary>
+        private string? PickGtin(EbayItemResponse item)
+        {
+            var candidates = new[] { item.Gtin }
+                .Concat(new[] { "UPC", "EAN", "GTIN", "ISBN", "Código de barras" }.Select(name => GetAspectValue(item, name)))
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .SelectMany(value => value!.Split(new[] { ',', ';', '/' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+            foreach (var candidate in candidates)
+            {
+                if (MarketplaceSync.Services.MercadoLibre.MercadoLibreListingClient.ValidateGtin(candidate, out var digits) is null)
+                    return digits;
             }
 
             return null;
@@ -518,6 +539,10 @@ namespace MarketplaceSync.Web.Services
 
         [JsonPropertyName("localizedAspects")]
         public List<EbayLocalizedAspect>? LocalizedAspects { get; set; }
+
+        /// <summary>GTIN del artículo según eBay (UPC, EAN o ISBN).</summary>
+        [JsonPropertyName("gtin")]
+        public string? Gtin { get; set; }
     }
 
     public class EbayPrice
