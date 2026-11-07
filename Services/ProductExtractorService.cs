@@ -26,6 +26,7 @@ namespace MarketplaceSync.Web.Services
 
         public async Task<ExtractedProductInfo> ExtractAsync(string url)
         {
+            url = MarketplaceSync.Web.Helpers.UrlCleaner.CleanSourceUrl(url);
             var marketplace = _detector.DetectMarketplace(url);
             var productId = ExtractProductId(url, marketplace);
 

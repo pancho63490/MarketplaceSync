@@ -594,7 +594,8 @@ public sealed class ImportAgentService
             return (false, "Ese link es de Mercado Libre; importa el de la tienda donde se compra.");
         link = uri.ToString();
 
-        if (await _context.Products.AnyAsync(p => p.OrganizationId == org && p.SourceUrl == link, cancellationToken))
+        var cleanLink = MarketplaceSync.Web.Helpers.UrlCleaner.CleanSourceUrl(link);
+        if (await _context.Products.AnyAsync(p => p.OrganizationId == org && (p.SourceUrl == link || p.SourceUrl == cleanLink), cancellationToken))
             return (false, "Ese link ya está en el catálogo.");
         var tokens = PartNumbers(mlTitle).ToList();
         foreach (var token in tokens.Take(3))

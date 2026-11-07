@@ -85,10 +85,11 @@ namespace MarketplaceSync.Web.Controllers
             if (string.IsNullOrWhiteSpace(createdByUserId))
                 return StatusCode(500, new { message = "La organización importadora no tiene usuarios activos." });
 
+            var cleanSourceUrl = MarketplaceSync.Web.Helpers.UrlCleaner.CleanSourceUrl(sourceUrl);
             var existingProduct = await _context.Products
                 .FirstOrDefaultAsync(x =>
                     x.OrganizationId == organizationId.Value &&
-                    (x.SourceUrl == sourceUrl ||
+                    (x.SourceUrl == sourceUrl || x.SourceUrl == cleanSourceUrl ||
                     (!string.IsNullOrWhiteSpace(sourceProductId) &&
                      x.SourceProductId == sourceProductId &&
                      x.SourceMarketplace == request.SourceMarketplace)));

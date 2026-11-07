@@ -129,8 +129,9 @@ public sealed partial class TelegramNotificationService
             return;
         }
 
+        var cleanLink = MarketplaceSync.Web.Helpers.UrlCleaner.CleanSourceUrl(link);
         var existing = await _context.Products.AsNoTracking()
-            .Where(p => p.OrganizationId == org && p.SourceUrl == link)
+            .Where(p => p.OrganizationId == org && (p.SourceUrl == link || p.SourceUrl == cleanLink))
             .Select(p => new { p.Id, p.Title })
             .FirstOrDefaultAsync(cancellationToken);
         if (existing is not null)

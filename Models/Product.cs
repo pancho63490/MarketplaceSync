@@ -26,9 +26,18 @@ namespace MarketplaceSync.Web.Models
         // Fuente original: Amazon/eBay/etc.
         // =========================
 
+        private string _sourceUrl = string.Empty;
+        private string? _imageUrl;
+        private string? _originalImageUrl;
+
+        /// <summary>Link de la tienda en su forma corta (sin rastreo); nunca pasa de 1,000 caracteres.</summary>
         [Required]
         [MaxLength(1000)]
-        public string SourceUrl { get; set; } = string.Empty;
+        public string SourceUrl
+        {
+            get => _sourceUrl;
+            set => _sourceUrl = MarketplaceSync.Web.Helpers.UrlCleaner.CleanSourceUrl(value);
+        }
 
         [MaxLength(100)]
         public string SourceMarketplace { get; set; } = string.Empty;
@@ -63,11 +72,19 @@ namespace MarketplaceSync.Web.Models
         public string? SourceAvailabilityText { get; set; }
 
         [MaxLength(1000)]
-        public string? ImageUrl { get; set; }
+        public string? ImageUrl
+        {
+            get => _imageUrl;
+            set => _imageUrl = MarketplaceSync.Web.Helpers.UrlCleaner.Fit(value);
+        }
 
         /// <summary>Foto original antes de ponerle fondo blanco (para deshacer).</summary>
         [MaxLength(1000)]
-        public string? OriginalImageUrl { get; set; }
+        public string? OriginalImageUrl
+        {
+            get => _originalImageUrl;
+            set => _originalImageUrl = MarketplaceSync.Web.Helpers.UrlCleaner.Fit(value);
+        }
 
         /// <summary>Revisión de la portada: ok, fill, plain, busy, small, error (ver PhotoStudioService).</summary>
         [MaxLength(20)]
