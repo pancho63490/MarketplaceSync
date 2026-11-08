@@ -1,3 +1,4 @@
+using Hangfire;
 using System.Globalization;
 using System.Text;
 using MarketplaceSync.Services.Automation;
@@ -238,6 +239,21 @@ public sealed partial class TelegramNotificationService
                 await SendLabelsAsync(token, settings, force: false, cancellationToken);
         }
 
+        if (automation.PromotionAlerts && automation.PromotionsCheckedOn != today && now.Hour >= 9 && now.Hour < 20)
+        {
+            var claimed = await _context.AutomationSettings
+                .Where(a => a.Id == automation.Id && (a.PromotionsCheckedOn == null || a.PromotionsCheckedOn != today))
+                .ExecuteUpdateAsync(u => u.SetProperty(a => a.PromotionsCheckedOn, today), cancellationToken);
+            if (claimed == 1)
+            {
+                var org = settings.OrganizationId;
+                // Lo que terminó o empezó se revisa aparte (muchas llamadas); las invitaciones van ya.
+                Service<IBackgroundJobClient>().Enqueue<MarketplaceSync.Services.MercadoLibre.PromotionService>(
+                    s => s.RefreshAllAsync(org, 150, CancellationToken.None));
+                await SendPromotionInvitesAsync(token, settings, force: false, cancellationToken);
+            }
+        }
+
         if (automation.WeeklyPurchaseEnabled && automation.WeeklyPurchaseSentOn != today &&
             (int)now.DayOfWeek == automation.WeeklyPurchaseDay && now.Hour >= 8 && now.Hour < 20)
         {
@@ -246,6 +262,157 @@ public sealed partial class TelegramNotificationService
                 .ExecuteUpdateAsync(u => u.SetProperty(a => a.WeeklyPurchaseSentOn, today), cancellationToken);
             if (claimed == 1)
                 await SendPurchaseListAsync(token, settings, force: false, cancellationToken);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Promociones
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Campañas de Mercado Libre con publicaciones invitadas: cuáles siguen ganando con ese precio y un botón
+    /// para meter solo esas. Sin <paramref name="force"/>, cada campaña se avisa una sola vez.
+    /// </summary>
+    private async Task SendPromotionInvitesAsync(string token, NotificationSettings settings, bool force, CancellationToken cancellationToken)
+    {
+        var org = settings.OrganizationId;
+        var chatId = settings.TelegramChatId!.Value;
+        var promotions = Service<MarketplaceSync.Services.MercadoLibre.PromotionService>();
+        List<MarketplaceSync.Services.MercadoLibre.CampaignView> campaigns;
+        try
+        {
+            campaigns = await promotions.CampaignsAsync(org, cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(exception, "Reading promotions for {Org} failed.", org);
+            if (force)
+                await _telegram.SendMessageAsync(token, chatId, "No pude leer las promociones de Mercado Libre. Intenta en un momento.", cancellationToken: cancellationToken);
+            return;
+        }
+
+        var sent = 0;
+        foreach (var campaign in campaigns.Where(c => c.Candidates > 0))
+        {
+            var key = "promo:" + campaign.Promotion.Id;
+            if (!force && (campaign.CandidatesThatEarn == 0 ||
+                           await _context.NotificationLogs.AnyAsync(l => l.OrganizationId == org && l.Key == key, cancellationToken)))
+                continue;
+
+            var p = campaign.Promotion;
+            var earning = campaign.Rows.Where(r => r.Offer.IsCandidate && r.Earns).ToList();
+            var losing = campaign.Rows.Where(r => r.Offer.IsCandidate && r.CostKnown && !r.Earns).ToList();
+            var noCost = campaign.Rows.Count(r => r.Offer.IsCandidate && !r.CostKnown);
+
+            var html = new StringBuilder();
+            html.Append("🏷️ <b>Mercado Libre te invita a «").Append(E(p.Name)).Append("»</b>\n")
+                .Append(E(p.TypeLabel));
+            if (p.Deadline is { } deadline && deadline > DateTime.UtcNow)
+                html.Append(" · entras hasta el ").Append(deadline.AddHours(-7).ToString("d MMM", MxCulture));
+            else if (p.Finish is { } finish)
+                html.Append(" · termina el ").Append(finish.AddHours(-7).ToString("d MMM", MxCulture));
+            html.Append('\n');
+
+            if (earning.Count > 0)
+            {
+                html.Append("\n✅ <b>Siguen ganando</b> (").Append(earning.Count).Append("):\n");
+                foreach (var r in earning.Take(8))
+                    html.Append("• ").Append(E(Short(r.Title, 45))).Append(": ").Append(Money(r.CurrentPrice)).Append(" → <b>")
+                        .Append(r.ProposedPrice is { } pp ? Money(pp) : "—").Append("</b> · ganas ").Append(Money(r.Profit ?? 0)).Append('\n');
+                if (earning.Count > 8) html.Append("…y ").Append(earning.Count - 8).Append(" más\n");
+            }
+            if (losing.Count > 0)
+            {
+                html.Append("\n✖️ <b>No conviene</b> (").Append(losing.Count).Append("): ");
+                html.Append(string.Join(", ", losing.Take(4).Select(r =>
+                    E(Short(r.Title, 30)) + (r.Profit < 0 ? " (pierdes " + Money(Math.Abs(r.Profit ?? 0)) + ")" : " (ganas " + Money(r.Profit ?? 0) + ")"))));
+                if (losing.Count > 4) html.Append(" y ").Append(losing.Count - 4).Append(" más");
+                html.Append('\n');
+            }
+            if (noCost > 0)
+                html.Append("\n").Append(noCost).Append(noCost == 1 ? " sin costo capturado (no sé si gana)." : " sin costo capturado (no sé si ganan).").Append('\n');
+
+            var buttons = new List<IReadOnlyList<TelegramButton>>();
+            long? actionId = null;
+            if (earning.Count > 0)
+            {
+                var payload = new MarketplaceSync.Services.MercadoLibre.PromotionJoinPayload
+                {
+                    PromotionId = p.Id,
+                    Type = p.Type,
+                    SubType = p.SubType,
+                    Name = p.Name,
+                    Items = earning.Select(r => new MarketplaceSync.Services.MercadoLibre.PromotionJoinItem
+                    {
+                        PublicationId = r.PublicationId,
+                        Price = r.PriceEditable ? r.ProposedPrice : null,
+                        OfferId = r.Offer.OfferId
+                    }).ToList()
+                };
+                var action = new BotAction
+                {
+                    OrganizationId = org,
+                    Kind = BotActionKinds.PromotionJoin,
+                    Description = $"Entrar a «{p.Name}» con {earning.Count} {(earning.Count == 1 ? "publicación" : "publicaciones")}",
+                    Payload = System.Text.Json.JsonSerializer.Serialize(payload),
+                    Source = "promotions"
+                };
+                if (action.Payload.Length <= 4000)
+                {
+                    // Una sola tarjeta vigente por campaña: la nueva reemplaza a las anteriores.
+                    var marker = $"\"PromotionId\":\"{p.Id}\"";
+                    await _context.BotActions
+                        .Where(a => a.OrganizationId == org && a.Kind == BotActionKinds.PromotionJoin &&
+                                    a.Status == BotActionStatus.Pending && a.Payload != null && a.Payload.Contains(marker))
+                        .ExecuteUpdateAsync(u => u
+                            .SetProperty(a => a.Status, BotActionStatus.Expired)
+                            .SetProperty(a => a.DecidedAt, DateTime.UtcNow), cancellationToken);
+                    _context.BotActions.Add(action);
+                    await _context.SaveChangesAsync(cancellationToken);
+                    actionId = action.Id;
+                    buttons.Add(new[] { new TelegramButton($"✅ Entrar con {(earning.Count == 1 ? "la que gana" : $"las {earning.Count} que ganan")}", CallbackData: $"ax:{action.Id}") });
+                }
+            }
+            var second = new List<TelegramButton>();
+            if (settings.PublicBaseUrl is not null)
+                second.Add(new TelegramButton("Revisar en la app", Url: AppUrl(settings, "/Promotions")));
+            if (actionId is { } id)
+                second.Add(new TelegramButton("No", CallbackData: $"an:{id}"));
+            if (second.Count > 0)
+                buttons.Add(second);
+
+            var messageId = await _telegram.SendMessageAsync(token, chatId, html.ToString().TrimEnd(), buttons, cancellationToken: cancellationToken);
+            if (actionId is { } aid)
+                await _context.BotActions.Where(a => a.Id == aid).ExecuteUpdateAsync(u => u.SetProperty(a => a.TelegramMessageId, messageId), cancellationToken);
+            if (!await _context.NotificationLogs.AnyAsync(l => l.OrganizationId == org && l.Key == key, cancellationToken))
+                await LogAsync(org, key, "promo", p.Id, chatId, messageId, cancellationToken);
+            sent++;
+        }
+
+        if (force)
+        {
+            var discounted = await _context.MarketplacePublications.AsNoTracking()
+                .Where(x => x.Product.OrganizationId == org && x.PromotionType != null)
+                .Select(x => new { x.Product.Title, x.PromotionPrice, x.PromotionOriginalPrice, x.PromotionEndsAt })
+                .ToListAsync(cancellationToken);
+            var text = new StringBuilder();
+            if (sent == 0)
+                text.Append("Mercado Libre no te ha invitado a campañas con tus publicaciones.\n");
+            if (discounted.Count > 0)
+            {
+                text.Append("\n🏷️ <b>Con promoción ahora</b> (").Append(discounted.Count).Append("):\n");
+                foreach (var d in discounted.Take(10))
+                    text.Append("• ").Append(E(Short(d.Title, 45))).Append(": <b>").Append(d.PromotionPrice is { } pp ? Money(pp) : "—").Append("</b>")
+                        .Append(d.PromotionOriginalPrice is { } op ? " (antes " + Money(op) + ")" : "")
+                        .Append(d.PromotionEndsAt is { } end ? " hasta el " + end.AddHours(-7).ToString("d MMM", MxCulture) : "").Append('\n');
+            }
+            else
+            {
+                text.Append("Ninguna publicación tiene descuento. Pídeme uno: «ponle 10% al faro por una semana».");
+            }
+            await _telegram.SendMessageAsync(token, chatId, text.ToString().Trim(),
+                settings.PublicBaseUrl is null ? null : new[] { new[] { new TelegramButton("Abrir Promociones", Url: AppUrl(settings, "/Promotions")) } },
+                cancellationToken: cancellationToken);
         }
     }
 

@@ -14,4 +14,20 @@ public sealed class PublicationEditViewModel
 
     public int? CompatibilityCount { get; init; }
     public DateTime? CompatibilitySentAt { get; init; }
+
+    // ── Promociones ──
+
+    /// <summary>La publicación como está en la app (con la promoción activa, si tiene).</summary>
+    public MarketplaceSync.Web.Models.Marketplace.MarketplacePublication? Publication { get; init; }
+
+    /// <summary>Campañas de Mercado Libre a las que puede entrar (con la ganancia a ese precio).</summary>
+    public List<CampaignRow> CampaignOffers { get; init; } = new();
+
+    public List<DiscountOption> DiscountOptions { get; init; } = new();
+
+    /// <summary>Ganancia por pieza con el precio de la promoción activa.</summary>
+    public decimal? PromotionProfit { get; init; }
+
+    /// <summary>No se pudo leer de Mercado Libre en qué promociones está.</summary>
+    public bool PromotionsUnavailable { get; init; }
 }

@@ -56,7 +56,8 @@ public sealed class RepricingService
         var publications = await _context.MarketplacePublications.AsNoTracking()
             .Include(p => p.Product)
             .Where(p => p.Product.OrganizationId == org && p.Marketplace == "MercadoLibre" && p.IsPublished &&
-                        p.ExternalItemId != null && p.Status == "active" && p.Price > 0)
+                        p.ExternalItemId != null && p.Status == "active" && p.Price > 0 &&
+                        p.PromotionType == null) // subir el precio le quitaría el descuento
             .ToListAsync(cancellationToken);
 
         var candidates = publications

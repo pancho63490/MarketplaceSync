@@ -1,4 +1,5 @@
 using System.Globalization;
+using MarketplaceSync.Services.Automation;
 using MarketplaceSync.Services.Interfaces;
 using MarketplaceSync.Services.MercadoLibre;
 using MarketplaceSync.Web.Data;
@@ -274,6 +275,34 @@ public sealed class PublicationsController : Controller
         var (landed, profit) = await ProfitAsync(organizationId, item.ProductId, item.Price, id, cancellationToken);
         var product = await _context.Products.AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == item.ProductId && p.OrganizationId == organizationId, cancellationToken);
+
+        // Promociones: en cuál está y a cuáles puede entrar (lectura en vivo de Mercado Libre).
+        var promotions = HttpContext.RequestServices.GetRequiredService<PromotionService>();
+        var offers = item.IsClosed ? new List<PromotionOffer>() : await promotions.RefreshAsync(organizationId, id, cancellationToken);
+        var publication = await _context.MarketplacePublications.AsNoTracking()
+            .Include(p => p.Product)
+            .FirstOrDefaultAsync(p => p.Id == id && p.Product.OrganizationId == organizationId, cancellationToken);
+        var campaignRows = new List<CampaignRow>();
+        var discountOptions = new List<DiscountOption>();
+        decimal? promotionProfit = null;
+        if (publication is not null)
+        {
+            var settings = await _pricing.GetOrCreateSettingsAsync(organizationId, cancellationToken);
+            discountOptions = promotions.DiscountOptions(publication, settings);
+            campaignRows = (offers ?? new())
+                .Where(o => o.IsCandidate && o.Type != "PRICE_DISCOUNT" && !string.IsNullOrEmpty(o.PromotionId))
+                .Select(o => promotions.BuildRow(publication, o, settings))
+                .ToList();
+            if (publication.PromotionType is not null && publication.PromotionPrice is > 0)
+            {
+                var original = PromotionService.BasePrice(publication) ?? publication.PromotionPrice.Value;
+                var received = PromotionService.SellerPrice(publication.PromotionPrice, original, publication.PromotionMeliPercent,
+                    publication.PromotionMeliPercent is > 0 && original > 0 ? Math.Max(0, (1 - publication.PromotionPrice.Value / original) * 100m - publication.PromotionMeliPercent.Value) : null);
+                promotionProfit = HttpContext.RequestServices.GetRequiredService<PublicationEconomics>()
+                    .Calculate(publication, publication.Product, settings, received)?.Profit.NetProfitMxn;
+            }
+        }
+
         return View(new PublicationEditViewModel
         {
             Item = item,
@@ -281,7 +310,12 @@ public sealed class PublicationsController : Controller
             Profit = profit,
             Compatibilities = product is null ? new() : CompatibilityService.Read(product),
             CompatibilityCount = product?.CompatibilityCount,
-            CompatibilitySentAt = product?.CompatibilitySentAt
+            CompatibilitySentAt = product?.CompatibilitySentAt,
+            Publication = publication,
+            CampaignOffers = campaignRows,
+            DiscountOptions = discountOptions,
+            PromotionProfit = promotionProfit,
+            PromotionsUnavailable = offers is null && !item.IsClosed
         });
     }
 

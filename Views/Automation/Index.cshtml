@@ -166,6 +166,15 @@
                 </div>
                 <p class="small text-muted mb-0">Con lo vendido en 30 días y tu stock; total en dólares y links. Apruebas, y al llegar pulsas «Ya llegó todo» para sumar el stock. También con <code>/compra</code>.</p>
             </fieldset>
+            <fieldset>
+                <legend class="fw-bold">Campañas de Mercado Libre</legend>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="prOn" name="promotionAlerts" value="true" checked="@s.PromotionAlerts" />
+                    <input type="hidden" name="promotionAlerts" value="false" />
+                    <label class="form-check-label" for="prOn">Avisarme cuando me inviten a una campaña</label>
+                </div>
+                <p class="small text-muted mb-0">Una vez al día. Te dice cuáles publicaciones siguen ganando con el precio de la campaña y trae un botón para meter solo esas. Nunca entra sin tu ✅. También con <code>/promos</code>.</p>
+            </fieldset>
             <button type="submit" class="btn btn-primary btn-sm align-self-start">Guardar</button>
         </form>
     </section>

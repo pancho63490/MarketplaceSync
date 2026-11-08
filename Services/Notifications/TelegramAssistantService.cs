@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using MarketplaceSync.Services.Ai;
 using MarketplaceSync.Services.Automation;
 using MarketplaceSync.Services.Interfaces;
+using MarketplaceSync.Services.MercadoLibre;
 using MarketplaceSync.Web.Data;
 using MarketplaceSync.Web.Models.Automation;
 using MarketplaceSync.Web.Models.Orders;
@@ -125,6 +126,9 @@ public sealed class TelegramAssistantService
                         "proponer_pausar" => await ProposeStatusAsync(org, Int(input, "publicacion_id"), BotActionKinds.Pause, actions, cancellationToken),
                         "proponer_activar" => await ProposeStatusAsync(org, Int(input, "publicacion_id"), BotActionKinds.Activate, actions, cancellationToken),
                         "encargar_busqueda" => Enqueue(org, Str(input, "texto")),
+                        "promociones" => await PromotionsAsync(org, cancellationToken),
+                        "proponer_descuento" => await ProposeDiscountAsync(org, Int(input, "publicacion_id"), Int(input, "porcentaje"), Int(input, "dias"), actions, cancellationToken),
+                        "proponer_quitar_promocion" => await ProposeLeaveAsync(org, Int(input, "publicacion_id"), actions, cancellationToken),
                         "registrar_gasto" => await AddExpenseAsync(org, input, cancellationToken),
                         "ganancia_del_mes" => await MonthAsync(org, cancellationToken),
                         "mandar_etiquetas" => Flag(ref sendLabels, "Listo: las etiquetas se mandan en un mensaje aparte."),
@@ -170,6 +174,8 @@ public sealed class TelegramAssistantService
         - Si te pide "sube/baja X a $N", primero busca la publicación con buscar_publicaciones. Si hay varias que
           coinciden, pregunta cuál (muestra 2-3 opciones con su precio) en vez de adivinar.
         - Si un precio nuevo deja pérdida o baja de la ganancia mínima, adviértelo al proponerlo.
+        - Descuentos: "ponle 10% al faro por una semana" → busca la publicación y usa proponer_descuento (5% a 80%, hasta 31 días;
+          di cuánto queda y cuánto gana). "Quítale el descuento" → proponer_quitar_promocion. "¿Qué campañas hay?" → promociones.
         - "Encárgale/busca productos de…" → encargar_busqueda. "Etiquetas" → mandar_etiquetas. "Qué compro" → lista_de_compra.
         - Montos en pesos salvo que digan US$. Sobre impuestos, información general y que lo confirme con su contador.
         """;
@@ -198,6 +204,16 @@ public sealed class TelegramAssistantService
                 ["descripcion"] = Prop("string", "qué fue, corto: 'Cajas medianas', 'Gasolina viaje a El Paso'"),
                 ["mensual"] = Prop("boolean", "true si se repite cada mes (Render, internet)")
             }, "monto", "descripcion"),
+        Tool("promociones", "Campañas de Mercado Libre a las que invitan al vendedor (cuántas publicaciones pueden entrar y cuántas siguen ganando) y publicaciones con descuento ahora.", new JsonObject()),
+        Tool("proponer_descuento", "Propone un descuento individual (sale tachado en Mercado Libre). El vendedor confirma con botón. Regresa precio con descuento y ganancia.",
+            new JsonObject
+            {
+                ["publicacion_id"] = Prop("integer", "id de buscar_publicaciones"),
+                ["porcentaje"] = Prop("integer", "5 a 80"),
+                ["dias"] = Prop("integer", "1 a 31; 7 si no dice")
+            }, "publicacion_id", "porcentaje"),
+        Tool("proponer_quitar_promocion", "Propone sacar una publicación de su descuento o campaña (vuelve a su precio normal).",
+            new JsonObject { ["publicacion_id"] = Prop("integer", "id") }, "publicacion_id"),
         Tool("ganancia_del_mes", "Ganancia neta del mes: ventas, ganancia de las ventas, gastos y neta.", new JsonObject()),
         Tool("mandar_etiquetas", "Manda ahora el PDF de etiquetas y la lista de empaque de los pedidos por enviar.", new JsonObject()),
         Tool("lista_de_compra", "Manda ahora la lista de qué recomprar en EE.UU. para aprobarla.", new JsonObject())
@@ -358,6 +374,94 @@ public sealed class TelegramAssistantService
         var verb = kind == BotActionKinds.Pause ? "Pausar" : "Activar";
         var description = $"{verb} «{Short(publication.Product.Title, 60)}» ({publication.ExternalItemId})";
         var action = await _actions.ProposeAsync(org, kind, publication.Id, null, description, "assistant", cancellationToken);
+        actions.Add(action);
+        return $"Propuesto: {description}. El vendedor debe confirmarlo con el botón.";
+    }
+
+    private async Task<string> PromotionsAsync(Guid org, CancellationToken cancellationToken)
+    {
+        var promotions = _services.GetRequiredService<PromotionService>();
+        var campaigns = await promotions.CampaignsAsync(org, cancellationToken);
+        var discounted = await _context.MarketplacePublications.AsNoTracking()
+            .Where(p => p.Product.OrganizationId == org && p.PromotionType != null)
+            .Select(p => new { p.Id, p.Product.Title, p.PromotionType, p.PromotionPrice, p.PromotionOriginalPrice, p.PromotionEndsAt })
+            .Take(15)
+            .ToListAsync(cancellationToken);
+        return JsonSerializer.Serialize(new
+        {
+            campanas = campaigns.Select(c => new
+            {
+                nombre = c.Promotion.Name,
+                tipo = c.Promotion.TypeLabel,
+                entrar_hasta = c.Promotion.Deadline?.AddHours(-7).ToString("d MMM", CultureInfo.GetCultureInfo("es-MX")),
+                invitadas = c.Candidates,
+                siguen_ganando = c.CandidatesThatEarn,
+                ya_participan = c.Joined,
+                ejemplos = c.Rows.Where(r => r.Offer.IsCandidate).Take(4).Select(r => new
+                {
+                    titulo = Short(r.Title, 50),
+                    precio_hoy = Money(r.CurrentPrice),
+                    precio_campana = Money(r.ProposedPrice),
+                    ganancia = r.CostKnown ? Money(r.Profit) : "sin costo"
+                })
+            }),
+            con_descuento = discounted.Select(d => new
+            {
+                publicacion_id = d.Id,
+                titulo = Short(d.Title, 50),
+                tipo = PromotionService.TypeLabel(d.PromotionType),
+                precio = Money(d.PromotionPrice),
+                antes = Money(d.PromotionOriginalPrice),
+                termina = d.PromotionEndsAt?.AddHours(-7).ToString("d MMM", CultureInfo.GetCultureInfo("es-MX"))
+            }),
+            nota = "Para entrar a una campaña: botón en el aviso de Telegram (/promos) o en la app (/Promotions)."
+        });
+    }
+
+    private async Task<string> ProposeDiscountAsync(Guid org, int? publicationId, int? percent, int? days, List<BotAction> actions, CancellationToken cancellationToken)
+    {
+        var publication = await LoadAsync(org, publicationId, cancellationToken);
+        if (publication is null)
+            return "No encontré esa publicación; búscala primero.";
+        if (percent is not (>= PromotionService.MinDiscount and <= PromotionService.MaxDiscount))
+            return $"El descuento debe ser de {PromotionService.MinDiscount}% a {PromotionService.MaxDiscount}%.";
+        if (publication.PromotionType is not null)
+            return $"Ya tiene una promoción ({PromotionService.TypeLabel(publication.PromotionType)}) a {Money(publication.PromotionPrice)}. Primero hay que quitarla (proponer_quitar_promocion).";
+        var d = Math.Clamp(days ?? 7, 1, PromotionService.MaxDays);
+        var basePrice = PromotionService.BasePrice(publication);
+        if (basePrice is not > 0)
+            return "Esa publicación no tiene precio.";
+
+        var settings = await _pricing.GetOrCreateSettingsAsync(org, cancellationToken);
+        var price = PromotionService.DiscountedPrice(basePrice.Value, percent.Value);
+        var money = _economics.Calculate(publication, publication.Product, settings, price);
+        var description = $"Poner {percent}% de descuento a «{Short(publication.Product.Title, 45)}» por {d} {(d == 1 ? "día" : "días")}: {Money(basePrice)} → {Money(price)}" +
+                          (money is null ? "" : money.Profit.NetProfitMxn < 0
+                              ? $" (perderías {Money(-money.Profit.NetProfitMxn)} por pieza)"
+                              : $" (ganarías {Money(money.Profit.NetProfitMxn)} por pieza)");
+        var action = await _actions.ProposeAsync(org, BotActionKinds.Discount, publication.Id, percent, description, "assistant", cancellationToken);
+        action.Payload = JsonSerializer.Serialize(new { days = d });
+        await _context.SaveChangesAsync(cancellationToken);
+        actions.Add(action);
+        return JsonSerializer.Serialize(new
+        {
+            propuesto = description,
+            ganancia_con_descuento = money?.Profit.NetProfitMxn,
+            gana_lo_minimo = money is not null && money.Profit.NetProfitMxn >= settings.MinProfitAmountMxn,
+            nota = "El vendedor debe confirmarlo con el botón. Mercado Libre pide reputación verde y producto nuevo."
+        });
+    }
+
+    private async Task<string> ProposeLeaveAsync(Guid org, int? publicationId, List<BotAction> actions, CancellationToken cancellationToken)
+    {
+        var publication = await LoadAsync(org, publicationId, cancellationToken);
+        if (publication is null)
+            return "No encontré esa publicación; búscala primero.";
+        if (publication.PromotionType is null)
+            return "Según lo último que leí, esa publicación no tiene promoción.";
+        var description = $"Quitar la promoción ({PromotionService.TypeLabel(publication.PromotionType)}) a «{Short(publication.Product.Title, 50)}» " +
+                          $"(vuelve de {Money(publication.PromotionPrice)} a {Money(PromotionService.BasePrice(publication))})";
+        var action = await _actions.ProposeAsync(org, BotActionKinds.DiscountRemove, publication.Id, null, description, "assistant", cancellationToken);
         actions.Add(action);
         return $"Propuesto: {description}. El vendedor debe confirmarlo con el botón.";
     }

@@ -193,6 +193,12 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("PromotionAlerts")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly?>("PromotionsCheckedOn")
+                        .HasColumnType("date");
+
                     b.Property<decimal>("RepricingMaxIncreasePercent")
                         .HasPrecision(6, 2)
                         .HasColumnType("numeric(6,2)");
@@ -262,6 +268,10 @@ namespace MarketplaceSync.Web.Migrations
 
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Payload")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
 
                     b.Property<int?>("PublicationId")
                         .HasColumnType("integer");
@@ -1055,6 +1065,37 @@ namespace MarketplaceSync.Web.Migrations
 
                     b.Property<int>("ProductId")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("PromotionCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PromotionEndsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PromotionId")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<decimal?>("PromotionMeliPercent")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("PromotionOfferId")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<decimal?>("PromotionOriginalPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("PromotionPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("PromotionStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("PromotionType")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
 
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("timestamp with time zone");

@@ -36,6 +36,10 @@ public sealed class BotAction
     [MaxLength(500)]
     public string? Result { get; set; }
 
+    /// <summary>Datos extra en JSON (días del descuento; campaña y publicaciones al entrar a una promoción).</summary>
+    [MaxLength(4000)]
+    public string? Payload { get; set; }
+
     public long? TelegramMessageId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? DecidedAt { get; set; }
@@ -49,6 +53,15 @@ public static class BotActionKinds
 
     /// <summary>Mandar a Mercado Libre las compatibilidades guardadas en el producto.</summary>
     public const string Compatibilities = "compat";
+
+    /// <summary>Descuento individual (Value = %, Payload {"days":7}).</summary>
+    public const string Discount = "discount";
+
+    /// <summary>Quitar la promoción en la que está la publicación.</summary>
+    public const string DiscountRemove = "undiscount";
+
+    /// <summary>Entrar a una campaña de Mercado Libre con varias publicaciones (Payload con campaña y precios).</summary>
+    public const string PromotionJoin = "promo";
 }
 
 public static class BotActionStatus

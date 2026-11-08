@@ -73,6 +73,14 @@ public sealed class AutomationSettings
 
     public DateOnly? WeeklyPurchaseSentOn { get; set; }
 
+    // ── Promociones ──
+
+    /// <summary>Avisar por Telegram cuando Mercado Libre invita a una campaña, con botón para entrar con las que siguen ganando.</summary>
+    public bool PromotionAlerts { get; set; } = true;
+
+    /// <summary>Última vez que se revisaron campañas nuevas (una vez al día).</summary>
+    public DateOnly? PromotionsCheckedOn { get; set; }
+
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 

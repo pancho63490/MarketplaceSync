@@ -80,6 +80,9 @@ public sealed class BotActionService
                 BotActionKinds.Pause => await _editor.SetStatusAsync(org, action.PublicationId!.Value, "paused", cancellationToken),
                 BotActionKinds.Activate => await _editor.SetStatusAsync(org, action.PublicationId!.Value, "active", cancellationToken),
                 BotActionKinds.Compatibilities => await CompatibilitiesAsync(org, action, cancellationToken),
+                BotActionKinds.Discount when action.Value is > 0 => await DiscountAsync(org, action, cancellationToken),
+                BotActionKinds.DiscountRemove => await LeavePromotionAsync(org, action, cancellationToken),
+                BotActionKinds.PromotionJoin => await JoinPromotionAsync(org, action, cancellationToken),
                 _ => "No sé hacer esa acción."
             };
         }
@@ -118,6 +121,48 @@ public sealed class BotActionService
         if (ok)
             action.Description = message;
         return ok ? null : message;
+    }
+
+    private async Task<string?> DiscountAsync(Guid org, BotAction action, CancellationToken cancellationToken)
+    {
+        var days = 7;
+        if (!string.IsNullOrWhiteSpace(action.Payload))
+        {
+            try
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(action.Payload);
+                if (document.RootElement.TryGetProperty("days", out var d) && d.TryGetInt32(out var n)) days = n;
+            }
+            catch (System.Text.Json.JsonException) { }
+        }
+        var (ok, message) = await _services.GetRequiredService<PromotionService>()
+            .CreateDiscountAsync(org, action.PublicationId!.Value, (int)action.Value!.Value, days, cancellationToken);
+        if (ok) action.Description = message;
+        return ok ? null : message;
+    }
+
+    private async Task<string?> LeavePromotionAsync(Guid org, BotAction action, CancellationToken cancellationToken)
+    {
+        var (ok, message) = await _services.GetRequiredService<PromotionService>().LeaveAsync(org, action.PublicationId!.Value, cancellationToken);
+        if (ok) action.Description = message;
+        return ok ? null : message;
+    }
+
+    private async Task<string?> JoinPromotionAsync(Guid org, BotAction action, CancellationToken cancellationToken)
+    {
+        PromotionJoinPayload? payload = null;
+        try { payload = string.IsNullOrWhiteSpace(action.Payload) ? null : System.Text.Json.JsonSerializer.Deserialize<PromotionJoinPayload>(action.Payload); }
+        catch (System.Text.Json.JsonException) { }
+        if (payload is null || payload.Items.Count == 0)
+            return "No encontré qué publicaciones meter a la campaña.";
+
+        var (joined, errors) = await _services.GetRequiredService<PromotionService>().JoinManyAsync(org, payload, cancellationToken);
+        if (joined == 0)
+            return "Mercado Libre no aceptó ninguna. " + string.Join(" · ", errors.Take(3));
+        action.Description = $"Entraron {joined} de {payload.Items.Count} a «{payload.Name}»." +
+                             (errors.Count > 0 ? " No entraron: " + string.Join(" · ", errors.Take(3)) : string.Empty);
+        if (action.Description.Length > 400) action.Description = action.Description[..400];
+        return null;
     }
 
     private async Task<string?> PriceAsync(Guid org, BotAction action, CancellationToken cancellationToken)

@@ -96,6 +96,38 @@ namespace MarketplaceSync.Web.Models.Marketplace
         public string? AutopilotNotes { get; set; }
 
         // =====================================
+        // PROMOCIÓN ACTIVA
+        // =====================================
+
+        /// <summary>Promoción en la que está hoy (PRICE_DISCOUNT, DEAL, SELLER_CAMPAIGN…); null = sin promoción.</summary>
+        [MaxLength(30)]
+        public string? PromotionType { get; set; }
+
+        /// <summary>Id de la campaña (P-MLM…, C-MLM…); null en descuentos individuales.</summary>
+        [MaxLength(60)]
+        public string? PromotionId { get; set; }
+
+        /// <summary>Id de la oferta en campañas que lo piden para salir (VOLUME, SMART, co-fondeadas).</summary>
+        [MaxLength(120)]
+        public string? PromotionOfferId { get; set; }
+
+        /// <summary>started (activa) o pending (programada).</summary>
+        [MaxLength(20)]
+        public string? PromotionStatus { get; set; }
+
+        /// <summary>Precio con la promoción (lo que paga el comprador).</summary>
+        public decimal? PromotionPrice { get; set; }
+
+        /// <summary>Precio sin promoción.</summary>
+        public decimal? PromotionOriginalPrice { get; set; }
+
+        /// <summary>% que pone Mercado Libre en campañas co-fondeadas (null = lo pone todo el vendedor).</summary>
+        public decimal? PromotionMeliPercent { get; set; }
+
+        public DateTime? PromotionEndsAt { get; set; }
+        public DateTime? PromotionCheckedAt { get; set; }
+
+        // =====================================
         // DATES
         // =====================================
 

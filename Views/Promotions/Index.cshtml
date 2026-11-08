@@ -1,0 +1,227 @@
+@model MarketplaceSync.Web.Controllers.PromotionsController.PromotionsIndexViewModel
+@using System.Globalization
+@using MarketplaceSync.Services.MercadoLibre
+@{
+    ViewData["Title"] = "Promociones";
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    string Mxn(decimal? v) => v.HasValue ? v.Value.ToString("C0", mx) : "—";
+    string Day(DateTime? d) => d.HasValue ? d.Value.AddHours(-7).ToString("d MMM", mx) : "—";
+    var canEnter = Model.Campaigns.Sum(c => c.Candidates);
+    var canEnterEarning = Model.Campaigns.Sum(c => c.CandidatesThatEarn);
+    var campaignIndex = 0;
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Promociones</h1>
+        <p>Las campañas a las que Mercado Libre te invita, con cuánto ganas en cada publicación a ese precio. Nada entra a una promoción sin que tú lo pidas.</p>
+    </div>
+    @if (Model.HasAccount)
+    {
+        <form asp-action="Refresh" method="post" data-busy="Revisando…">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-outline-secondary btn-sm">@Html.Icon("refresh-cw") Revisar mis descuentos</button>
+        </form>
+    }
+</header>
+
+@if (!Model.HasAccount)
+{
+    <div class="empty">
+        @Html.Icon("badge-percent", "icon")
+        <div>
+            <strong>Conecta tu cuenta de Mercado Libre</strong>
+            <p class="mb-0 small text-muted">Las promociones se leen de tu cuenta. <a asp-controller="MercadoLibre" asp-action="Status">Conectar cuenta</a></p>
+        </div>
+    </div>
+}
+else
+{
+    <dl class="stats stagger">
+        <div class="stat"><dt>Campañas abiertas</dt><dd>@Model.Campaigns.Count</dd></div>
+        <div class="stat @(canEnterEarning > 0 ? "is-ok" : "")"><dt>Pueden entrar ganando</dt><dd>@canEnterEarning <small>de @canEnter invitadas</small></dd></div>
+        <div class="stat"><dt>Con promoción ahora</dt><dd>@Model.Discounted.Count</dd></div>
+        <div class="stat"><dt>Ganancia mínima</dt><dd>@Mxn(Model.MinProfit) <small><a asp-controller="CrossBorder" asp-action="Index">cambiar</a></small></dd></div>
+    </dl>
+
+    @if (Model.Campaigns.Count == 0)
+    {
+        <div class="empty mb-3">
+            @Html.Icon("badge-percent", "icon")
+            <div>
+                <strong>Mercado Libre no te ha invitado a campañas con tus publicaciones</strong>
+                <p class="mb-0 small text-muted">Cuando llegue una invitación te aviso por Telegram. Mientras, puedes poner un descuento propio desde Publicados → Editar → Promoción.</p>
+            </div>
+        </div>
+    }
+
+    @foreach (var campaign in Model.Campaigns)
+    {
+        var p = campaign.Promotion;
+        var formId = "join-" + campaignIndex;
+        var rowIndex = 0;
+        var anyEditable = campaign.Rows.Any(r => r.PriceEditable);
+        var coFunded = campaign.Rows.Any(r => r.Offer.MeliPercent is > 0);
+        <section class="panel promo-campaign" aria-labelledby="pc-@campaignIndex">
+            <div class="panel-head">
+                <h2 id="pc-@campaignIndex">@p.Name <span class="pill pill-info">@p.TypeLabel</span></h2>
+                <p class="mb-0">
+                    @if (p.Start.HasValue || p.Finish.HasValue) { <text>Del @Day(p.Start) al @Day(p.Finish)</text> }
+                    @if (p.Deadline.HasValue && p.Deadline > DateTime.UtcNow) { <text> · puedes entrar hasta el <b>@Day(p.Deadline)</b></text> }
+                    @if (coFunded) { <text> · Mercado Libre pone parte del descuento</text> }
+                </p>
+            </div>
+            <form asp-action="Join" method="post" id="@formId" data-busy="Mandando a Mercado Libre…">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="promotionId" value="@p.Id" />
+                <input type="hidden" name="type" value="@p.Type" />
+                <input type="hidden" name="subType" value="@p.SubType" />
+                <input type="hidden" name="name" value="@p.Name" />
+                <div class="table-responsive">
+                    <table class="data-table promo-table">
+                        <thead>
+                            <tr>
+                                <th aria-label="Entrar"></th>
+                                <th>Publicación</th>
+                                <th class="num">Precio hoy</th>
+                                <th class="num">En la campaña</th>
+                                <th class="num">Ganas por pieza</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in campaign.Rows)
+                            {
+                                var i = rowIndex++;
+                                <tr class="@(r.Offer.IsCandidate && !r.Earns ? "promo-loss" : "")">
+                                    <td class="promo-check">
+                                        @if (r.Offer.IsCandidate)
+                                        {
+                                            <input type="hidden" name="rows[@i].PublicationId" value="@r.PublicationId" />
+                                            <input type="hidden" name="rows[@i].OfferId" value="@r.Offer.OfferId" />
+                                            <input class="form-check-input" type="checkbox" name="rows[@i].Selected" value="true" checked="@r.Earns" aria-label="Meter @r.Title" />
+                                        }
+                                    </td>
+                                    <td class="promo-title">
+                                        <a asp-controller="Publications" asp-action="Edit" asp-route-id="@r.PublicationId">@r.Title</a>
+                                        <span class="sub">@r.Offer.ItemId</span>
+                                    </td>
+                                    <td class="num" data-label="Precio hoy">@Mxn(r.CurrentPrice)</td>
+                                    <td class="num" data-label="En la campaña">
+                                        @if (r.PriceEditable && r.Offer.IsCandidate)
+                                        {
+                                            <input name="rows[@i].Price" class="form-control form-control-sm promo-price" inputmode="decimal"
+                                                   value="@(r.ProposedPrice?.ToString("0.##", CultureInfo.InvariantCulture))"
+                                                   min="@(r.Offer.MinPrice?.ToString("0.##", CultureInfo.InvariantCulture))"
+                                                   max="@(r.Offer.MaxPrice?.ToString("0.##", CultureInfo.InvariantCulture))"
+                                                   aria-label="Precio en la campaña" />
+                                            @if (r.Offer.MinPrice is > 0 || r.Offer.MaxPrice is > 0)
+                                            {
+                                                <span class="sub">@(r.Offer.MinPrice is > 0 ? Mxn(r.Offer.MinPrice) : "")@(r.Offer.MinPrice is > 0 && r.Offer.MaxPrice is > 0 ? " a " : "")@(r.Offer.MaxPrice is > 0 ? Mxn(r.Offer.MaxPrice) : "")</span>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <b>@Mxn(r.ProposedPrice)</b>
+                                            @if (r.DiscountPercent is > 0) { <span class="sub">−@r.DiscountPercent%@(r.Offer.MeliPercent is > 0 ? $" · ML pone {r.Offer.MeliPercent:0.#}%" : "")</span> }
+                                        }
+                                    </td>
+                                    <td class="num" data-label="Ganas por pieza">
+                                        @if (!r.CostKnown)
+                                        {
+                                            <span class="text-muted" title="Captura el costo en el producto para saber cuánto ganas">sin costo</span>
+                                        }
+                                        else
+                                        {
+                                            <b class="@(r.Earns ? "text-ok" : "text-bad")">@Mxn(r.Profit)</b>
+                                            <span class="sub">hoy @Mxn(r.ProfitNow)</span>
+                                        }
+                                    </td>
+                                    <td data-label="Estado">
+                                        @if (r.Offer.Status == "started") { <span class="pill pill-ok">Participa</span> }
+                                        else if (r.Offer.IsActive) { <span class="pill pill-info">Programada</span> }
+                                        else if (!r.CostKnown) { <span class="pill">Puede entrar</span> }
+                                        else if (r.Earns) { <span class="pill pill-ok">Conviene</span> }
+                                        else if (r.Profit < 0) { <span class="pill pill-bad">Pierdes</span> }
+                                        else { <span class="pill pill-warn">Bajo el mínimo</span> }
+                                        @if (r.Offer.IsActive)
+                                        {
+                                            <button type="submit" form="leave-@r.PublicationId" class="btn btn-link btn-sm p-0 ms-1">Salir</button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (campaign.Candidates > 0)
+                {
+                    <div class="panel-body promo-foot">
+                        <button type="submit" class="btn btn-primary btn-sm">@Html.Icon("check") Entrar con las marcadas</button>
+                        <span class="small text-muted">
+                            Ya vienen marcadas las que siguen ganando al menos @Mxn(Model.MinProfit).
+                            @if (anyEditable) { <text>Tú escoges el precio dentro del rango; la ganancia es con el precio propuesto.</text> }
+                        </span>
+                    </div>
+                }
+            </form>
+        </section>
+        campaignIndex++;
+    }
+
+    <section class="panel" aria-labelledby="pd-now">
+        <div class="panel-head">
+            <h2 id="pd-now">Con promoción ahora</h2>
+            <p class="mb-0">Si subes el precio de una publicación con descuento, Mercado Libre le quita el descuento.</p>
+        </div>
+        @if (Model.Discounted.Count == 0)
+        {
+            <div class="panel-body"><p class="text-muted mb-0">Ninguna publicación tiene promoción. Para poner un descuento: Publicados → Editar → Promoción.</p></div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="data-table promo-table">
+                    <thead><tr><th>Publicación</th><th>Promoción</th><th class="num">Precio</th><th>Termina</th><th class="num">Ganas por pieza</th><th aria-label="Quitar"></th></tr></thead>
+                    <tbody>
+                        @foreach (var d in Model.Discounted)
+                        {
+                            var off = d.OriginalPrice is > 0 && d.Price is > 0 ? Math.Round((1 - d.Price.Value / d.OriginalPrice.Value) * 100m) : (decimal?)null;
+                            <tr>
+                                <td class="promo-title"><a asp-controller="Publications" asp-action="Edit" asp-route-id="@d.PublicationId" asp-fragment="pe-promo-panel">@d.Title</a></td>
+                                <td data-label="Promoción">@PromotionService.TypeLabel(d.Type)@if (d.Status is "pending") { <span class="pill pill-info ms-1">Programada</span> }</td>
+                                <td class="num" data-label="Precio"><b>@Mxn(d.Price)</b>@if (off is > 0) { <span class="sub">antes @Mxn(d.OriginalPrice) · −@off%</span> }</td>
+                                <td class="text-nowrap" data-label="Termina">@Day(d.EndsAt)</td>
+                                <td class="num" data-label="Ganas por pieza">@if (d.CostKnown) { <b class="@(d.Profit >= Model.MinProfit ? "text-ok" : "text-bad")">@Mxn(d.Profit)</b> } else { <span class="text-muted">sin costo</span> }</td>
+                                <td class="promo-action"><button type="submit" form="leave-@d.PublicationId" class="btn btn-outline-secondary btn-sm">Quitar</button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    @foreach (var id in Model.Discounted.Select(d => d.PublicationId).Concat(Model.Campaigns.SelectMany(c => c.Rows).Where(r => r.Offer.IsActive).Select(r => r.PublicationId)).Distinct())
+    {
+        <form asp-action="Leave" method="post" id="leave-@id" class="d-none" data-busy="Quitando…" onsubmit="return confirm('¿Quitar la promoción? La publicación vuelve a su precio normal.')">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="publicationId" value="@id" />
+        </form>
+    }
+}
+
+@section Scripts {
+<script>
+    document.querySelectorAll('.promo-campaign form[id^="join-"]').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            var losing = form.querySelectorAll('tr.promo-loss input[type=checkbox]:checked').length;
+            if (losing > 0 && !confirm(losing + (losing === 1 ? ' de las marcadas pierde' : ' de las marcadas pierden') +
+                ' o gana menos de tu mínimo con ese precio. ¿Entrar de todos modos?')) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+            }
+        }, true);
+    });
+</script>
+}

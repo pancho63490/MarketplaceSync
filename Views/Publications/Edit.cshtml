@@ -393,6 +393,94 @@
             </div>
         </section>
 
+        @if (!item.IsClosed && Model.Publication is { } pub)
+        {
+            var promoPrice = pub.PromotionPrice;
+            var promoOriginal = MarketplaceSync.Services.MercadoLibre.PromotionService.BasePrice(pub);
+            var promoOff = promoOriginal is > 0 && promoPrice is > 0 ? Math.Round((1 - promoPrice.Value / promoOriginal.Value) * 100m) : (decimal?)null;
+            var defaultOption = Model.DiscountOptions.Where(o => o.Earns).Select(o => (int?)o.Percent).LastOrDefault() ?? 10;
+            <section class="panel" aria-labelledby="pe-promo" id="pe-promo-panel">
+                <div class="panel-head"><h2 id="pe-promo">@Html.Icon("badge-percent") Promoción</h2></div>
+                <div class="panel-body promo-box">
+                    @if (pub.PromotionType is not null)
+                    {
+                        <div class="promo-now">
+                            <span><span class="pill @(pub.PromotionStatus == "started" ? "pill-ok" : "pill-info")">@(pub.PromotionStatus == "started" ? "Activa" : "Programada")</span> @PromotionService.TypeLabel(pub.PromotionType)@(promoOff is > 0 ? $" · −{promoOff}%" : "")</span>
+                            <span class="promo-price-line">@Mxn(promoPrice)@if (promoOriginal is > 0 && promoOriginal != promoPrice) { <s>@Mxn(promoOriginal)</s> }</span>
+                            @if (Model.PromotionProfit is { } pp)
+                            {
+                                <span class="small">Ganas <b class="@(pp >= 0 ? "text-ok" : "text-bad")">@Mxn(pp)</b> por pieza con la promoción.</span>
+                            }
+                            @if (pub.PromotionEndsAt is { } ends) { <span class="small text-muted">Termina el @ends.AddHours(-7).ToString("d MMM", mx).</span> }
+                        </div>
+                        <form asp-controller="Promotions" asp-action="Leave" method="post" data-busy="Quitando…" onsubmit="return confirm('¿Quitar la promoción? Vuelve a su precio normal.')">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="publicationId" value="@pub.Id" />
+                            <input type="hidden" name="returnTo" value="edit" />
+                            <button type="submit" class="btn btn-outline-secondary btn-sm">Quitar promoción</button>
+                        </form>
+                        <p class="small text-muted mb-0">Si cambias el precio, Mercado Libre le quita el descuento.</p>
+                    }
+                    else if (Model.DiscountOptions.Count > 0 && item.Condition == "new")
+                    {
+                        <form asp-controller="Promotions" asp-action="Discount" method="post" class="promo-form d-grid gap-2" data-busy="Mandando a Mercado Libre…">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="publicationId" value="@pub.Id" />
+                            <div class="row-2">
+                                <div>
+                                    <label class="form-label small" for="promoPct">Descuento</label>
+                                    <select id="promoPct" name="percent" class="form-select form-select-sm">
+                                        @foreach (var o in Model.DiscountOptions)
+                                        {
+                                            <option value="@o.Percent" selected="@(o.Percent == defaultOption)"
+                                                    data-price="@Mxn(o.Price)" data-profit="@(o.Profit.HasValue ? Mxn(o.Profit) : "")" data-earns="@(o.Earns ? "1" : "0")">@o.Percent%</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label small" for="promoDays">Por</label>
+                                    <select id="promoDays" name="days" class="form-select form-select-sm">
+                                        <option value="3">3 días</option>
+                                        <option value="7" selected>7 días</option>
+                                        <option value="15">15 días</option>
+                                        <option value="31">31 días</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <p class="promo-preview mb-0" id="promoPreview" aria-live="polite"></p>
+                            <button type="submit" class="btn btn-primary btn-sm justify-self-start">Poner descuento</button>
+                        </form>
+                        <p class="small text-muted mb-0">Sale tachado en Mercado Libre. Pide reputación verde y al menos una venta.</p>
+                    }
+                    else if (Model.PromotionsUnavailable)
+                    {
+                        <p class="small text-muted mb-0">No pude leer las promociones de Mercado Libre. Intenta en un momento.</p>
+                    }
+                    else
+                    {
+                        <p class="small text-muted mb-0">Mercado Libre solo deja poner descuento a publicaciones de productos nuevos.</p>
+                    }
+
+                    @if (Model.CampaignOffers.Count > 0)
+                    {
+                        <div>
+                            <strong class="small">Te invitan a</strong>
+                            <ul class="promo-offers mt-1">
+                                @foreach (var c in Model.CampaignOffers)
+                                {
+                                    <li>
+                                        <span>@(c.Offer.Name ?? PromotionService.TypeLabel(c.Offer.Type))<span class="d-block text-muted">a @Mxn(c.ProposedPrice)</span></span>
+                                        <span class="text-end">@if (c.CostKnown) { <b class="@(c.Earns ? "text-ok" : "text-bad")">@Mxn(c.Profit)</b><span class="d-block text-muted">por pieza</span> }</span>
+                                    </li>
+                                }
+                            </ul>
+                            <a asp-controller="Promotions" asp-action="Index" class="small">Entrar desde Promociones</a>
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+
         <section class="panel" aria-labelledby="pe-summary">
             <div class="panel-head"><h2 id="pe-summary">Resumen</h2></div>
             <div class="panel-body">
@@ -414,6 +502,20 @@
 
 @section Scripts {
 <script>
+    (function () {
+        var pct = document.getElementById('promoPct');
+        var out = document.getElementById('promoPreview');
+        if (!pct || !out) return;
+        function show() {
+            var o = pct.options[pct.selectedIndex];
+            var profit = o.dataset.profit;
+            out.innerHTML = 'Queda en <b>' + o.dataset.price + '</b>' +
+                (profit ? ' · ganas <b class="' + (o.dataset.earns === '1' ? 'text-ok' : 'text-bad') + '">' + profit + '</b> por pieza' +
+                 (o.dataset.earns === '1' ? '' : ' (abajo de tu mínimo)') : ' · captura el costo para ver la ganancia');
+        }
+        pct.addEventListener('change', show);
+        show();
+    })();
     (function () {
         var body = document.getElementById('compatRows');
         if (!body) return;
