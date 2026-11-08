@@ -388,6 +388,9 @@ public sealed class ProductTitleTranslator
     /// Ajusta a 60 caracteres cuidando lo que más busca el comprador: la pieza y el vehículo con sus años.
     /// Primero quita accesorios ("con Empaque"), luego marcas de fábrica sueltas, y al final recorta.
     /// </summary>
+    /// <summary>Ajusta a 60 caracteres (ver <see cref="FitTitle"/>).</summary>
+    public static string Fit(string title) => FitTitle(title);
+
     private static string FitTitle(string title)
     {
         if (title.Length <= MaxTitleLength)

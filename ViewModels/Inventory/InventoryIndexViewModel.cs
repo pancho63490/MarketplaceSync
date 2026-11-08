@@ -15,6 +15,9 @@ public sealed class InventoryIndexViewModel
     public int TotalUnits { get; init; }
     public int LowStockVariants { get; init; }
     public int OutOfStockVariants { get; init; }
+
+    /// <summary>Piezas por SKU que no se publican (reserva general).</summary>
+    public int StockReserve { get; init; }
     public IReadOnlyList<MarketplaceSync.Services.Inventory.ExpiringLot> ExpiringLots { get; init; }
         = Array.Empty<MarketplaceSync.Services.Inventory.ExpiringLot>();
     public IReadOnlyDictionary<int, (DateOnly ExpiresOn, int Units, int LotUnits)> NextExpiryByVariant { get; init; }

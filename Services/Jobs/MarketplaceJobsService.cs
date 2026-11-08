@@ -289,6 +289,14 @@ namespace MarketplaceSync.Services.Jobs
             await _telegram.PollAllAsync();
         }
 
+        /// <summary>Revisa que todo funcione y avisa por Telegram lo que falla (y cuando se arregla).</summary>
+        [AutomaticRetry(Attempts = 0)]
+        [DisableConcurrentExecution(timeoutInSeconds: 600)]
+        public async Task CheckHealth()
+        {
+            await _telegram.SendHealthAlertsAllAsync();
+        }
+
         /// <summary>Manda por Telegram lo que no se ha avisado (preguntas, ventas, agotados, resumen diario).</summary>
         [AutomaticRetry(Attempts = 0)]
         [DisableConcurrentExecution(timeoutInSeconds: 300)]

@@ -56,6 +56,8 @@ public sealed class PublicationsController : Controller
                         p.IsPublished &&
                         p.ExternalItemId != null)
             .ToListAsync(cancellationToken);
+        var generalReserve = await _context.AutomationSettings.AsNoTracking()
+            .Where(a => a.OrganizationId == organizationId).Select(a => a.StockReserve).FirstOrDefaultAsync(cancellationToken);
 
         var rows = publications.Select(p =>
         {
@@ -93,6 +95,7 @@ public sealed class PublicationsController : Controller
                 Price = p.Price,
                 MercadoLibreStock = p.Stock,
                 AppStock = variants.Count > 0 ? variants.Sum(v => Math.Max(0, v.Stock)) : null,
+                AppPublishable = variants.Count > 0 ? MarketplaceSync.Services.Inventory.StockReserve.Publishable(variants, generalReserve) : null,
                 SkuCount = variants.Count,
                 HasRemoteVariations = p.Variants.Count > 0,
                 Sold = p.SoldQuantity,
@@ -478,7 +481,8 @@ public sealed class PublicationsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Bulk(int[] ids, string? bulkAction, string? amount, string? mode, string? filter, CancellationToken cancellationToken)
+    public async Task<IActionResult> Bulk(int[] ids, string? bulkAction, string? amount, string? mode, string? filter,
+        int? percent, int? days, bool includeLosing, CancellationToken cancellationToken)
     {
         var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
         if (ids.Length == 0)
@@ -489,6 +493,8 @@ public sealed class PublicationsController : Controller
 
         if (bulkAction == "suggested")
             return await ApplySuggestedPricesAsync(organizationId, ids, filter, cancellationToken);
+        if (bulkAction is "discount" or "undiscount")
+            return await BulkDiscountAsync(organizationId, ids, bulkAction, percent ?? 10, days ?? 7, includeLosing, filter, cancellationToken);
 
         decimal? value = null;
         if (bulkAction == "price")
@@ -509,6 +515,61 @@ public sealed class PublicationsController : Controller
         }
         if (result.Errors.Count > 0)
             TempData["Error"] = string.Join(" · ", result.Errors.Take(5)) + (result.Errors.Count > 5 ? $" (y {result.Errors.Count - 5} más)" : "");
+        return RedirectToAction(nameof(Index), new { filter });
+    }
+
+    /// <summary>
+    /// Descuento individual a varias publicaciones (o quitarlo). Las que perderían con el descuento se saltan,
+    /// salvo que se marque "también las que pierden".
+    /// </summary>
+    private async Task<IActionResult> BulkDiscountAsync(Guid organizationId, int[] ids, string action, int percent, int days, bool includeLosing, string? filter, CancellationToken cancellationToken)
+    {
+        var promotions = HttpContext.RequestServices.GetRequiredService<PromotionService>();
+        var economics = HttpContext.RequestServices.GetRequiredService<PublicationEconomics>();
+        var settings = await _pricing.GetOrCreateSettingsAsync(organizationId, cancellationToken);
+        var publications = await _context.MarketplacePublications.AsNoTracking()
+            .Include(p => p.Product)
+            .Where(p => ids.Contains(p.Id) && p.Product.OrganizationId == organizationId && p.ExternalItemId != null)
+            .Take(50)
+            .ToListAsync(cancellationToken);
+
+        var done = 0;
+        var skipped = new List<string>();
+        var errors = new List<string>();
+        foreach (var publication in publications)
+        {
+            var title = publication.Product.Title.Length > 35 ? publication.Product.Title[..35] + "…" : publication.Product.Title;
+            if (action == "undiscount")
+            {
+                if (publication.PromotionType is null) { skipped.Add($"«{title}» no tenía"); continue; }
+                var (left, leaveMessage) = await promotions.LeaveAsync(organizationId, publication.Id, cancellationToken);
+                if (left) done++; else errors.Add($"«{title}»: {leaveMessage}");
+                continue;
+            }
+
+            if (publication.PromotionType is not null) { skipped.Add($"«{title}» ya tiene promoción"); continue; }
+            var basePrice = PromotionService.BasePrice(publication);
+            if (basePrice is not > 0) { skipped.Add($"«{title}» sin precio"); continue; }
+            var money = economics.Calculate(publication, publication.Product, settings, PromotionService.DiscountedPrice(basePrice.Value, percent));
+            if (money is not null && money.Profit.NetProfitMxn < 0 && !includeLosing)
+            {
+                skipped.Add($"«{title}» perdería {(-money.Profit.NetProfitMxn).ToString("C0", Mx)}");
+                continue;
+            }
+            var (ok, message) = await promotions.CreateDiscountAsync(organizationId, publication.Id, percent, days, cancellationToken);
+            if (ok) done++; else errors.Add($"«{title}»: {message}");
+        }
+
+        if (done > 0)
+            TempData["Success"] = action == "undiscount"
+                ? $"Quité la promoción de {done} {(done == 1 ? "publicación" : "publicaciones")}."
+                : $"{percent}% de descuento por {days} días en {done} {(done == 1 ? "publicación" : "publicaciones")}.";
+        if (skipped.Count > 0)
+            TempData["Warning"] = "Sin cambio: " + string.Join(" · ", skipped.Take(5)) + (skipped.Count > 5 ? $" (y {skipped.Count - 5} más)" : "") + ".";
+        if (errors.Count > 0)
+            TempData["Error"] = string.Join(" · ", errors.Take(4)) + (errors.Count > 4 ? $" (y {errors.Count - 4} más)" : "");
+        if (done == 0 && skipped.Count == 0 && errors.Count == 0)
+            TempData["Warning"] = "No encontré esas publicaciones.";
         return RedirectToAction(nameof(Index), new { filter });
     }
 

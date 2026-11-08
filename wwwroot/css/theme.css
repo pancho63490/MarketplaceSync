@@ -2222,3 +2222,9 @@ body {
 .ad-camp-form .ad-input { width: 9.5rem; flex-wrap: nowrap; }
 .ad-camp-form .ad-input .form-control { min-width: 0; }
 .text-warn { color: var(--warn) !important; }
+.pe-title-issues { margin-top: .4rem; font-size: var(--fs-sm); }
+.pe-title-issues ul { padding-left: 1.1rem; }
+.tt-input { min-width: 16rem; }
+.tt-count { font-variant-numeric: var(--num); }
+.inv-reserve { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.inv-reserve .input-group { width: 8.5rem; }

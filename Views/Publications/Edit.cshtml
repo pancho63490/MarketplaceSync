@@ -61,6 +61,22 @@
                                 <span>@(item.CanEditTitle ? "Producto + marca + modelo + años. Sin “envío gratis” ni signos." : "Mercado Libre no deja cambiar el título porque ya tiene ventas. Puedes mejorar la ficha técnica y la descripción.")</span>
                                 <span id="titleCount" class="text-nowrap">@item.Title.Length/60</span>
                             </div>
+                            @{
+                                var titleIssues = MarketplaceSync.Services.Ai.TitleQuality.Review(item.Title);
+                                var titleFix = titleIssues.Count > 0 ? MarketplaceSync.Services.Ai.TitleQuality.Clean(item.Title) : null;
+                            }
+                            @if (titleIssues.Count > 0)
+                            {
+                                <div class="pe-title-issues">
+                                    <ul class="mb-1">
+                                        @foreach (var issue in titleIssues) { <li class="@(issue.Blocks ? "text-bad" : "text-warn")">@issue.Message</li> }
+                                    </ul>
+                                    @if (item.CanEditTitle && !string.IsNullOrWhiteSpace(titleFix) && titleFix != item.Title)
+                                    {
+                                        <span class="small">Sugerencia: <b>@titleFix</b> <button type="button" class="btn btn-link btn-sm p-0 align-baseline" onclick="var t=document.getElementById('Title');t.value=this.dataset.title;t.dispatchEvent(new Event('input'));" data-title="@titleFix">Usar</button></span>
+                                    }
+                                </div>
+                            }
                         </div>
 
                         <div class="pe-field">

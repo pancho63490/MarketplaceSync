@@ -214,6 +214,9 @@ namespace MarketplaceSync.Web.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
 
+                    b.Property<int>("StockReserve")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("ThankYouEnabled")
                         .HasColumnType("boolean");
 
@@ -2218,6 +2221,9 @@ namespace MarketplaceSync.Web.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.Property<int>("Stock")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("StockReserve")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("UpdatedAt")

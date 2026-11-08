@@ -902,6 +902,10 @@ public async Task<IActionResult> PublishToMercadoLibre(PublishToMercadoLibreRequ
 
     ValidateRequiredMercadoLibreAttributes(input);
 
+    // Palabras prohibidas, datos de contacto o más de 60 caracteres: Mercado Libre lo rechaza o lo castiga.
+    foreach (var issue in MarketplaceSync.Services.Ai.TitleQuality.Review(input.Title).Where(i => i.Blocks))
+        ModelState.AddModelError(nameof(input.Title), issue.Message + $" Sugerencia: «{MarketplaceSync.Services.Ai.TitleQuality.Clean(input.Title)}».");
+
     if (!ModelState.IsValid)
     {
         await PopulateMarketplaceAccountsAsync(input, organizationId);
@@ -961,6 +965,9 @@ var token = await _context.MercadoLibreTokens
         return View(input);
     }
 
+    var generalReserve = Math.Max(0, await _context.AutomationSettings.AsNoTracking()
+        .Where(a => a.OrganizationId == organizationId).Select(a => a.StockReserve).FirstOrDefaultAsync());
+
     Dictionary<string, object?> BuildPayload()
     {
         var payload = new Dictionary<string, object?>
@@ -994,7 +1001,7 @@ var token = await _context.MercadoLibreTokens
                         })
                         .ToArray(),
                     ["price"] = variant.Price ?? input.Price,
-                    ["available_quantity"] = variant.Stock,
+                    ["available_quantity"] = MarketplaceSync.Services.Inventory.StockReserve.Publishable(variant, generalReserve),
                     ["seller_custom_field"] = variant.Sku
                 };
 

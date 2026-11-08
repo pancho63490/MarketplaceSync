@@ -33,7 +33,10 @@ public sealed class PublicationRow
     public string? LastStockPushError { get; init; }
     public string? AccountName { get; init; }
 
-    public bool StockMismatch => AppStock.HasValue && MercadoLibreStock.HasValue && AppStock != MercadoLibreStock;
+    /// <summary>Lo que debería estar publicado (stock de la app menos la reserva).</summary>
+    public int? AppPublishable { get; init; }
+
+    public bool StockMismatch => (AppPublishable ?? AppStock).HasValue && MercadoLibreStock.HasValue && (AppPublishable ?? AppStock) != MercadoLibreStock;
 }
 
 public sealed class PublicationsIndexViewModel

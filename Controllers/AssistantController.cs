@@ -106,6 +106,7 @@ public sealed class AssistantController : Controller
             - Promociones: campañas de Mercado Libre a las que te invitan con la ganancia de cada publicación a ese precio (entrar con las que ganan), y descuentos activos con botón para quitarlos: /Promotions. Para poner un descuento propio (5% a 80%, hasta 31 días): Publicados → Editar → Promoción. Gastos del negocio y Excel para el contador: /Finance
             - Facturas CFDI: lista del mes y factura global al público en general: /Invoices; datos fiscales y CSD: /Invoices/Settings; facturar una venta: Pedidos → la venta → Factura (/Orders/Details/NÚMERO#factura)
             - Publicidad (Mercado Ads): gasto, ventas y ACOS por campaña y por anuncio, cuánto ganas con cada anuncio contra su ACOS máximo, pausar anuncios y cambiar presupuesto u objetivo de ACOS: /Ads  (?days=7, 30 o 90)
+            - Revisar títulos (palabras prohibidas, inglés, términos de México, mayúsculas, símbolos; sugerencia con IA y cambiar los que no tienen ventas): /Titles
             - Importar producto con IA: /Products/CreateFromUrl
             - Inventario (incluye caducidades por lote): /Inventory
             - Pedidos: /Orders

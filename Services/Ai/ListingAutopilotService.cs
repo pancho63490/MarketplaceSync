@@ -195,6 +195,16 @@ public sealed class ListingAutopilotService : IListingAutopilotService
 
         if (!string.IsNullOrWhiteSpace(enrichment.OptimizedTitle))
             product.Title = enrichment.OptimizedTitle;
+        // Sin palabras prohibidas ni de más, términos de México, sin símbolos y en 60 caracteres.
+        if (!string.IsNullOrWhiteSpace(product.Title) && TitleQuality.Review(product.Title).Count > 0)
+        {
+            var cleanTitle = TitleQuality.Clean(product.Title);
+            if (cleanTitle.Length >= 15 && cleanTitle != product.Title)
+            {
+                product.Title = cleanTitle;
+                done.Add("Título corregido (palabras prohibidas o términos de México)");
+            }
+        }
         if (!string.IsNullOrWhiteSpace(enrichment.CleanDescription))
             product.Description = enrichment.CleanDescription;
         product.Brand = string.IsNullOrWhiteSpace(enrichment.Brand) ? product.Brand : enrichment.Brand;
@@ -280,8 +290,10 @@ public sealed class ListingAutopilotService : IListingAutopilotService
 
         var activeVariants = product.Variants.Where(v => v.IsActive).ToList();
         var hasVariations = activeVariants.Any(v => v.AttributesJson is not null && v.AttributesJson.Trim() != "{}");
+        var generalReserve = Math.Max(0, await _context.AutomationSettings.AsNoTracking()
+            .Where(a => a.OrganizationId == product.OrganizationId).Select(a => a.StockReserve).FirstOrDefaultAsync(cancellationToken));
         var stock = activeVariants.Count > 0
-            ? activeVariants.Sum(v => Math.Max(0, v.Stock))
+            ? MarketplaceSync.Services.Inventory.StockReserve.Publishable(activeVariants, generalReserve)
             : publication.Stock ?? product.SourceStock ?? 1;
         publication.Stock = activeVariants.Count > 0 ? stock : Math.Max(1, stock);
 
@@ -290,7 +302,10 @@ public sealed class ListingAutopilotService : IListingAutopilotService
         if (string.IsNullOrWhiteSpace(product.Title)) missing.Add("Título");
         if (string.IsNullOrWhiteSpace(product.ImageUrl)) missing.Add("Imagen del producto");
         if (publication.Price is not > 0) missing.Add("Precio");
-        if (publication.Stock is not > 0) missing.Add("Stock: recibe la mercancía o define cuántas piezas tienes");
+        if (publication.Stock is not > 0)
+            missing.Add(activeVariants.Count > 0 && activeVariants.Sum(v => Math.Max(0, v.Stock)) > 0
+                ? "Stock: todas las piezas están apartadas por el stock de reserva"
+                : "Stock: recibe la mercancía o define cuántas piezas tienes");
         if (enrichment.HighRiskIntellectualProperty)
             missing.Add("Revisión manual: la IA detectó posible riesgo de marca o réplica" +
                         (string.IsNullOrWhiteSpace(enrichment.IntellectualPropertyWarning) ? "" : $" ({enrichment.IntellectualPropertyWarning})"));

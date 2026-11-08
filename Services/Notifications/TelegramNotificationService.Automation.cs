@@ -428,6 +428,91 @@ public sealed partial class TelegramNotificationService
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Avisos de fallas
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>Revisión de cada hora: avisa lo que dejó de funcionar (una vez al día por problema) y cuando ya quedó.</summary>
+    public async Task SendHealthAlertsAllAsync(CancellationToken cancellationToken = default)
+    {
+        var orgIds = await _context.NotificationSettings.AsNoTracking()
+            .Where(x => x.TelegramChatId != null)
+            .Select(x => x.OrganizationId)
+            .ToListAsync(cancellationToken);
+        foreach (var org in orgIds)
+        {
+            try
+            {
+                await SendHealthAlertsAsync(org, cancellationToken);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(exception, "Health alerts failed for {Org}.", org);
+            }
+            finally
+            {
+                _context.ChangeTracker.Clear();
+            }
+        }
+    }
+
+    public async Task SendHealthAlertsAsync(Guid org, CancellationToken cancellationToken = default)
+    {
+        var settings = await _context.NotificationSettings.FirstOrDefaultAsync(x => x.OrganizationId == org, cancellationToken);
+        var token = settings is null ? null : TokenFor(settings);
+        if (settings?.TelegramChatId is not { } chatId || token is null)
+            return;
+
+        var (problems, _) = await Service<HealthMonitorService>().CheckAsync(org, cancellationToken);
+        var today = LocalNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        foreach (var problem in problems)
+        {
+            var key = $"health:{problem.Key}:{today}";
+            if (await _context.NotificationLogs.AnyAsync(l => l.OrganizationId == org && l.Key == key, cancellationToken))
+                continue;
+            var html = $"⚠️ <b>{E(problem.Title)}</b>\n{E(problem.Detail)}";
+            var buttons = problem.FixPath is not null && settings.PublicBaseUrl is not null
+                ? new[] { new[] { new TelegramButton("Arreglarlo en la app", Url: AppUrl(settings, problem.FixPath)) } }
+                : null;
+            var messageId = await _telegram.SendMessageAsync(token, chatId, html, buttons, cancellationToken: cancellationToken);
+            await LogAsync(org, key, "health", problem.Key.Length > 60 ? problem.Key[..60] : problem.Key, chatId, messageId, cancellationToken);
+        }
+
+        // Lo que se avisó en las últimas 24 horas y ya no aparece: avisar que quedó (una vez).
+        var since = DateTime.UtcNow.AddHours(-24);
+        var alerted = await _context.NotificationLogs.AsNoTracking()
+            .Where(l => l.OrganizationId == org && l.Kind == "health" && l.SentAt >= since && l.EntityId != null)
+            .Select(l => l.EntityId!)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var current = problems.Select(p => p.Key.Length > 60 ? p.Key[..60] : p.Key).ToHashSet();
+        foreach (var problemKey in alerted.Where(k => !current.Contains(k)))
+        {
+            var okKey = $"health-ok:{problemKey}:{today}";
+            if (await _context.NotificationLogs.AnyAsync(l => l.OrganizationId == org && l.Key == okKey, cancellationToken))
+                continue;
+            var messageId = await _telegram.SendMessageAsync(token, chatId, "✅ " + E(HealthMonitorService.ResolvedLabel(problemKey)) + ".", cancellationToken: cancellationToken);
+            await LogAsync(org, okKey, "health-ok", problemKey, chatId, messageId, cancellationToken);
+        }
+    }
+
+    /// <summary>/estado: todo lo que se revisa, bien o mal.</summary>
+    private async Task SendHealthStatusAsync(string token, NotificationSettings settings, CancellationToken cancellationToken)
+    {
+        var (problems, checks) = await Service<HealthMonitorService>().CheckAsync(settings.OrganizationId, cancellationToken);
+        var html = new StringBuilder(problems.Count == 0 ? "✅ <b>Todo funciona</b>\n" : $"⚠️ <b>{problems.Count} {(problems.Count == 1 ? "cosa necesita" : "cosas necesitan")} atención</b>\n");
+        foreach (var p in problems)
+            html.Append("\n⚠️ <b>").Append(E(p.Title)).Append("</b>\n").Append(E(p.Detail)).Append('\n');
+        if (checks.Count > 0)
+        {
+            html.Append('\n');
+            foreach (var c in checks)
+                html.Append("✅ ").Append(E(c.Name)).Append(": ").Append(E(c.Detail)).Append('\n');
+        }
+        await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, html.ToString().Trim(), cancellationToken: cancellationToken);
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Publicidad
     // ─────────────────────────────────────────────────────────────
 

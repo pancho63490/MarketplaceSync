@@ -29,6 +29,7 @@
     <div class="d-flex flex-wrap gap-2 align-items-center">
         @if (Model.HasConnectedAccount)
         {
+            <a asp-controller="Titles" asp-action="Index" class="btn btn-outline-secondary">@Html.Icon("pencil") Revisar títulos</a>
             <a asp-controller="BulkEdit" asp-action="Export" class="btn btn-outline-secondary">@Html.Icon("download") Bajar Excel</a>
             <form asp-controller="BulkEdit" asp-action="Upload" method="post" enctype="multipart/form-data" class="be-upload" data-busy="Leyendo…">
                 @Html.AntiForgeryToken()
@@ -221,6 +222,8 @@ else
         <select name="bulkAction" id="bulkAction" class="form-select form-select-sm" aria-label="Qué hacer">
             <option value="price">Cambiar precio</option>
             <option value="suggested">Precio sugerido (solo las que no ganan lo mínimo)</option>
+            <option value="discount">Poner descuento</option>
+            <option value="undiscount">Quitar descuento o promoción</option>
             <option value="paused">Pausar</option>
             <option value="active">Activar</option>
         </select>
@@ -230,6 +233,15 @@ else
                 <option value="percent">%</option>
                 <option value="amount">pesos</option>
             </select>
+        </span>
+        <span class="d-inline-flex gap-1 align-items-center" id="bulkDiscount" hidden>
+            <select name="percent" class="form-select form-select-sm" aria-label="Descuento">
+                @foreach (var pct in new[] { 5, 10, 15, 20, 25, 30, 40, 50 }) { <option value="@pct" selected="@(pct == 10)">@pct%</option> }
+            </select>
+            <select name="days" class="form-select form-select-sm" aria-label="Cuántos días">
+                <option value="3">3 días</option><option value="7" selected>7 días</option><option value="15">15 días</option><option value="31">31 días</option>
+            </select>
+            <label class="small text-white text-nowrap"><input type="checkbox" class="form-check-input me-1" name="includeLosing" value="true" />también las que pierden</label>
         </span>
         <button type="submit" class="btn btn-primary btn-sm" id="bulkButton">Aplicar en Mercado Libre</button>
         <button type="button" class="btn btn-link btn-sm text-white" id="bulkClear">Quitar selección</button>
@@ -252,7 +264,8 @@ else
             boxes.forEach(function (b) { b.addEventListener('change', refresh); });
             document.getElementById('bulkClear').addEventListener('click', function () { boxes.forEach(function (b) { b.checked = false; }); refresh(); });
             var action = document.getElementById('bulkAction'), price = document.getElementById('bulkPrice');
-            action.addEventListener('change', function () { price.hidden = action.value !== 'price'; });
+            var discount = document.getElementById('bulkDiscount');
+            action.addEventListener('change', function () { price.hidden = action.value !== 'price'; discount.hidden = action.value !== 'discount'; });
             document.querySelectorAll('form[data-confirm]').forEach(function (f) {
                 f.addEventListener('submit', function (e) {
                     if (!confirm(f.dataset.confirm)) { e.preventDefault(); return; }

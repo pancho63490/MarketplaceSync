@@ -27,6 +27,9 @@ public class ProductVariant
 
     public int Stock { get; set; }
     public int LowStockThreshold { get; set; } = 5;
+
+    /// <summary>Piezas que no se publican (para no sobrevender); null = la reserva general de Automatización.</summary>
+    public int? StockReserve { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

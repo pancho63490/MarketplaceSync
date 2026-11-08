@@ -1,0 +1,113 @@
+@model MarketplaceSync.Web.Controllers.TitlesController.TitlesViewModel
+@{
+    ViewData["Title"] = "Revisar títulos";
+    var index = 0;
+    var editable = Model.Rows.Count(r => r.CanEdit && r.Suggestion != r.Title);
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Revisar títulos</h1>
+        <p>Títulos claros en español de México venden más. Aquí ves los que tienen palabras prohibidas o que no se usan en México, restos en inglés o símbolos, con una sugerencia que puedes editar antes de mandarla.</p>
+    </div>
+    <a asp-controller="Publications" asp-action="Index" class="btn btn-outline-secondary btn-sm">Volver a Publicados</a>
+</header>
+
+<dl class="stats">
+    <div class="stat"><dt>Publicaciones</dt><dd>@Model.Total</dd></div>
+    <div class="stat @(Model.Blocking > 0 ? "is-bad" : "is-ok")"><dt>Con palabras prohibidas o muy largos</dt><dd>@Model.Blocking</dd></div>
+    <div class="stat @(Model.Warnings > 0 ? "is-warn" : "is-ok")"><dt>Se pueden mejorar</dt><dd>@Model.Warnings</dd></div>
+    <div class="stat"><dt>Se pueden cambiar</dt><dd>@Model.Rows.Count(r => r.CanEdit) <small>sin ventas</small></dd></div>
+</dl>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <nav class="d-flex flex-wrap gap-2" aria-label="Filtro">
+        <a asp-action="Index" asp-route-filter="problems" class="pub-chip @(Model.Filter == "problems" ? "active" : "")">Con problemas <span>@Model.Warnings</span></a>
+        <a asp-action="Index" asp-route-filter="blocking" class="pub-chip @(Model.Filter == "blocking" ? "active" : "")">Prohibidas <span>@Model.Blocking</span></a>
+        <a asp-action="Index" asp-route-filter="all" class="pub-chip @(Model.Filter == "all" ? "active" : "")">Todas <span>@Model.Total</span></a>
+    </nav>
+    @if (Model.AiConfigured && Model.Rows.Any(r => r.CanEdit && r.Issues.Count > 0))
+    {
+        <form asp-action="Suggest" method="post" data-busy="Pensando…">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="filter" value="@Model.Filter" />
+            <button type="submit" class="btn btn-outline-secondary btn-sm">@Html.Icon("sparkles") Mejorar con IA (hasta 15)</button>
+        </form>
+    }
+</div>
+
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty">
+        @Html.Icon("circle-check", "icon")
+        <div><strong>Tus títulos están bien</strong><p class="mb-0 small text-muted">Ninguno tiene palabras prohibidas, inglés ni símbolos.</p></div>
+    </div>
+}
+else
+{
+    <form asp-action="Apply" method="post" data-busy="Cambiando en Mercado Libre…">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="filter" value="@Model.Filter" />
+        <section class="panel">
+            <div class="table-responsive">
+                <table class="data-table promo-table">
+                    <thead><tr><th aria-label="Cambiar"></th><th>Título actual</th><th>Qué tiene</th><th>Título nuevo</th></tr></thead>
+                    <tbody>
+                        @foreach (var r in Model.Rows)
+                        {
+                            var i = index++;
+                            var differs = r.Suggestion != r.Title;
+                            <tr id="t@(r.PublicationId)" class="@(r.Issues.Any(x => x.Blocks) ? "promo-loss" : "")">
+                                <td class="promo-check">
+                                    @if (r.CanEdit)
+                                    {
+                                        <input type="hidden" name="rows[@i].Id" value="@r.PublicationId" />
+                                        <input class="form-check-input" type="checkbox" name="rows[@i].Selected" value="true" checked="@(differs && r.Issues.Count > 0)" aria-label="Cambiar título de @r.Title" />
+                                    }
+                                </td>
+                                <td class="promo-title">
+                                    <a asp-controller="Publications" asp-action="Edit" asp-route-id="@r.PublicationId">@r.Title</a>
+                                    <span class="sub">@r.ItemId · @r.Title.Length/60@(r.Status == "paused" ? " · pausada" : "")</span>
+                                </td>
+                                <td data-label="Qué tiene" class="small">
+                                    @if (r.Issues.Count == 0) { <span class="text-ok">Bien</span> }
+                                    @foreach (var issue in r.Issues) { <span class="d-block @(issue.Blocks ? "text-bad" : "text-warn")">@issue.Message</span> }
+                                </td>
+                                <td data-label="Título nuevo">
+                                    @if (r.CanEdit)
+                                    {
+                                        <input name="rows[@i].Title" class="form-control form-control-sm tt-input" maxlength="60" value="@r.Suggestion" aria-label="Título nuevo" oninput="this.nextElementSibling.textContent=this.value.length+'/60'" />
+                                        <span class="small text-muted tt-count">@r.Suggestion.Length/60</span>@if (r.FromAi) { <span class="pill pill-signal ms-1">IA</span> }
+                                        @if (Model.AiConfigured)
+                                        {
+                                            <button type="submit" form="ai-@r.PublicationId" class="btn btn-link btn-sm p-0 ms-2">Mejorar con IA</button>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="small text-muted">Ya tiene ventas: Mercado Libre no deja cambiar el título.</span>
+                                        @if (differs) { <span class="d-block small">Si la republicas, usa: <b>@r.Suggestion</b></span> }
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (Model.Rows.Any(r => r.CanEdit))
+            {
+                <div class="panel-body promo-foot">
+                    <button type="submit" class="btn btn-primary btn-sm">@Html.Icon("check") Cambiar los marcados en Mercado Libre</button>
+                    <span class="small text-muted">Revisa que el título nuevo diga exactamente lo que es la pieza. Hasta 30 por vez.</span>
+                </div>
+            }
+        </section>
+    </form>
+    @foreach (var r in Model.Rows.Where(r => r.CanEdit))
+    {
+        <form asp-action="Suggest" method="post" id="ai-@r.PublicationId" class="d-none" data-busy="Pensando…">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" value="@r.PublicationId" /><input type="hidden" name="filter" value="@Model.Filter" />
+        </form>
+    }
+}

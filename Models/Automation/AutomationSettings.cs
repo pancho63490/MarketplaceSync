@@ -81,6 +81,11 @@ public sealed class AutomationSettings
     /// <summary>Última vez que se revisaron campañas nuevas (una vez al día).</summary>
     public DateOnly? PromotionsCheckedOn { get; set; }
 
+    // ── Inventario ──
+
+    /// <summary>Piezas por SKU que no se publican en Mercado Libre (colchón contra sobreventa). 0 = publicar todo.</summary>
+    public int StockReserve { get; set; }
+
     // ── Publicidad ──
 
     /// <summary>Avisar por Telegram de anuncios de Mercado Ads que gastan más de lo que ganan (una vez al día).</summary>

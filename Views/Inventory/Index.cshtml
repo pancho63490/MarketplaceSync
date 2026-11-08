@@ -24,7 +24,20 @@
         <h1 class="page-title">Inventario</h1>
         <p>Las piezas que tienes en Juárez. Cada cambio se manda solo a Mercado Libre.</p>
     </div>
+    <form asp-action="SetReserve" method="post" class="inv-reserve" title="Piezas por SKU que no se publican, para no sobrevender en temporada alta">
+        @Html.AntiForgeryToken()
+        <label for="invReserve" class="small fw-semibold">Stock de reserva</label>
+        <span class="input-group input-group-sm">
+            <input id="invReserve" name="stockReserve" type="number" min="0" max="100" value="@Model.StockReserve" class="form-control" />
+            <span class="input-group-text">por SKU</span>
+        </span>
+        <button type="submit" class="btn btn-outline-secondary btn-sm">Guardar</button>
+    </form>
 </header>
+@if (Model.StockReserve > 0)
+{
+    <p class="small text-muted">En Mercado Libre se publican @Model.StockReserve @(Model.StockReserve == 1 ? "pieza" : "piezas") menos de las que tienes en cada SKU (salvo los que tienen su propia reserva).</p>
+}
 
 <dl class="stats">
     <div class="stat"><dt>SKU activos</dt><dd>@Model.TotalVariants.ToString("N0", mx)</dd></div>
@@ -110,7 +123,7 @@
     {
         <div class="table-wrap">
             <table class="data-table inv-table">
-                <thead><tr><th>Producto</th><th class="num">Hay</th><th class="num">Vendidas</th><th>Avisar con</th><th>Ajustar existencias</th></tr></thead>
+                <thead><tr><th>Producto</th><th class="num">Hay</th><th class="num">Vendidas</th><th>Avisar con · Reserva</th><th>Ajustar existencias</th></tr></thead>
                 <tbody>
                 @foreach (var row in Model.Variants)
                 {
@@ -131,6 +144,7 @@
                         </td>
                         <td class="num">
                             <span class="pill @stockTone inv-stock">@variant.Stock</span>
+                            @if ((variant.StockReserve ?? Model.StockReserve) > 0 && variant.Stock > 0) { <span class="sub">publica @MarketplaceSync.Services.Inventory.StockReserve.Publishable(variant, Model.StockReserve)</span> }
                             @if (variant.Stock < 0) { <span class="sub text-danger">Sobreventa</span> }
                         </td>
                         <td class="num">@Math.Max(0, row.NetSoldUnits)</td>
@@ -138,7 +152,8 @@
                             <form asp-action="SetThreshold" method="post" class="inv-inline">
                                 @Html.AntiForgeryToken()
                                 <input type="hidden" name="variantId" value="@variant.Id" />
-                                <input type="number" name="lowStockThreshold" value="@variant.LowStockThreshold" min="0" max="1000000" class="form-control form-control-sm inv-num" aria-label="Avisar cuando queden estas piezas de @variant.Sku" />
+                                <input type="number" name="lowStockThreshold" value="@variant.LowStockThreshold" min="0" max="1000000" class="form-control form-control-sm inv-num" aria-label="Avisar cuando queden estas piezas de @variant.Sku" title="Avisar cuando queden" />
+                                <input type="number" name="stockReserve" value="@variant.StockReserve" min="0" max="1000" placeholder="@Model.StockReserve" class="form-control form-control-sm inv-num" aria-label="Piezas apartadas de @variant.Sku (vacío = la general)" title="Piezas apartadas (vacío = la general)" />
                                 <button class="btn btn-sm btn-outline-secondary" type="submit">Guardar</button>
                             </form>
                         </td>

@@ -103,7 +103,9 @@ public sealed class InventoryController : Controller
             TotalVariants = summary?.TotalVariants ?? 0,
             TotalUnits = summary?.TotalUnits ?? 0,
             LowStockVariants = summary?.LowStock ?? 0,
-            OutOfStockVariants = summary?.OutOfStock ?? 0
+            OutOfStockVariants = summary?.OutOfStock ?? 0,
+            StockReserve = await _dbContext.AutomationSettings.AsNoTracking()
+                .Where(a => a.OrganizationId == organizationId).Select(a => a.StockReserve).FirstOrDefaultAsync(cancellationToken)
         });
     }
 
@@ -216,11 +218,37 @@ public sealed class InventoryController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    /// <summary>Reserva general: piezas por SKU que no se publican. Se vuelve a mandar el stock de todo.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetReserve(int stockReserve, CancellationToken cancellationToken)
+    {
+        var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var automation = await HttpContext.RequestServices.GetRequiredService<MarketplaceSync.Services.Automation.AutomationService>()
+            .GetAsync(organizationId, cancellationToken);
+        var value = Math.Clamp(stockReserve, 0, 100);
+        if (automation.StockReserve != value)
+        {
+            automation.StockReserve = value;
+            automation.UpdatedAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            var productIds = await _dbContext.ProductVariants
+                .Where(v => v.OrganizationId == organizationId && v.IsActive && v.StockReserve == null)
+                .Select(v => v.ProductId).Distinct().ToListAsync(cancellationToken);
+            _stockSync.RequestPush(productIds);
+        }
+        TempData["Success"] = value == 0
+            ? "Sin reserva: se publican todas las piezas."
+            : $"Listo: se {(value == 1 ? "aparta 1 pieza" : $"apartan {value} piezas")} por SKU. Mercado Libre se actualiza en unos segundos.";
+        return RedirectToAction(nameof(Index));
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SetThreshold(
         int variantId,
         int lowStockThreshold,
+        string? stockReserve,
         CancellationToken cancellationToken)
     {
         if (lowStockThreshold is < 0 or > 1_000_000)
@@ -239,10 +267,17 @@ public sealed class InventoryController : Controller
         if (variant is null)
             return NotFound();
 
+        // Reserva de este SKU: vacío = la general.
+        int? reserve = int.TryParse(stockReserve, out var r) && r >= 0 ? Math.Min(r, 1000) : null;
+        var reserveChanged = reserve != variant.StockReserve;
         variant.LowStockThreshold = lowStockThreshold;
+        variant.StockReserve = reserve;
         variant.UpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
-        TempData["Success"] = $"Alerta de {variant.Sku} configurada en {lowStockThreshold} unidades.";
+        if (reserveChanged)
+            _stockSync.RequestPush(new[] { variant.ProductId });
+        TempData["Success"] = $"{variant.Sku}: aviso con {lowStockThreshold} piezas" +
+            (reserve is { } rr ? $", {rr} {(rr == 1 ? "pieza apartada" : "piezas apartadas")} (no se publican)" : ", reserva general") + ".";
         return RedirectToAction(nameof(Index));
     }
 }

@@ -178,6 +178,7 @@ public sealed class MercadoLibreListingSyncService : IMercadoLibreListingSyncSer
                         itemIds.Contains(p.ExternalItemId))
             .ToListAsync(cancellationToken);
         var byItemId = publications.ToDictionary(p => p.ExternalItemId!, StringComparer.OrdinalIgnoreCase);
+        var reserve = await GeneralReserveAsync(organizationId, cancellationToken);
 
         var skuMap = await _context.ProductVariants
             .Where(v => v.OrganizationId == organizationId && v.IsActive)
@@ -302,7 +303,7 @@ public sealed class MercadoLibreListingSyncService : IMercadoLibreListingSyncSer
             var activeVariants = publication.Product.Variants.Where(v => v.IsActive).ToList();
             if (activeVariants.Count > 0 && !hasVariations)
             {
-                var desired = activeVariants.Sum(v => Math.Max(0, v.Stock));
+                var desired = MarketplaceSync.Services.Inventory.StockReserve.Publishable(activeVariants, reserve);
                 if (desired != publication.Stock)
                 {
                     var error = await PutAsync(token, itemId, new { available_quantity = desired }, cancellationToken);
@@ -312,7 +313,7 @@ public sealed class MercadoLibreListingSyncService : IMercadoLibreListingSyncSer
             }
             else if (hasVariations && publication.Variants.Count > 0)
             {
-                pushed += await PushVariationsAsync(token, publication, activeVariants, variations, cancellationToken);
+                pushed += await PushVariationsAsync(token, publication, activeVariants, variations, reserve, cancellationToken);
             }
         }
 
@@ -341,6 +342,7 @@ public sealed class MercadoLibreListingSyncService : IMercadoLibreListingSyncSer
         if (activeVariants.Count == 0 || publications.Count == 0)
             return new StockPushResult(publications.Count, 0, errors);
 
+        var reserve = await GeneralReserveAsync(product.OrganizationId, cancellationToken);
         var updated = 0;
         foreach (var publication in publications)
         {
@@ -357,11 +359,11 @@ public sealed class MercadoLibreListingSyncService : IMercadoLibreListingSyncSer
 
             if (publication.Variants.Count > 0)
             {
-                updated += await PushVariationsAsync(token, publication, activeVariants, default, cancellationToken);
+                updated += await PushVariationsAsync(token, publication, activeVariants, default, reserve, cancellationToken);
                 continue;
             }
 
-            var desired = activeVariants.Sum(v => Math.Max(0, v.Stock));
+            var desired = MarketplaceSync.Services.Inventory.StockReserve.Publishable(activeVariants, reserve);
             var error = await PutAsync(token, publication.ExternalItemId!, new { available_quantity = desired }, cancellationToken);
             RecordPush(publication, error, desired);
             if (error == null) updated++;
@@ -377,6 +379,7 @@ public sealed class MercadoLibreListingSyncService : IMercadoLibreListingSyncSer
         MarketplacePublication publication,
         IReadOnlyList<ProductVariant> variants,
         JsonElement remoteVariations,
+        int reserve,
         CancellationToken cancellationToken)
     {
         var remoteQuantity = new Dictionary<string, int>();
@@ -398,7 +401,7 @@ public sealed class MercadoLibreListingSyncService : IMercadoLibreListingSyncSer
                 Variant = variants.FirstOrDefault(v => v.Id == link.ProductVariantId)
             })
             .Where(x => x.Variant != null)
-            .Select(x => new { x.Link.ExternalVariationId, Quantity = Math.Max(0, x.Variant!.Stock) })
+            .Select(x => new { x.Link.ExternalVariationId, Quantity = MarketplaceSync.Services.Inventory.StockReserve.Publishable(x.Variant!, reserve) })
             .Where(x => !remoteQuantity.TryGetValue(x.ExternalVariationId!, out var current) || current != x.Quantity)
             .ToList();
         if (changes.Count == 0)
@@ -413,9 +416,16 @@ public sealed class MercadoLibreListingSyncService : IMercadoLibreListingSyncSer
             }).ToArray()
         };
         var error = await PutAsync(token, publication.ExternalItemId!, body, cancellationToken);
-        RecordPush(publication, error, variants.Sum(v => Math.Max(0, v.Stock)));
+        RecordPush(publication, error, MarketplaceSync.Services.Inventory.StockReserve.Publishable(variants, reserve));
         return error == null ? 1 : 0;
     }
+
+    /// <summary>Reserva general de la organización (piezas por SKU que no se publican).</summary>
+    private async Task<int> GeneralReserveAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Math.Max(0, await _context.AutomationSettings.AsNoTracking()
+            .Where(a => a.OrganizationId == organizationId)
+            .Select(a => a.StockReserve)
+            .FirstOrDefaultAsync(cancellationToken));
 
     private static void RecordPush(MarketplacePublication publication, string? error, int quantity)
     {
