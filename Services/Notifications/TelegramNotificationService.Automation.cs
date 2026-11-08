@@ -256,6 +256,15 @@ public sealed partial class TelegramNotificationService
             }
         }
 
+        if (automation.AdsAlerts && automation.AdsCheckedOn != today && now.Hour >= 10 && now.Hour < 20)
+        {
+            var claimed = await _context.AutomationSettings
+                .Where(a => a.Id == automation.Id && (a.AdsCheckedOn == null || a.AdsCheckedOn != today))
+                .ExecuteUpdateAsync(u => u.SetProperty(a => a.AdsCheckedOn, today), cancellationToken);
+            if (claimed == 1)
+                await SendLosingAdsAsync(token, settings, force: false, cancellationToken);
+        }
+
         if (automation.WeeklyPurchaseEnabled && automation.WeeklyPurchaseSentOn != today &&
             (int)now.DayOfWeek == automation.WeeklyPurchaseDay && now.Hour >= 8 && now.Hour < 20)
         {
@@ -416,6 +425,94 @@ public sealed partial class TelegramNotificationService
                 settings.PublicBaseUrl is null ? null : new[] { new[] { new TelegramButton("Abrir Promociones", Url: AppUrl(settings, "/Promotions")) } },
                 cancellationToken: cancellationToken);
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Publicidad
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Anuncios activos que en 7 días gastaron $100 o más y perdieron (sin ventas o con ACOS arriba del máximo).
+    /// Cada anuncio se avisa una vez por semana; con <paramref name="force"/> (/anuncios) manda el resumen siempre.
+    /// </summary>
+    private async Task SendLosingAdsAsync(string token, NotificationSettings settings, bool force, CancellationToken cancellationToken)
+    {
+        var org = settings.OrganizationId;
+        var chatId = settings.TelegramChatId!.Value;
+        MarketplaceSync.Services.MercadoLibre.AdsReport report;
+        try
+        {
+            report = await Service<MarketplaceSync.Services.MercadoLibre.AdsService>().ReportAsync(org, 7, cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(exception, "Ads report for {Org} failed.", org);
+            return;
+        }
+        if (!report.Enabled)
+        {
+            if (force)
+                await _telegram.SendMessageAsync(token, chatId, "📣 " + E(report.Error ?? "Sin Mercado Ads."), cancellationToken: cancellationToken);
+            return;
+        }
+
+        if (force)
+        {
+            var html = $"📣 <b>Publicidad, últimos 7 días</b>\nGastaste {Money(report.Cost)} y vendiste {Money(report.Sales)} con anuncios" +
+                       (report.Acos is { } acos ? $" (ACOS {acos.ToString("0.#", MxCulture)}%)" : "") +
+                       $".\nGanancia con anuncios: <b>{(report.Profit < 0 ? "-" : "")}{Money(Math.Abs(report.Profit))}</b>.";
+            await _telegram.SendMessageAsync(token, chatId, html,
+                settings.PublicBaseUrl is null ? null : new[] { new[] { new TelegramButton("Abrir Publicidad", Url: AppUrl(settings, "/Ads?days=7")) } },
+                cancellationToken: cancellationToken);
+        }
+
+        var week = System.Globalization.ISOWeek.GetWeekOfYear(LocalNow);
+        var losing = report.Ads
+            .Where(a => a.IsActive && a.Verdict == "bad" && a.Metrics.Cost >= 100)
+            .OrderBy(a => a.Profit ?? -a.Metrics.Cost)
+            .Take(5)
+            .ToList();
+        foreach (var ad in losing)
+        {
+            var key = $"ads:{ad.ItemId}:{LocalNow.Year}-W{week}";
+            if (!force && await _context.NotificationLogs.AnyAsync(l => l.OrganizationId == org && l.Key == key, cancellationToken))
+                continue;
+            var html = new StringBuilder("📣 <b>").Append(ad.Metrics.DirectUnits == 0 ? "Este anuncio gasta sin vender" : "Este anuncio te hace perder").Append("</b>\n")
+                .Append(E(Short(ad.Title, 80))).Append('\n')
+                .Append("7 días: gastó <b>").Append(Money(ad.Metrics.Cost)).Append("</b>, vendió ").Append(ad.Metrics.DirectUnits)
+                .Append(ad.Metrics.DirectUnits == 1 ? " pieza" : " piezas");
+            if (ad.Metrics.DirectAmount > 0) html.Append(" (").Append(Money(ad.Metrics.DirectAmount)).Append(')');
+            html.Append('.');
+            if (ad.RealAcos is { } realAcos && ad.BreakEvenAcos is { } max)
+                html.Append("\nACOS ").Append(realAcos.ToString("0.#", MxCulture)).Append("% y tu máximo es ").Append(max.ToString("0.#", MxCulture)).Append("%.");
+            if (ad.Profit is { } p && p < 0)
+                html.Append("\nPerdiste <b>").Append(Money(-p)).Append("</b> con el anuncio.");
+
+            var action = new BotAction
+            {
+                OrganizationId = org,
+                Kind = BotActionKinds.AdPause,
+                PublicationId = ad.PublicationId,
+                Description = $"Pausar el anuncio de «{Short(ad.Title, 60)}»",
+                Payload = System.Text.Json.JsonSerializer.Serialize(new { accountId = ad.AccountId, itemId = ad.ItemId }),
+                Source = "ads"
+            };
+            _context.BotActions.Add(action);
+            await _context.SaveChangesAsync(cancellationToken);
+            var buttons = new List<IReadOnlyList<TelegramButton>>
+            {
+                new[] { new TelegramButton("⏸ Pausar anuncio", CallbackData: $"ax:{action.Id}"), new TelegramButton("Ignorar", CallbackData: $"an:{action.Id}") }
+            };
+            if (settings.PublicBaseUrl is not null)
+                buttons.Add(new[] { new TelegramButton("Ver Publicidad", Url: AppUrl(settings, "/Ads?days=7&filter=bad")) });
+            var messageId = await _telegram.SendMessageAsync(token, chatId, html.ToString(), buttons, cancellationToken: cancellationToken);
+            action.TelegramMessageId = messageId;
+            await _context.SaveChangesAsync(cancellationToken);
+            if (!await _context.NotificationLogs.AnyAsync(l => l.OrganizationId == org && l.Key == key, cancellationToken))
+                await LogAsync(org, key, "ads", ad.ItemId, chatId, messageId, cancellationToken);
+        }
+        if (force && losing.Count == 0)
+            await _telegram.SendMessageAsync(token, chatId, "Ningún anuncio activo está perdiendo esta semana. 👍", cancellationToken: cancellationToken);
     }
 
     // ─────────────────────────────────────────────────────────────

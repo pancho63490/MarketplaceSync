@@ -26,10 +26,21 @@
             }
         </p>
     </div>
-    <form asp-action="Sync" method="post" id="syncForm">
-        @Html.AntiForgeryToken()
-        <button type="submit" class="btn btn-primary" id="syncButton" @(Model.HasConnectedAccount ? "" : "disabled")>@Html.Icon("refresh-cw") Actualizar desde Mercado Libre</button>
-    </form>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        @if (Model.HasConnectedAccount)
+        {
+            <a asp-controller="BulkEdit" asp-action="Export" class="btn btn-outline-secondary">@Html.Icon("download") Bajar Excel</a>
+            <form asp-controller="BulkEdit" asp-action="Upload" method="post" enctype="multipart/form-data" class="be-upload" data-busy="Leyendo…">
+                @Html.AntiForgeryToken()
+                <label class="btn btn-outline-secondary mb-0" for="beFile" title="Sube el Excel con «Precio nuevo», «Stock nuevo» o «Estado nuevo»">@Html.Icon("upload") Subir Excel</label>
+                <input id="beFile" name="file" type="file" accept=".xlsx,.csv" class="visually-hidden" onchange="this.form.requestSubmit()" />
+            </form>
+        }
+        <form asp-action="Sync" method="post" id="syncForm">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-primary" id="syncButton" @(Model.HasConnectedAccount ? "" : "disabled")>@Html.Icon("refresh-cw") Actualizar desde Mercado Libre</button>
+        </form>
+    </div>
 </div>
 
 @if (!Model.HasConnectedAccount)

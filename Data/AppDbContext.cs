@@ -51,6 +51,7 @@ namespace MarketplaceSync.Web.Data
         public DbSet<MarketplaceSync.Web.Models.Finance.BusinessExpense> BusinessExpenses { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Invoicing.InvoicingSettings> InvoicingSettings { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Invoicing.SalesInvoice> SalesInvoices { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Marketplace.BulkEditImport> BulkEditImports { get; set; }
         public DbSet<MarketplaceSync.Web.Models.PostSale.OrderClaim> OrderClaims { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Agents.AgentStep> AgentSteps { get; set; }
 
@@ -372,6 +373,8 @@ namespace MarketplaceSync.Web.Data
             {
                 entity.HasIndex(x => new { x.OrganizationId, x.SellerId }).IsUnique();
             });
+            builder.Entity<MarketplaceSync.Web.Models.Marketplace.BulkEditImport>(entity =>
+                entity.HasIndex(x => new { x.OrganizationId, x.CreatedAt }));
             builder.Entity<MarketplaceSync.Web.Models.Invoicing.InvoicingSettings>(entity =>
                 entity.HasIndex(x => x.OrganizationId).IsUnique());
             builder.Entity<MarketplaceSync.Web.Models.Invoicing.SalesInvoice>(entity =>

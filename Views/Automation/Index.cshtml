@@ -173,6 +173,11 @@
                     <input type="hidden" name="promotionAlerts" value="false" />
                     <label class="form-check-label" for="prOn">Avisarme cuando me inviten a una campaña</label>
                 </div>
+                <div class="form-check form-switch mt-1">
+                    <input class="form-check-input" type="checkbox" role="switch" id="adOn" name="adsAlerts" value="true" checked="@s.AdsAlerts" />
+                    <input type="hidden" name="adsAlerts" value="false" />
+                    <label class="form-check-label" for="adOn">Avisarme de anuncios de Mercado Ads que pierden</label>
+                </div>
                 <p class="small text-muted mb-0">Una vez al día. Te dice cuáles publicaciones siguen ganando con el precio de la campaña y trae un botón para meter solo esas. Nunca entra sin tu ✅. También con <code>/promos</code>.</p>
             </fieldset>
             <button type="submit" class="btn btn-primary btn-sm align-self-start">Guardar</button>

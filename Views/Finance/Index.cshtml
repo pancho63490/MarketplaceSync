@@ -34,7 +34,7 @@
 <dl class="stats stagger">
     <div class="stat"><dt>Ventas cobradas</dt><dd>@Mxn(Model.Charged) <small>@Model.Sales.Count ventas</small></dd></div>
     <div class="stat @(Model.SalesProfit < 0 ? "is-bad" : "is-ok")"><dt>Ganancia de las ventas</dt><dd>@Mxn(Model.SalesProfit)</dd></div>
-    <div class="stat"><dt>Gastos del negocio</dt><dd>@Mxn(Model.ExpensesTotal) <small>@Model.Expenses.Count gastos</small></dd></div>
+    <div class="stat"><dt>Gastos del negocio</dt><dd>@Mxn(Model.ExpensesTotal + (Model.AdsSpend ?? 0)) <small>@Model.Expenses.Count gastos@(Model.AdsSpend is > 0 ? " + anuncios" : "")</small></dd></div>
     <div class="stat @(Model.NetProfit < 0 ? "is-bad" : "is-ok")"><dt>Ganancia neta</dt><dd>@Mxn(Model.NetProfit)</dd></div>
 </dl>
 
@@ -94,6 +94,10 @@
                 <div class="is-minus"><dt>Costo de lo vendido</dt><dd>−@Mxn(Model.CostOfGoods)</dd></div>
                 <div class="is-total"><dt>Ganancia de las ventas</dt><dd>@Mxn(Model.SalesProfit)</dd></div>
                 <div class="is-minus"><dt>Gastos del negocio</dt><dd>−@Mxn(Model.ExpensesTotal)</dd></div>
+                @if (Model.AdsSpend is { } ads)
+                {
+                    <div class="is-minus"><dt><a asp-controller="Ads" asp-action="Index">Publicidad (Mercado Ads)</a></dt><dd>−@Mxn(ads)</dd></div>
+                }
                 <div class="is-total @(Model.NetProfit < 0 ? "is-bad" : "")"><dt>Ganancia neta</dt><dd>@Mxn(Model.NetProfit)</dd></div>
             </dl>
             @if (Model.SalesWithoutCost > 0)

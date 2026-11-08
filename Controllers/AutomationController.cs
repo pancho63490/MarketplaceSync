@@ -93,6 +93,7 @@ public sealed class AutomationController : Controller
         int? weeklyPurchaseDay,
         bool weeklyPurchaseIncludeNew,
         bool promotionAlerts,
+        bool adsAlerts,
         CancellationToken cancellationToken)
     {
         var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
@@ -106,6 +107,7 @@ public sealed class AutomationController : Controller
         settings.WeeklyPurchaseDay = Math.Clamp(weeklyPurchaseDay ?? 1, 0, 6);
         settings.WeeklyPurchaseIncludeNew = weeklyPurchaseIncludeNew;
         settings.PromotionAlerts = promotionAlerts;
+        settings.AdsAlerts = adsAlerts;
         settings.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
         TempData["Success"] = "Guardado. Los avisos llegan al Telegram vinculado.";

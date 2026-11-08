@@ -32,7 +32,9 @@ public sealed record MonthReport(
     public decimal SalesProfit => Sales.Sum(s => s.Profit ?? 0);
     public int SalesWithoutCost => Sales.Count(s => s.Profit is null);
     public decimal ExpensesTotal => Expenses.Sum(e => e.AmountMxn);
-    public decimal NetProfit => SalesProfit - ExpensesTotal;
+    /// <summary>Gasto en Mercado Ads del mes (null si no hay Ads o el mes pasa de los 90 días que guarda Mercado Libre).</summary>
+    public decimal? AdsSpend { get; init; }
+    public decimal NetProfit => SalesProfit - ExpensesTotal - (AdsSpend ?? 0);
     public decimal PurchasesUsd => Purchases.Sum(p => p.TotalUsd ?? 0);
     public string Title => CultureInfo.GetCultureInfo("es-MX").TextInfo.ToTitleCase(new DateTime(Year, Month, 1).ToString("MMMM yyyy", CultureInfo.GetCultureInfo("es-MX")));
 }
@@ -44,11 +46,14 @@ public sealed class FinanceReportService
     private readonly ICrossBorderPricingService _pricing;
     private readonly OrderProfitService _profits;
 
-    public FinanceReportService(AppDbContext context, ICrossBorderPricingService pricing, OrderProfitService profits)
+    private readonly IServiceProvider _services;
+
+    public FinanceReportService(AppDbContext context, ICrossBorderPricingService pricing, OrderProfitService profits, IServiceProvider services)
     {
         _context = context;
         _pricing = pricing;
         _profits = profits;
+        _services = services;
     }
 
     public static DateOnly TodayJuarez => DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-7));
@@ -136,8 +141,14 @@ public sealed class FinanceReportService
         purchases.AddRange(restock.Select(i => new PurchaseLine(i.ApprovedAt!.Value.AddHours(-7), i.Title, i.Quantity, i.UnitCostUsd,
             i.UnitCostUsd * i.Quantity, i.UnitCostUsd * i.Quantity * settings.UsdToMxnRate, "Resurtido")));
 
+        var lastDay = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
+        var adsSpend = await _services.GetRequiredService<MarketplaceSync.Services.MercadoLibre.AdsService>()
+            .SpendAsync(org, new DateOnly(year, month, 1), lastDay, cancellationToken);
         return new MonthReport(year, month, sales, expenseLines, purchases.OrderBy(p => p.Date).ToList(),
-            settings.UsdToMxnRate, settings.PlatformTaxWithholdingPercent);
+            settings.UsdToMxnRate, settings.PlatformTaxWithholdingPercent)
+        {
+            AdsSpend = adsSpend is > 0 ? adsSpend : null
+        };
     }
 
     /// <summary>Excel para el contador: Resumen, Ventas, Gastos y Compras del mes.</summary>
@@ -157,6 +168,8 @@ public sealed class FinanceReportService
         Line("Costo de lo vendido", -report.CostOfGoods, report.SalesWithoutCost > 0 ? $"{report.SalesWithoutCost} ventas sin costo capturado (no se restan)" : "costo puesto en Juárez");
         Line("Ganancia de las ventas", report.SalesProfit, "", true);
         Line("Gastos del negocio", -report.ExpensesTotal, $"{report.Expenses.Count} gastos (ver hoja Gastos)");
+        if (report.AdsSpend is { } ads)
+            Line("Publicidad en Mercado Libre (Mercado Ads)", -ads, "según Mercado Ads; Mercado Libre la factura aparte");
         Line("Ganancia neta del mes", report.NetProfit, "", true);
         summary.Add(new());
         summary.Add(new() { new C("Compras en EE.UU. (US$)", S.Bold), new C(report.PurchasesUsd, S.Money), new C($"≈ {(report.PurchasesUsd * report.UsdToMxn).ToString("C0", CultureInfo.GetCultureInfo("es-MX"))} a {report.UsdToMxn:0.00}; no se restan de la ganancia (ya están en el costo de lo vendido)") });

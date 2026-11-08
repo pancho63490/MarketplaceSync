@@ -428,6 +428,9 @@ public sealed partial class TelegramNotificationService
             case "/etiquetas":
                 await SendLabelsAsync(token, settings, force: true, cancellationToken);
                 break;
+            case "/anuncios" or "/publicidad" or "/ads":
+                await SendLosingAdsAsync(token, settings, force: true, cancellationToken);
+                break;
             case "/facturas" or "/factura":
                 await SendInvoicesStatusAsync(token, settings, cancellationToken);
                 break;
@@ -455,6 +458,7 @@ public sealed partial class TelegramNotificationService
                     "/compra — qué recomprar en EE.UU. esta semana\n" +
                     "/promos — campañas de Mercado Libre y descuentos activos\n" +
                     "/facturas — quién te pidió factura y la global del mes\n" +
+                    "/anuncios — gasto en Mercado Ads y anuncios que pierden\n" +
                     "/gasto 250 gasolina — anotar un gasto del negocio\n" +
                     "/precios — revisar qué publicaciones ya no ganan lo mínimo\n\n" +
                     "💬 <b>O escríbeme normal</b>: «¿cuánto vendí hoy?», «sube el faro de Tacoma a 3500», «pausa las balatas».\n\n" +

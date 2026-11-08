@@ -127,6 +127,8 @@ public sealed class TelegramAssistantService
                         "proponer_activar" => await ProposeStatusAsync(org, Int(input, "publicacion_id"), BotActionKinds.Activate, actions, cancellationToken),
                         "encargar_busqueda" => Enqueue(org, Str(input, "texto")),
                         "promociones" => await PromotionsAsync(org, cancellationToken),
+                        "publicidad" => await AdsAsync(org, Str(input, "dias"), cancellationToken),
+                        "proponer_pausar_anuncio" => await ProposeAdPauseAsync(org, Int(input, "publicacion_id"), actions, cancellationToken),
                         "proponer_descuento" => await ProposeDiscountAsync(org, Int(input, "publicacion_id"), Int(input, "porcentaje"), Int(input, "dias"), actions, cancellationToken),
                         "proponer_quitar_promocion" => await ProposeLeaveAsync(org, Int(input, "publicacion_id"), actions, cancellationToken),
                         "registrar_gasto" => await AddExpenseAsync(org, input, cancellationToken),
@@ -176,6 +178,7 @@ public sealed class TelegramAssistantService
         - Si un precio nuevo deja pérdida o baja de la ganancia mínima, adviértelo al proponerlo.
         - Descuentos: "ponle 10% al faro por una semana" → busca la publicación y usa proponer_descuento (5% a 80%, hasta 31 días;
           di cuánto queda y cuánto gana). "Quítale el descuento" → proponer_quitar_promocion. "¿Qué campañas hay?" → promociones.
+        - Publicidad: "¿cómo van mis anuncios?" → publicidad; "pausa el anuncio del faro" → busca la publicación y proponer_pausar_anuncio.
         - "Encárgale/busca productos de…" → encargar_busqueda. "Etiquetas" → mandar_etiquetas. "Qué compro" → lista_de_compra.
         - Montos en pesos salvo que digan US$. Sobre impuestos, información general y que lo confirme con su contador.
         """;
@@ -213,6 +216,10 @@ public sealed class TelegramAssistantService
                 ["dias"] = Prop("integer", "1 a 31; 7 si no dice")
             }, "publicacion_id", "porcentaje"),
         Tool("proponer_quitar_promocion", "Propone sacar una publicación de su descuento o campaña (vuelve a su precio normal).",
+            new JsonObject { ["publicacion_id"] = Prop("integer", "id") }, "publicacion_id"),
+        Tool("publicidad", "Mercado Ads: gasto, ventas con anuncios, ACOS, ganancia con anuncios y los anuncios que pierden.",
+            new JsonObject { ["dias"] = Enum("7", "30", "90") }),
+        Tool("proponer_pausar_anuncio", "Propone pausar el anuncio de Mercado Ads de una publicación (no pausa la publicación).",
             new JsonObject { ["publicacion_id"] = Prop("integer", "id") }, "publicacion_id"),
         Tool("ganancia_del_mes", "Ganancia neta del mes: ventas, ganancia de las ventas, gastos y neta.", new JsonObject()),
         Tool("mandar_etiquetas", "Manda ahora el PDF de etiquetas y la lista de empaque de los pedidos por enviar.", new JsonObject()),
@@ -416,6 +423,47 @@ public sealed class TelegramAssistantService
             }),
             nota = "Para entrar a una campaña: botón en el aviso de Telegram (/promos) o en la app (/Promotions)."
         });
+    }
+
+    private async Task<string> AdsAsync(Guid org, string? days, CancellationToken cancellationToken)
+    {
+        var d = int.TryParse(days, out var n) ? n : 7;
+        var report = await _services.GetRequiredService<AdsService>().ReportAsync(org, d, cancellationToken);
+        if (!report.Enabled)
+            return report.Error ?? "Sin Mercado Ads.";
+        return JsonSerializer.Serialize(new
+        {
+            dias = report.Days,
+            gasto = Money(report.Cost),
+            ventas_con_anuncios = Money(report.Sales),
+            acos = report.Acos,
+            ganancia_con_anuncios = Money(report.Profit),
+            campanas = report.Campaigns.Select(c => new { nombre = c.Name, estado = c.Status, gasto = Money(c.Metrics.Cost), acos = c.Metrics.Acos, acos_objetivo = c.AcosTarget, acos_maximo = c.BreakEvenAcos }),
+            anuncios_que_pierden = report.Ads.Where(a => a.Verdict == "bad" && a.Metrics.Cost > 0).Take(6).Select(a => new
+            {
+                publicacion_id = a.PublicationId,
+                titulo = Short(a.Title, 50),
+                gasto = Money(a.Metrics.Cost),
+                vendio = a.Metrics.DirectUnits,
+                acos = a.RealAcos,
+                acos_maximo = a.BreakEvenAcos,
+                ganancia = a.Profit is { } p ? Money(p) : "sin costo"
+            }),
+            nota = "ACOS máximo = ganancia por pieza ÷ precio. Para pausar un anuncio usa proponer_pausar_anuncio."
+        });
+    }
+
+    private async Task<string> ProposeAdPauseAsync(Guid org, int? publicationId, List<BotAction> actions, CancellationToken cancellationToken)
+    {
+        var publication = await LoadAsync(org, publicationId, cancellationToken);
+        if (publication?.ExternalItemId is null || publication.MarketplaceAccountId is null)
+            return "No encontré esa publicación; búscala primero.";
+        var description = $"Pausar el anuncio de «{Short(publication.Product.Title, 60)}» (la publicación sigue activa)";
+        var action = await _actions.ProposeAsync(org, BotActionKinds.AdPause, publication.Id, null, description, "assistant", cancellationToken);
+        action.Payload = JsonSerializer.Serialize(new { accountId = publication.MarketplaceAccountId.Value, itemId = publication.ExternalItemId });
+        await _context.SaveChangesAsync(cancellationToken);
+        actions.Add(action);
+        return $"Propuesto: {description}. El vendedor debe confirmarlo con el botón.";
     }
 
     private async Task<string> ProposeDiscountAsync(Guid org, int? publicationId, int? percent, int? days, List<BotAction> actions, CancellationToken cancellationToken)

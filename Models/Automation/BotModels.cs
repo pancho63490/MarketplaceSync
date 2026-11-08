@@ -68,6 +68,9 @@ public static class BotActionKinds
 
     /// <summary>Timbrar la factura global de un mes (Payload {"year":2026,"month":10}).</summary>
     public const string GlobalInvoice = "global_invoice";
+
+    /// <summary>Pausar un anuncio de Mercado Ads (Payload {"accountId":1,"itemId":"MLM1"}).</summary>
+    public const string AdPause = "ad_pause";
 }
 
 public static class BotActionStatus

@@ -85,6 +85,7 @@ public sealed class BotActionService
                 BotActionKinds.PromotionJoin => await JoinPromotionAsync(org, action, cancellationToken),
                 BotActionKinds.Invoice => await InvoiceAsync(org, action, cancellationToken),
                 BotActionKinds.GlobalInvoice => await GlobalInvoiceAsync(org, action, cancellationToken),
+                BotActionKinds.AdPause => await AdPauseAsync(org, action, cancellationToken),
                 _ => "No sé hacer esa acción."
             };
         }
@@ -191,6 +192,23 @@ public sealed class BotActionService
         var (ok, message, _) = await _services.GetRequiredService<MarketplaceSync.Services.Invoicing.InvoicingService>()
             .IssueGlobalAsync(org, PayloadInt(action, "year"), PayloadInt(action, "month"), includeBuyersWithRfc: false, cancellationToken);
         if (ok) action.Description = message.Length > 400 ? message[..400] : message;
+        return ok ? null : message;
+    }
+
+    private async Task<string?> AdPauseAsync(Guid org, BotAction action, CancellationToken cancellationToken)
+    {
+        string? itemId = null;
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(action.Payload ?? "{}");
+            itemId = document.RootElement.TryGetProperty("itemId", out var v) ? v.GetString() : null;
+        }
+        catch (System.Text.Json.JsonException) { }
+        if (itemId is null)
+            return "No encontré el anuncio.";
+        var (ok, message) = await _services.GetRequiredService<AdsService>()
+            .SetAdStatusAsync(org, PayloadInt(action, "accountId"), itemId, "paused", cancellationToken);
+        if (ok) action.Description = message;
         return ok ? null : message;
     }
 

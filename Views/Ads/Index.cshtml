@@ -1,0 +1,169 @@
+@model MarketplaceSync.Services.MercadoLibre.AdsReport
+@using System.Globalization
+@using MarketplaceSync.Services.MercadoLibre
+@{
+    ViewData["Title"] = "Publicidad";
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    string Mxn(decimal? v) => v.HasValue ? v.Value.ToString("C0", mx) : "—";
+    string Pct(decimal? v) => v.HasValue ? v.Value.ToString("0.#", mx) + "%" : "—";
+    var filter = (string)(ViewBag.Filter ?? "all");
+    var ads = filter switch
+    {
+        "bad" => Model.Ads.Where(a => a.Verdict is "bad" or "warn").ToList(),
+        "active" => Model.Ads.Where(a => a.IsActive).ToList(),
+        _ => Model.Ads
+    };
+    var badCount = Model.Ads.Count(a => a.Verdict == "bad");
+    var campaignNames = Model.Campaigns.ToDictionary(c => (c.AccountId, c.Id), c => c.Name);
+    var strategies = new Dictionary<string, string> { ["profitability"] = "Rentabilidad", ["increase"] = "Crecimiento", ["visibility"] = "Visibilidad" };
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Publicidad</h1>
+        <p>Lo que gastas en Mercado Ads y si cada anuncio te deja ganancia. El <b>ACOS máximo</b> es lo más que puede gastar un anuncio por cada peso vendido sin que pierdas: tu ganancia por pieza ÷ precio.</p>
+    </div>
+    <nav class="d-flex flex-wrap gap-2" aria-label="Periodo">
+        @foreach (var d in new[] { 7, 30, 90 })
+        {
+            <a asp-action="Index" asp-route-days="@d" asp-route-filter="@filter" class="pub-chip @(Model.Days == d ? "active" : "")">@d días</a>
+        }
+    </nav>
+</header>
+
+@if (!Model.Enabled)
+{
+    <div class="empty">
+        @Html.Icon("megaphone", "icon")
+        <div>
+            <strong>Sin Mercado Ads</strong>
+            <p class="mb-0 small text-muted">@Model.Error Actívalo en Mercado Libre → Publicidad. Cuando tengas campañas, aquí ves si te conviene cada anuncio.</p>
+        </div>
+    </div>
+}
+else
+{
+    @if (Model.Error is not null)
+    {
+        <div class="inv-banner mb-3">@Html.Icon("triangle-alert") <span>@Model.Error</span></div>
+    }
+    <dl class="stats stagger">
+        <div class="stat"><dt>Gastaste en anuncios</dt><dd>@Mxn(Model.Cost) <small>@Model.Days días</small></dd></div>
+        <div class="stat"><dt>Vendiste con anuncios</dt><dd>@Mxn(Model.Sales) <small>ACOS @Pct(Model.Acos)</small></dd></div>
+        <div class="stat @(Model.Profit < 0 ? "is-bad" : "is-ok")"><dt>Ganancia con anuncios</dt><dd>@Mxn(Model.Profit) <small>ventas directas − gasto</small></dd></div>
+        <div class="stat @(badCount > 0 ? "is-bad" : "")"><dt>Anuncios que pierden</dt><dd>@badCount <small>de @Model.Ads.Count(a => a.Metrics.Cost > 0) con gasto</small></dd></div>
+    </dl>
+
+    <section class="panel mb-3" aria-labelledby="ad-camp">
+        <div class="panel-head">
+            <h2 id="ad-camp">Campañas</h2>
+            <p class="mb-0">Si el ACOS objetivo está arriba del ACOS máximo, Mercado Libre puede gastar más de lo que ganas.</p>
+        </div>
+        @if (Model.Campaigns.Count == 0)
+        {
+            <div class="panel-body"><p class="text-muted mb-0">No tienes campañas.</p></div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="data-table promo-table">
+                    <thead><tr><th>Campaña</th><th class="num">Gasto</th><th class="num">Ventas</th><th class="num">ACOS</th><th class="num">ACOS máximo</th><th class="num">Ganancia</th><th>Ajustes</th></tr></thead>
+                    <tbody>
+                        @foreach (var c in Model.Campaigns)
+                        {
+                            var over = c.AcosTarget is { } t && c.BreakEvenAcos is { } be && t > be;
+                            <tr>
+                                <td class="promo-title"><b>@c.Name</b>
+                                    <span class="sub">@(c.Status == "active" ? "Activa" : c.Status == "paused" ? "Pausada" : c.Status)@(c.Strategy is { } s && strategies.TryGetValue(s, out var sl) ? " · " + sl : "")</span></td>
+                                <td class="num" data-label="Gasto">@Mxn(c.Metrics.Cost)<span class="sub">@c.Metrics.Clicks.ToString("N0", mx) clics</span></td>
+                                <td class="num" data-label="Ventas">@Mxn(c.Metrics.TotalAmount)<span class="sub">@(c.Metrics.DirectUnits + c.Metrics.IndirectUnits) piezas</span></td>
+                                <td class="num" data-label="ACOS">@Pct(c.Metrics.Acos)<span class="sub">objetivo @Pct(c.AcosTarget)</span></td>
+                                <td class="num" data-label="ACOS máximo"><b class="@(over ? "text-bad" : "")">@Pct(c.BreakEvenAcos)</b>@if (over) { <span class="sub text-bad">objetivo muy alto</span> }</td>
+                                <td class="num" data-label="Ganancia">@if (c.Profit is { } cp) { <b class="@(cp < 0 ? "text-bad" : "text-ok")">@Mxn(cp)</b> } else { <span class="text-muted">—</span> }</td>
+                                <td class="promo-action">
+                                    <form asp-action="Campaign" method="post" class="ad-camp-form" data-busy="Guardando…">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="accountId" value="@c.AccountId" /><input type="hidden" name="campaignId" value="@c.Id" /><input type="hidden" name="days" value="@Model.Days" />
+                                        <label class="visually-hidden" for="b-@c.Id">Presupuesto diario</label>
+                                        <span class="input-group input-group-sm ad-input"><input id="b-@c.Id" name="budget" class="form-control" inputmode="decimal" value="@(c.Budget?.ToString("0.##", CultureInfo.InvariantCulture))" title="Presupuesto diario (MXN)" /><span class="input-group-text">$/día</span></span>
+                                        <label class="visually-hidden" for="a-@c.Id">ACOS objetivo</label>
+                                        <span class="input-group input-group-sm ad-input"><input id="a-@c.Id" name="acosTarget" class="form-control" inputmode="decimal" value="@(c.AcosTarget?.ToString("0.#", CultureInfo.InvariantCulture))" title="ACOS objetivo (%)" /><span class="input-group-text">% ACOS</span></span>
+                                        <button type="submit" class="btn btn-outline-secondary btn-sm">Guardar</button>
+                                        <button type="submit" name="status" value="@(c.Status == "active" ? "paused" : "active")" class="btn btn-link btn-sm p-0">@(c.Status == "active" ? "Pausar" : "Activar")</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="panel" aria-labelledby="ad-items">
+        <div class="panel-head ad-head">
+            <h2 id="ad-items">Anuncios</h2>
+            <nav class="d-flex flex-wrap gap-2" aria-label="Filtro">
+                <a asp-action="Index" asp-route-days="@Model.Days" asp-route-filter="all" class="pub-chip @(filter == "all" ? "active" : "")">Todos</a>
+                <a asp-action="Index" asp-route-days="@Model.Days" asp-route-filter="bad" class="pub-chip @(filter == "bad" ? "active" : "")">Pierden o al límite</a>
+                <a asp-action="Index" asp-route-days="@Model.Days" asp-route-filter="active" class="pub-chip @(filter == "active" ? "active" : "")">Activos</a>
+            </nav>
+        </div>
+        @if (ads.Count == 0)
+        {
+            <div class="panel-body"><p class="text-muted mb-0">@(filter == "bad" ? "Ningún anuncio pierde en este periodo." : "Sin anuncios.")</p></div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="data-table promo-table">
+                    <thead><tr><th>Publicación</th><th class="num">Gasto</th><th class="num">Vendió</th><th class="num">ACOS</th><th class="num">ACOS máximo</th><th class="num">Ganancia</th><th>Estado</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in ads)
+                        {
+                            var (label, tone) = a.Verdict switch
+                            {
+                                "bad" => (a.Metrics.DirectUnits == 0 ? "Gasta sin vender" : "Pierdes", "pill-bad"),
+                                "warn" => ("Al límite", "pill-warn"),
+                                "ok" => ("Conviene", "pill-ok"),
+                                "unknown" => ("Sin costo", ""),
+                                _ => ("Sin gasto", "")
+                            };
+                            <tr class="@(a.Verdict == "bad" ? "promo-loss" : "")">
+                                <td class="promo-title">
+                                    @if (a.PublicationId is { } pid) { <a asp-controller="Publications" asp-action="Edit" asp-route-id="@pid">@a.Title</a> } else { @a.Title }
+                                    <span class="sub">@a.ItemId@(a.CampaignId is { } cid && campaignNames.TryGetValue((a.AccountId, cid), out var cn) ? " · " + cn : "")</span>
+                                </td>
+                                <td class="num" data-label="Gasto">@Mxn(a.Metrics.Cost)<span class="sub">@a.Metrics.Clicks.ToString("N0", mx) clics</span></td>
+                                <td class="num" data-label="Vendió">@a.Metrics.DirectUnits <span class="sub">@Mxn(a.Metrics.DirectAmount)@(a.Metrics.IndirectUnits > 0 ? $" · +{a.Metrics.IndirectUnits} indirectas" : "")</span></td>
+                                <td class="num" data-label="ACOS">@Pct(a.RealAcos)</td>
+                                <td class="num" data-label="ACOS máximo">@Pct(a.BreakEvenAcos)@if (a.UnitProfit is { } up) { <span class="sub">ganas @Mxn(up)/pieza</span> }</td>
+                                <td class="num" data-label="Ganancia">@if (a.Profit is { } p) { <b class="@(p < 0 ? "text-bad" : "text-ok")">@Mxn(p)</b> } else { <span class="text-muted">—</span> }</td>
+                                <td data-label="Estado">
+                                    <span class="pill @tone">@label</span>
+                                    <form asp-action="SetAd" method="post" class="d-inline" data-busy="…">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="accountId" value="@a.AccountId" /><input type="hidden" name="itemId" value="@a.ItemId" /><input type="hidden" name="days" value="@Model.Days" />
+                                        @if (a.IsActive)
+                                        {
+                                            <button type="submit" name="status" value="paused" class="btn btn-link btn-sm p-0 ms-1">Pausar</button>
+                                        }
+                                        else if (a.Status == "paused")
+                                        {
+                                            <button type="submit" name="status" value="active" class="btn btn-link btn-sm p-0 ms-1">Activar</button>
+                                        }
+                                        else
+                                        {
+                                            <span class="small text-muted ms-1">@a.Status</span>
+                                        }
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        <div class="panel-body small text-muted">La ganancia cuenta las ventas directas del anuncio con tu ganancia por pieza de hoy (costo, comisión, envío y retención) menos lo que costó el anuncio. Mercado Libre actualiza las métricas una vez al día.</div>
+    </section>
+}

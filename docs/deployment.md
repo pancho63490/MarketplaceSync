@@ -89,3 +89,7 @@ No webhook is needed: a Hangfire job reads the bot every minute. Do not set a we
 4. Uploading invoices to the purchase uses `POST /packs/{pack_id}/fiscal_documents`; the Mercado Libre app needs permission to manage the seller's orders/post-sale.
 
 `Facturama__BaseUrl` is only for tests.
+
+## Mercado Ads (optional)
+
+The Publicidad screen reads Product Ads with the seller's token (`/advertising/advertisers?product_id=PADS`, `/marketplace/advertising/{site}/advertisers/{id}/product_ads/campaigns|ads`). The Mercado Libre app needs the advertising permission in the developer panel; if it is missing the screen says "Sin Mercado Ads".

@@ -81,6 +81,13 @@ public sealed class AutomationSettings
     /// <summary>Última vez que se revisaron campañas nuevas (una vez al día).</summary>
     public DateOnly? PromotionsCheckedOn { get; set; }
 
+    // ── Publicidad ──
+
+    /// <summary>Avisar por Telegram de anuncios de Mercado Ads que gastan más de lo que ganan (una vez al día).</summary>
+    public bool AdsAlerts { get; set; } = true;
+
+    public DateOnly? AdsCheckedOn { get; set; }
+
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 

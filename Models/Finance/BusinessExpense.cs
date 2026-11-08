@@ -60,7 +60,7 @@ public static class ExpenseCategories
         (Packaging, "Empaques", "cajas, cinta, burbuja, etiquetas"),
         (Shipping, "Envíos por fuera", "paqueterías que no son de Mercado Libre"),
         (Software, "Servicios y apps", "Render, IA, dominio, teléfono"),
-        (Ads, "Publicidad", "Product Ads, redes sociales"),
+        (Ads, "Publicidad", "Facebook, volantes… (Mercado Ads se suma solo)"),
         (Tools, "Herramientas y equipo", "impresora térmica, báscula"),
         (Other, "Otro", "")
     };

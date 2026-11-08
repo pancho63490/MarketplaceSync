@@ -1,0 +1,118 @@
+@model MarketplaceSync.Web.Models.Marketplace.BulkEditImport
+@using System.Globalization
+@using MarketplaceSync.Services.MercadoLibre
+@using MarketplaceSync.Web.Models.Marketplace
+@{
+    ViewData["Title"] = "Cambios por Excel";
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    string Mxn(decimal? v) => v.HasValue ? v.Value.ToString("C0", mx) : "—";
+    var rows = BulkEditService.Rows(Model);
+    var preview = Model.Status == BulkEditStatus.Preview;
+    var applying = Model.Status == BulkEditStatus.Applying;
+    var valid = rows.Where(r => r.Error is null).ToList();
+    var invalid = rows.Where(r => r.Error is not null).ToList();
+    var done = rows.Count(r => r.Result is not null);
+}
+@if (applying)
+{
+    <meta http-equiv="refresh" content="3" />
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Cambios por Excel</h1>
+        <p>@Model.FileName · @Model.CreatedAt.AddHours(-7).ToString("d MMM HH:mm", mx)</p>
+    </div>
+    <a asp-controller="Publications" asp-action="Index" class="btn btn-outline-secondary btn-sm">Volver a Publicados</a>
+</header>
+
+@if (preview)
+{
+    <div class="inv-banner mb-3">@Html.Icon("info") <span>Revisa antes de mandar: nada ha cambiado en Mercado Libre. Los que pierden vienen sin marcar.</span></div>
+}
+else if (applying)
+{
+    <div class="inv-banner mb-3">@Html.Icon("refresh-cw") <span>Aplicando en Mercado Libre: <b>@done de @Model.Total</b>. Esta página se actualiza sola; puedes cerrarla.</span></div>
+}
+else
+{
+    <div class="inv-banner @(Model.Failed == 0 ? "is-ok" : "") mb-3">@Html.Icon(Model.Failed == 0 ? "circle-check" : "triangle-alert") <span>Listo: <b>@Model.Applied</b> @(Model.Applied == 1 ? "publicación cambiada" : "publicaciones cambiadas")@(Model.Failed > 0 ? $", {Model.Failed} con error (abajo dice por qué)" : "").</span></div>
+}
+
+<dl class="stats">
+    <div class="stat"><dt>Con cambios</dt><dd>@valid.Count</dd></div>
+    <div class="stat"><dt>Precios</dt><dd>@valid.Count(r => r.NewPrice is not null)</dd></div>
+    <div class="stat"><dt>Stock</dt><dd>@valid.Count(r => r.NewStock is not null)</dd></div>
+    <div class="stat @(valid.Any(r => r.ProfitNew < 0) ? "is-bad" : "")"><dt>Pierden al precio nuevo</dt><dd>@valid.Count(r => r.ProfitNew < 0)</dd></div>
+</dl>
+
+<form asp-action="Apply" asp-route-id="@Model.Id" method="post" data-busy="Mandando…">
+    @Html.AntiForgeryToken()
+    <section class="panel" aria-labelledby="be-list">
+        <div class="panel-head ad-head">
+            <h2 id="be-list">Cambios</h2>
+            @if (preview && valid.Count > 0)
+            {
+                <label class="small"><input type="checkbox" class="form-check-input me-1" id="beAll" /> Marcar todos</label>
+            }
+        </div>
+        <div class="table-responsive">
+            <table class="data-table promo-table">
+                <thead><tr><th aria-label="Aplicar"></th><th>Publicación</th><th class="num">Precio</th><th class="num">Ganas por pieza</th><th class="num">Stock</th><th>Estado</th><th>@(preview ? "Avisos" : "Resultado")</th></tr></thead>
+                <tbody>
+                    @foreach (var r in valid.Concat(invalid))
+                    {
+                        <tr class="@(r.ProfitNew < 0 || r.Result == "failed" ? "promo-loss" : "")">
+                            <td class="promo-check">
+                                @if (preview && r.Error is null)
+                                {
+                                    <input class="form-check-input be-row" type="checkbox" name="lines" value="@r.Line" checked="@r.Selected" aria-label="Aplicar renglón @r.Line" />
+                                }
+                                else if (r.Result == "done") { <span class="text-ok">@Html.Icon("check")</span> }
+                            </td>
+                            <td class="promo-title">
+                                @if (r.PublicationId > 0) { <a asp-controller="Publications" asp-action="Edit" asp-route-id="@r.PublicationId">@r.Title</a> } else { @r.Title }
+                                <span class="sub">Renglón @r.Line@(r.ItemId.Length > 0 ? " · " + r.ItemId : "")</span>
+                            </td>
+                            <td class="num" data-label="Precio">@if (r.NewPrice is { } np) { <span class="text-muted text-decoration-line-through me-1">@Mxn(r.OldPrice)</span><b>@Mxn(np)</b> } else { @Mxn(r.OldPrice) }</td>
+                            <td class="num" data-label="Ganas por pieza">
+                                @if (r.NewPrice is not null && r.ProfitNew is { } pn) { <b class="@(pn < 0 ? "text-bad" : "text-ok")">@Mxn(pn)</b><span class="sub">hoy @Mxn(r.ProfitNow)</span> }
+                                else { @Mxn(r.ProfitNow) }
+                            </td>
+                            <td class="num" data-label="Stock">@if (r.NewStock is { } ns) { <span class="text-muted me-1">@r.OldStock →</span><b>@ns</b>@if (r.VariantId is not null) { <span class="sub">en Inventario</span> } } else { @(r.OldStock?.ToString() ?? "—") }</td>
+                            <td data-label="Estado">@if (r.NewStatus is { } st) { <b>@BulkEditService.StatusLabel(st)</b> } else { <span class="text-muted">@BulkEditService.StatusLabel(r.OldStatus)</span> }</td>
+                            <td data-label="@(preview ? "Avisos" : "Resultado")" class="small">
+                                @if (r.Error is not null) { <span class="text-bad">@r.Error</span> }
+                                else if (r.Result is not null) { <span class="@(r.Result == "failed" ? "text-bad" : "")">@r.ResultMessage</span> }
+                                else if (!preview && r.Selected) { <span class="text-muted">Pendiente…</span> }
+                                else if (!preview) { <span class="text-muted">No se aplicó</span> }
+                                @if (r.Error is null && r.Result is null) { foreach (var w in r.Warnings) { <span class="d-block text-warn">@w</span> } }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (preview && valid.Count > 0)
+        {
+            <div class="panel-body promo-foot">
+                <button type="submit" class="btn btn-primary btn-sm">@Html.Icon("upload") Aplicar los marcados en Mercado Libre</button>
+                <span class="small text-muted">Se mandan en segundo plano; tarda unos segundos por publicación.</span>
+            </div>
+        }
+    </section>
+</form>
+
+@section Scripts {
+<script>
+    (function () {
+        var all = document.getElementById('beAll');
+        if (!all) return;
+        var boxes = Array.prototype.slice.call(document.querySelectorAll('.be-row'));
+        function sync() { all.checked = boxes.every(function (b) { return b.checked; }); }
+        all.addEventListener('change', function () { boxes.forEach(function (b) { b.checked = all.checked; }); });
+        boxes.forEach(function (b) { b.addEventListener('change', sync); });
+        sync();
+    })();
+</script>
+}

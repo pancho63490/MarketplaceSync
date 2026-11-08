@@ -179,6 +179,8 @@ builder.Services.AddScoped<MarketplaceSync.Services.Finance.FinanceReportService
 builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.PromotionService>();
 builder.Services.AddScoped<MarketplaceSync.Services.Invoicing.FacturamaClient>();
 builder.Services.AddScoped<MarketplaceSync.Services.Invoicing.InvoicingService>();
+builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.AdsService>();
+builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.BulkEditService>();
 builder.Services.AddScoped<MarketplaceSync.Services.Notifications.TelegramAssistantService>();
 
 builder.Services.AddScoped<MercadoLibreCategoryService>();
