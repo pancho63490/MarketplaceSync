@@ -38,7 +38,49 @@ public sealed class AutomationSettings
     /// <summary>Desde cuándo está prendido: solo se manda a ventas posteriores.</summary>
     public DateTime? ThankYouSince { get; set; }
 
+    // ── Precios ──
+
+    /// <summary>Qué hacer cuando una publicación deja de ganar lo mínimo: off, alert (avisar con botones) o auto.</summary>
+    [MaxLength(10)]
+    public string RepricingMode { get; set; } = RepricingModes.Alert;
+
+    /// <summary>En automático, cuánto puede subir un precio sin preguntar (en %); arriba de eso solo avisa.</summary>
+    public decimal RepricingMaxIncreasePercent { get; set; } = 25m;
+
+    // ── Etiquetas ──
+
+    /// <summary>Mandar cada mañana a Telegram las etiquetas y la lista de qué empacar.</summary>
+    public bool LabelsDaily { get; set; } = true;
+
+    /// <summary>Hora de Juárez para mandar las etiquetas.</summary>
+    public int LabelsHour { get; set; } = 9;
+
+    public DateOnly? LabelsSentOn { get; set; }
+
+    /// <summary>Etiquetas en formato para impresora térmica (ZPL/10x15) en lugar de PDF carta.</summary>
+    public bool LabelsThermal { get; set; }
+
+    // ── Compra semanal ──
+
+    /// <summary>Mandar cada semana la lista de qué recomprar en EE.UU. para aprobarla en Telegram.</summary>
+    public bool WeeklyPurchaseEnabled { get; set; } = true;
+
+    /// <summary>Día de la semana (0 = domingo … 6 = sábado) a las 8:00 de Juárez.</summary>
+    public int WeeklyPurchaseDay { get; set; } = 1;
+
+    /// <summary>Incluir también los productos nuevos que recomienda "Qué comprar" (máximo 3).</summary>
+    public bool WeeklyPurchaseIncludeNew { get; set; } = true;
+
+    public DateOnly? WeeklyPurchaseSentOn { get; set; }
+
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public static class RepricingModes
+{
+    public const string Off = "off";
+    public const string Alert = "alert";
+    public const string Auto = "auto";
 }
 
 public static class AutomationDefaults

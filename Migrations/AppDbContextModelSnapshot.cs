@@ -122,6 +122,37 @@ namespace MarketplaceSync.Web.Migrations
                     b.ToTable("AgentSteps");
                 });
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Automation.AssistantTurn", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "CreatedAt");
+
+                    b.ToTable("AssistantTurns");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.Automation.AutomationSettings", b =>
                 {
                     b.Property<int>("Id")
@@ -144,11 +175,32 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<bool>("FixPhotosOnPublish")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("LabelsDaily")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LabelsHour")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("LabelsSentOn")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("LabelsThermal")
+                        .HasColumnType("boolean");
+
                     b.Property<bool?>("OffersInvoice")
                         .HasColumnType("boolean");
 
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
+
+                    b.Property<decimal>("RepricingMaxIncreasePercent")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)");
+
+                    b.Property<string>("RepricingMode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<bool>("ThankYouEnabled")
                         .HasColumnType("boolean");
@@ -164,12 +216,173 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("WeeklyPurchaseDay")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("WeeklyPurchaseEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("WeeklyPurchaseIncludeNew")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly?>("WeeklyPurchaseSentOn")
+                        .HasColumnType("date");
+
                     b.HasKey("Id");
 
                     b.HasIndex("OrganizationId")
                         .IsUnique();
 
                     b.ToTable("AutomationSettings");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Automation.BotAction", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("PublicationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Result")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<long?>("TelegramMessageId")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal?>("Value")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "Status");
+
+                    b.HasIndex("OrganizationId", "PublicationId", "CreatedAt");
+
+                    b.ToTable("BotActions");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Automation.PurchaseList", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<long?>("TelegramMessageId")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("TotalUsd")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "CreatedAt");
+
+                    b.ToTable("PurchaseLists");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Automation.PurchaseListItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<long?>("CandidateId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<int?>("ProductVariantId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PurchaseListId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Sku")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<decimal?>("UnitCostUsd")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PurchaseListId");
+
+                    b.ToTable("PurchaseListItems");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.CrossBorder.CrossBorderSettings", b =>
@@ -2114,6 +2327,17 @@ namespace MarketplaceSync.Web.Migrations
                     b.Navigation("AgentRun");
                 });
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Automation.PurchaseListItem", b =>
+                {
+                    b.HasOne("MarketplaceSync.Web.Models.Automation.PurchaseList", "PurchaseList")
+                        .WithMany("Items")
+                        .HasForeignKey("PurchaseListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PurchaseList");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.CrossBorder.CrossBorderSettings", b =>
                 {
                     b.HasOne("MarketplaceSync.Web.Models.Organization", "Organization")
@@ -2490,6 +2714,11 @@ namespace MarketplaceSync.Web.Migrations
             modelBuilder.Entity("MarketplaceSync.Web.Models.Agents.AgentRun", b =>
                 {
                     b.Navigation("Steps");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Automation.PurchaseList", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.MarketInsights.MarketRankingSnapshot", b =>

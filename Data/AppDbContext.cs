@@ -44,6 +44,10 @@ namespace MarketplaceSync.Web.Data
         public DbSet<MarketplaceSync.Web.Models.PostSale.BlockedBuyer> BlockedBuyers { get; set; }
         public DbSet<MarketplaceSync.Web.Models.MarketInsights.CompetitorListing> CompetitorListings { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Automation.AutomationSettings> AutomationSettings { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Automation.BotAction> BotActions { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Automation.AssistantTurn> AssistantTurns { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Automation.PurchaseList> PurchaseLists { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Automation.PurchaseListItem> PurchaseListItems { get; set; }
         public DbSet<MarketplaceSync.Web.Models.PostSale.OrderClaim> OrderClaims { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Agents.AgentStep> AgentSteps { get; set; }
 
@@ -365,6 +369,20 @@ namespace MarketplaceSync.Web.Data
             {
                 entity.HasIndex(x => new { x.OrganizationId, x.SellerId }).IsUnique();
             });
+            builder.Entity<MarketplaceSync.Web.Models.Automation.BotAction>(entity =>
+            {
+                entity.HasIndex(x => new { x.OrganizationId, x.Status });
+                entity.HasIndex(x => new { x.OrganizationId, x.PublicationId, x.CreatedAt });
+            });
+            builder.Entity<MarketplaceSync.Web.Models.Automation.AssistantTurn>(entity =>
+                entity.HasIndex(x => new { x.OrganizationId, x.CreatedAt }));
+            builder.Entity<MarketplaceSync.Web.Models.Automation.PurchaseList>(entity =>
+            {
+                entity.HasIndex(x => new { x.OrganizationId, x.CreatedAt });
+                entity.HasMany(x => x.Items).WithOne(x => x.PurchaseList).HasForeignKey(x => x.PurchaseListId).OnDelete(DeleteBehavior.Cascade);
+            });
+            builder.Entity<MarketplaceSync.Web.Models.Automation.AutomationSettings>(entity =>
+                entity.Property(x => x.RepricingMaxIncreasePercent).HasPrecision(6, 2));
             builder.Entity<MarketplaceSync.Web.Models.Automation.AutomationSettings>(entity =>
             {
                 entity.HasIndex(x => x.OrganizationId).IsUnique();

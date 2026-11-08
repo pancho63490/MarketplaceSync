@@ -1,5 +1,6 @@
 using MarketplaceSync.Services.Interfaces;
 using Hangfire;
+using Microsoft.EntityFrameworkCore;
 
 namespace MarketplaceSync.Services.Jobs
 {
@@ -60,6 +61,26 @@ namespace MarketplaceSync.Services.Jobs
             var rates = scope.ServiceProvider.GetRequiredService<MarketplaceSync.Services.CrossBorder.ExchangeRateService>();
             var updated = await rates.UpdateAllAsync();
             _logger.LogInformation("Exchange rate updated for {Count} organization(s).", updated);
+
+            // Con el dólar y los costos de hoy, ¿alguna publicación dejó de ganar lo mínimo?
+            var context = scope.ServiceProvider.GetRequiredService<MarketplaceSync.Web.Data.AppDbContext>();
+            var orgs = await context.NotificationSettings.AsNoTracking()
+                .Where(x => x.TelegramChatId != null)
+                .Select(x => x.OrganizationId)
+                .ToListAsync();
+            foreach (var org in orgs)
+            {
+                try
+                {
+                    using var orgScope = _serviceProvider.CreateScope();
+                    await orgScope.ServiceProvider.GetRequiredService<MarketplaceSync.Services.Notifications.TelegramNotificationService>()
+                        .ReviewPricesAsync(org);
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogWarning(exception, "Price review failed for {Org}.", org);
+                }
+            }
         }
 
         public async Task RefreshMercadoLibreToken()

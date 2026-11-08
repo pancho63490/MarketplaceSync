@@ -169,6 +169,11 @@ builder.Services.AddScoped<MarketplaceSync.Services.Products.SourceBarcodeServic
 builder.Services.AddScoped<MarketplaceSync.Services.Products.BarcodeLookupService>();
 builder.Services.AddScoped<MarketplaceSync.Services.Products.AttributeAutoFillService>();
 builder.Services.AddScoped<MarketplaceSync.Services.CrossBorder.ExchangeRateService>();
+builder.Services.AddScoped<MarketplaceSync.Services.Automation.PublicationEconomics>();
+builder.Services.AddScoped<MarketplaceSync.Services.Automation.BotActionService>();
+builder.Services.AddScoped<MarketplaceSync.Services.Automation.RepricingService>();
+builder.Services.AddScoped<MarketplaceSync.Services.Automation.WeeklyPurchaseService>();
+builder.Services.AddScoped<MarketplaceSync.Services.Notifications.TelegramAssistantService>();
 
 builder.Services.AddScoped<MercadoLibreCategoryService>();
 

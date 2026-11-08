@@ -83,6 +83,35 @@ public sealed class AutomationController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveTelegramAutomations(
+        string? repricingMode,
+        decimal? repricingMaxIncrease,
+        bool labelsDaily,
+        int? labelsHour,
+        bool labelsThermal,
+        bool weeklyPurchase,
+        int? weeklyPurchaseDay,
+        bool weeklyPurchaseIncludeNew,
+        CancellationToken cancellationToken)
+    {
+        var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var settings = await _automation.GetAsync(org, cancellationToken);
+        settings.RepricingMode = repricingMode is RepricingModes.Off or RepricingModes.Auto ? repricingMode : RepricingModes.Alert;
+        settings.RepricingMaxIncreasePercent = Math.Clamp(repricingMaxIncrease ?? 25m, 1m, 100m);
+        settings.LabelsDaily = labelsDaily;
+        settings.LabelsHour = Math.Clamp(labelsHour ?? 9, 5, 18);
+        settings.LabelsThermal = labelsThermal;
+        settings.WeeklyPurchaseEnabled = weeklyPurchase;
+        settings.WeeklyPurchaseDay = Math.Clamp(weeklyPurchaseDay ?? 1, 0, 6);
+        settings.WeeklyPurchaseIncludeNew = weeklyPurchaseIncludeNew;
+        settings.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+        TempData["Success"] = "Guardado. Los avisos llegan al Telegram vinculado.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> SavePhotos(bool enabled, CancellationToken cancellationToken)
     {
         var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);

@@ -118,9 +118,9 @@ public sealed class TelegramClient
         {
             using var _ = await CallAsync(token, "answerCallbackQuery", new { callback_query_id = callbackId, text }, cancellationToken);
         }
-        catch (TelegramApiException)
+        catch (Exception exception) when (exception is TelegramApiException or HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
         {
-            // El botón ya expiró: no afecta.
+            // El botón ya expiró o falló la red: es solo el aviso del botón, la acción sigue.
         }
     }
 
@@ -171,6 +171,42 @@ public sealed class TelegramClient
     }
 
     // ─────────────────────────────────────────────────────────────
+
+    /// <summary>Manda un archivo (PDF de etiquetas, por ejemplo) con texto y botones opcionales.</summary>
+    public async Task<long> SendDocumentAsync(
+        string token,
+        long chatId,
+        byte[] content,
+        string fileName,
+        string contentType,
+        string? captionHtml = null,
+        IReadOnlyList<IReadOnlyList<TelegramButton>>? buttons = null,
+        CancellationToken cancellationToken = default)
+    {
+        var client = _httpClientFactory.CreateClient(HttpClientName);
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent(chatId.ToString(System.Globalization.CultureInfo.InvariantCulture)), "chat_id");
+        if (!string.IsNullOrWhiteSpace(captionHtml))
+        {
+            form.Add(new StringContent(Truncate(captionHtml, 1000)), "caption");
+            form.Add(new StringContent("HTML"), "parse_mode");
+        }
+        if (BuildKeyboard(buttons) is { } keyboard)
+            form.Add(new StringContent(JsonSerializer.Serialize(keyboard, Json)), "reply_markup");
+        var file = new ByteArrayContent(content);
+        file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+        form.Add(file, "document", fileName);
+
+        using var response = await client.PostAsync($"{_apiBase}/bot{token.Trim()}/sendDocument", form, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+        if (!doc.RootElement.TryGetProperty("ok", out var ok) || !ok.GetBoolean())
+        {
+            var description = doc.RootElement.TryGetProperty("description", out var d) ? d.GetString() : null;
+            throw new TelegramApiException(description ?? $"Telegram respondió HTTP {(int)response.StatusCode}.", (int)response.StatusCode);
+        }
+        return doc.RootElement.GetProperty("result").GetProperty("message_id").GetInt64();
+    }
 
     private async Task<JsonDocument> CallAsync(string token, string method, object payload, CancellationToken cancellationToken)
     {

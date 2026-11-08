@@ -42,6 +42,7 @@ public sealed partial class TelegramNotificationService
     private readonly Hangfire.IBackgroundJobClient _jobs;
     private readonly MarketplaceSync.Services.Metrics.MetricsService _metrics;
     private readonly MarketplaceSync.Services.PostSale.PostSaleService _postSale;
+    private readonly IServiceProvider _services;
 
     public TelegramNotificationService(
         AppDbContext context,
@@ -54,8 +55,10 @@ public sealed partial class TelegramNotificationService
         MarketplaceSync.Services.Ai.IListingAutopilotService autopilot,
         Hangfire.IBackgroundJobClient jobs,
         MarketplaceSync.Services.Metrics.MetricsService metrics,
-        MarketplaceSync.Services.PostSale.PostSaleService postSale)
+        MarketplaceSync.Services.PostSale.PostSaleService postSale,
+        IServiceProvider services)
     {
+        _services = services;
         _postSale = postSale;
         _metrics = metrics;
         _extractor = extractor;
@@ -419,13 +422,30 @@ public sealed partial class TelegramNotificationService
             case "/resumen":
                 await SendSummaryAsync(token, settings, force: true, cancellationToken);
                 break;
+            case "/etiquetas":
+                await SendLabelsAsync(token, settings, force: true, cancellationToken);
+                break;
+            case "/compra":
+                await SendPurchaseListAsync(token, settings, force: true, cancellationToken);
+                break;
+            case "/precios":
+                await _telegram.SendMessageAsync(token, update.ChatId, "Reviso tus precios con el dólar y los costos de hoy…", cancellationToken: cancellationToken);
+                await ReviewPricesAsync(settings.OrganizationId, cancellationToken);
+                break;
+            case var command when !command.StartsWith('/') && text.Length > 0:
+                await HandleAssistantAsync(token, settings, text, update.MessageId, cancellationToken);
+                break;
             default:
                 await _telegram.SendMessageAsync(token, update.ChatId,
                     "<b>Lo que puedo hacer</b>\n" +
                     "/ventas — ventas de hoy, ayer, la semana y el mes, con lo más vendido\n" +
                     "/encargo … — el agente busca eso en Mercado Libre y eBay e importa lo que convenga (ej. <code>/encargo Ford Ranger 2019</code>)\n" +
                     "/pendientes — preguntas sin responder, con su respuesta sugerida\n" +
-                    "/resumen — ventas de ayer y lo pendiente de hoy\n\n" +
+                    "/resumen — ventas de ayer y lo pendiente de hoy\n" +
+                    "/etiquetas — el PDF de etiquetas y qué empacar\n" +
+                    "/compra — qué recomprar en EE.UU. esta semana\n" +
+                    "/precios — revisar qué publicaciones ya no ganan lo mínimo\n\n" +
+                    "💬 <b>O escríbeme normal</b>: «¿cuánto vendí hoy?», «sube el faro de Tacoma a 3500», «pausa las balatas».\n\n" +
                     "📥 <b>Mándame un link</b> de Amazon, eBay, Walmart o AliExpress y lo importo como producto. " +
                     "Si quieres, agrega el precio en dólares: <code>https://… 38.50</code>\n\n" +
                     "Para contestar una pregunta, <b>responde a su mensaje</b> con tu texto o usa sus botones.",
@@ -437,6 +457,8 @@ public sealed partial class TelegramNotificationService
     private async Task HandleCallbackAsync(string token, NotificationSettings settings, TelegramIncoming update, CancellationToken cancellationToken)
     {
         var data = update.CallbackData ?? string.Empty;
+        if (await HandleAutomationCallbackAsync(token, settings, update, cancellationToken))
+            return;
         if (data.StartsWith("pb:", StringComparison.Ordinal) && int.TryParse(data[3..], out var productId))
         {
             await PublishFromTelegramAsync(token, settings, productId, update, cancellationToken);
@@ -562,6 +584,7 @@ public sealed partial class TelegramNotificationService
                 await NotifyBuyerMessagesAsync(token, settings, since, cancellationToken);
             await NotifyClaimsAsync(token, settings, since, cancellationToken);
             await NotifyReputationAsync(token, settings, cancellationToken);
+            await RunDailyAutomationsAsync(token, settings, cancellationToken);
             if (settings.DailySummary)
                 await SendSummaryAsync(token, settings, force: false, cancellationToken);
         }
@@ -715,6 +738,16 @@ public sealed partial class TelegramNotificationService
         var today = DateOnly.FromDateTime(local);
         if (!force && (local.Hour < settings.DailySummaryHour || settings.LastDailySummaryOn == today))
             return;
+        if (!force)
+        {
+            // Se "aparta" el día en la base: si dos revisiones corren a la vez, solo una lo manda.
+            var claimed = await _context.NotificationSettings
+                .Where(x => x.Id == settings.Id && (x.LastDailySummaryOn == null || x.LastDailySummaryOn != today))
+                .ExecuteUpdateAsync(u => u.SetProperty(x => x.LastDailySummaryOn, today), cancellationToken);
+            if (claimed == 0)
+                return;
+            settings.LastDailySummaryOn = today;
+        }
 
         var org = settings.OrganizationId;
         var yesterdayStartUtc = DateTime.SpecifyKind(today.AddDays(-1).ToDateTime(TimeOnly.MinValue).AddHours(7), DateTimeKind.Utc);

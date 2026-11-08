@@ -1,5 +1,6 @@
 @model MarketplaceSync.Web.Controllers.AutomationViewModel
 @using MarketplaceSync.Services.Automation
+@using MarketplaceSync.Web.Models.Automation
 @{
     ViewData["Title"] = "Automático";
     var s = Model.Settings;
@@ -111,6 +112,60 @@
                 <label class="form-check-label fw-bold" for="pEnabled">Poner fondo blanco al publicar</label>
             </div>
             <p class="small text-muted mb-0">Las fotos de lo que ya está publicado se arreglan en <a asp-controller="Photos" asp-action="Index">Fotos</a>.</p>
+            <button type="submit" class="btn btn-primary btn-sm align-self-start">Guardar</button>
+        </form>
+    </section>
+
+    <section class="panel au-wide" aria-labelledby="au-tg">
+        <div class="panel-head">
+            <h2 id="au-tg">@Html.Icon("send") Desde Telegram</h2>
+            <p>Para no entrar a la app: escríbele al bot normal («¿cuánto vendí hoy?», «sube el faro a 3500») y confirma con un botón. Los cambios en Mercado Libre siempre esperan tu ✅, salvo los precios en automático.</p>
+        </div>
+        <form asp-action="SaveTelegramAutomations" method="post" class="panel-body au-form au-tg-grid">
+            @Html.AntiForgeryToken()
+            <fieldset>
+                <legend class="fw-bold">Precios cuando cambian el dólar o tus costos</legend>
+                <div class="form-check"><input class="form-check-input" type="radio" name="repricingMode" id="rpAlert" value="alert" checked="@(s.RepricingMode == RepricingModes.Alert)" /><label class="form-check-label" for="rpAlert">Avisarme con botones (Subir / Pausar / Ignorar)</label></div>
+                <div class="form-check"><input class="form-check-input" type="radio" name="repricingMode" id="rpAuto" value="auto" checked="@(s.RepricingMode == RepricingModes.Auto)" /><label class="form-check-label" for="rpAuto">Subirlos solo hasta</label>
+                    <input type="number" name="repricingMaxIncrease" value="@s.RepricingMaxIncreasePercent.ToString("0", System.Globalization.CultureInfo.InvariantCulture)" min="1" max="100" class="form-control form-control-sm d-inline-block mx-1" style="width:70px" aria-label="Tope de subida en porcentaje" />% <span class="text-muted small">(más que eso, me pregunta)</span></div>
+                <div class="form-check"><input class="form-check-input" type="radio" name="repricingMode" id="rpOff" value="off" checked="@(s.RepricingMode == RepricingModes.Off)" /><label class="form-check-label" for="rpOff">No revisar</label></div>
+                <p class="small text-muted mb-0">Se revisa después de actualizar el tipo de cambio (5:00 y 12:00). Nunca baja precios. También con <code>/precios</code>.</p>
+            </fieldset>
+            <fieldset>
+                <legend class="fw-bold">Etiquetas del día</legend>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="lbDaily" name="labelsDaily" value="true" checked="@s.LabelsDaily" />
+                    <input type="hidden" name="labelsDaily" value="false" />
+                    <label class="form-check-label" for="lbDaily">Mandarme el PDF y qué empacar a las</label>
+                    <select name="labelsHour" class="form-select form-select-sm d-inline-block ms-1" style="width:auto;min-width:6rem" aria-label="Hora">
+                        @for (var h = 5; h <= 18; h++) { <option value="@h" selected="@(s.LabelsHour == h)">@(h):00</option> }
+                    </select>
+                </div>
+                <div class="form-check form-switch mt-1">
+                    <input class="form-check-input" type="checkbox" role="switch" id="lbThermal" name="labelsThermal" value="true" checked="@s.LabelsThermal" />
+                    <input type="hidden" name="labelsThermal" value="false" />
+                    <label class="form-check-label" for="lbThermal">Formato de impresora térmica</label>
+                </div>
+                <p class="small text-muted mb-0">Solo si hay pedidos por enviar. Cada pedido trae un botón «Empacado». También con <code>/etiquetas</code>.</p>
+            </fieldset>
+            <fieldset>
+                <legend class="fw-bold">Compra de la semana</legend>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="wpOn" name="weeklyPurchase" value="true" checked="@s.WeeklyPurchaseEnabled" />
+                    <input type="hidden" name="weeklyPurchase" value="false" />
+                    <label class="form-check-label" for="wpOn">Mandarme qué recomprar cada</label>
+                    <select name="weeklyPurchaseDay" class="form-select form-select-sm d-inline-block ms-1" style="width:auto;min-width:8rem" aria-label="Día">
+                        @{ var days = new[] { "domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado" }; }
+                        @for (var d = 0; d < 7; d++) { <option value="@d" selected="@(s.WeeklyPurchaseDay == d)">@days[d]</option> }
+                    </select>
+                </div>
+                <div class="form-check form-switch mt-1">
+                    <input class="form-check-input" type="checkbox" role="switch" id="wpNew" name="weeklyPurchaseIncludeNew" value="true" checked="@s.WeeklyPurchaseIncludeNew" />
+                    <input type="hidden" name="weeklyPurchaseIncludeNew" value="false" />
+                    <label class="form-check-label" for="wpNew">Incluir hasta 3 productos nuevos de Qué comprar</label>
+                </div>
+                <p class="small text-muted mb-0">Con lo vendido en 30 días y tu stock; total en dólares y links. Apruebas, y al llegar pulsas «Ya llegó todo» para sumar el stock. También con <code>/compra</code>.</p>
+            </fieldset>
             <button type="submit" class="btn btn-primary btn-sm align-self-start">Guardar</button>
         </form>
     </section>
