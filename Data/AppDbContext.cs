@@ -49,6 +49,8 @@ namespace MarketplaceSync.Web.Data
         public DbSet<MarketplaceSync.Web.Models.Automation.PurchaseList> PurchaseLists { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Automation.PurchaseListItem> PurchaseListItems { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Finance.BusinessExpense> BusinessExpenses { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Invoicing.InvoicingSettings> InvoicingSettings { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Invoicing.SalesInvoice> SalesInvoices { get; set; }
         public DbSet<MarketplaceSync.Web.Models.PostSale.OrderClaim> OrderClaims { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Agents.AgentStep> AgentSteps { get; set; }
 
@@ -369,6 +371,13 @@ namespace MarketplaceSync.Web.Data
             builder.Entity<MarketplaceSync.Web.Models.MarketInsights.CompetitorStore>(entity =>
             {
                 entity.HasIndex(x => new { x.OrganizationId, x.SellerId }).IsUnique();
+            });
+            builder.Entity<MarketplaceSync.Web.Models.Invoicing.InvoicingSettings>(entity =>
+                entity.HasIndex(x => x.OrganizationId).IsUnique());
+            builder.Entity<MarketplaceSync.Web.Models.Invoicing.SalesInvoice>(entity =>
+            {
+                entity.HasIndex(x => new { x.OrganizationId, x.IssuedAt });
+                entity.HasIndex(x => new { x.OrganizationId, x.Kind, x.PeriodYear, x.PeriodMonth });
             });
             builder.Entity<MarketplaceSync.Web.Models.Finance.BusinessExpense>(entity =>
                 entity.HasIndex(x => new { x.OrganizationId, x.Date }));

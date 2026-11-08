@@ -99,6 +99,18 @@ public class SalesOrder
 
     public DateTime? ProfitComputedAt { get; set; }
 
+    // ── Factura ──
+
+    /// <summary>CFDI que ampara esta venta (individual o global).</summary>
+    public int? SalesInvoiceId { get; set; }
+
+    /// <summary>RFC que capturó el comprador en Mercado Libre (null = no pidió factura o no se ha revisado).</summary>
+    [System.ComponentModel.DataAnnotations.MaxLength(13)]
+    public string? BuyerRfc { get; set; }
+
+    /// <summary>Última vez que se leyeron sus datos de facturación en Mercado Libre.</summary>
+    public DateTime? BillingCheckedAt { get; set; }
+
     public DateTime DateCreated { get; set; }
     public DateTime? DateClosed { get; set; }
     public DateTime LastUpdated { get; set; }

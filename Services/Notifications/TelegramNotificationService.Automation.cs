@@ -239,6 +239,8 @@ public sealed partial class TelegramNotificationService
                 await SendLabelsAsync(token, settings, force: false, cancellationToken);
         }
 
+        await RunInvoicingAlertsAsync(token, settings, cancellationToken);
+
         if (automation.PromotionAlerts && automation.PromotionsCheckedOn != today && now.Hour >= 9 && now.Hour < 20)
         {
             var claimed = await _context.AutomationSettings
@@ -414,6 +416,174 @@ public sealed partial class TelegramNotificationService
                 settings.PublicBaseUrl is null ? null : new[] { new[] { new TelegramButton("Abrir Promociones", Url: AppUrl(settings, "/Promotions")) } },
                 cancellationToken: cancellationToken);
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Facturas
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>Compradores que pidieron factura (dieron RFC) y recordatorio de la factura global al empezar el mes.</summary>
+    private async Task RunInvoicingAlertsAsync(string token, NotificationSettings settings, CancellationToken cancellationToken)
+    {
+        var org = settings.OrganizationId;
+        var chatId = settings.TelegramChatId!.Value;
+        var invoicing = Service<MarketplaceSync.Services.Invoicing.InvoicingService>();
+        var invoiceSettings = await invoicing.GetSettingsAsync(org, cancellationToken);
+        if (!invoiceSettings.NotifyTelegram)
+            return;
+        var ready = invoicing.MissingSetup(invoiceSettings).Count == 0;
+
+        List<MarketplaceSync.Web.Models.Orders.SalesOrder> requests;
+        try
+        {
+            requests = await invoicing.CheckBuyerRequestsAsync(org, 15, cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(exception, "Checking invoice requests for {Org} failed.", org);
+            requests = new();
+        }
+
+        foreach (var order in requests)
+        {
+            var key = "invreq:" + (order.ExternalPackId ?? order.ExternalOrderId);
+            if (await _context.NotificationLogs.AnyAsync(l => l.OrganizationId == org && l.Key == key, cancellationToken))
+                continue;
+            var draft = await invoicing.DraftAsync(org, order.Id, readBuyer: false, cancellationToken);
+            var html = new StringBuilder("🧾 <b>Te pidieron factura</b>\n")
+                .Append("Venta #").Append(E(order.ExternalOrderId)).Append(" · ").Append(Money(draft?.Total ?? order.TotalAmount));
+            if (draft is { Lines.Count: > 0 })
+                html.Append("\n").Append(E(Short(string.Join(", ", draft.Lines.Select(l => $"{l.Quantity}× {l.Title}")), 120)));
+            html.Append("\nRFC <b>").Append(E(order.BuyerRfc)).Append("</b>");
+
+            var buttons = new List<IReadOnlyList<TelegramButton>>();
+            long? actionId = null;
+            if (ready)
+            {
+                var action = new BotAction
+                {
+                    OrganizationId = org,
+                    Kind = BotActionKinds.Invoice,
+                    Description = $"Timbrar la factura de la venta #{order.ExternalOrderId} para {order.BuyerRfc}",
+                    Payload = System.Text.Json.JsonSerializer.Serialize(new { orderId = order.Id }),
+                    Source = "invoicing"
+                };
+                _context.BotActions.Add(action);
+                await _context.SaveChangesAsync(cancellationToken);
+                actionId = action.Id;
+                buttons.Add(new[] { new TelegramButton("🧾 Timbrar con sus datos", CallbackData: $"ax:{action.Id}") });
+                html.Append("\n<i>Se timbra con los datos que capturó en Mercado Libre y se sube a su compra.</i>");
+            }
+            else
+            {
+                html.Append("\n<i>Para facturar desde aquí, completa tus datos fiscales y tu CSD en la app.</i>");
+            }
+            if (settings.PublicBaseUrl is not null)
+                buttons.Add(new[] { new TelegramButton(ready ? "Revisar en la app" : "Configurar facturación", Url: AppUrl(settings, ready ? $"/Orders/Details/{order.Id}#factura" : "/Invoices/Settings")) });
+
+            var messageId = await _telegram.SendMessageAsync(token, chatId, html.ToString(), buttons, cancellationToken: cancellationToken);
+            if (actionId is { } aid)
+                await _context.BotActions.Where(a => a.Id == aid).ExecuteUpdateAsync(u => u.SetProperty(a => a.TelegramMessageId, messageId), cancellationToken);
+            await LogAsync(org, key, "invoice", order.Id.ToString(CultureInfo.InvariantCulture), chatId, messageId, cancellationToken);
+        }
+
+        // Recordatorio de la global del mes anterior (días 1 a 5, de 9 a 20 h).
+        var now = LocalNow;
+        if (now.Day <= 5 && now.Hour >= 9 && now.Hour < 20)
+        {
+            var previous = new DateTime(now.Year, now.Month, 1).AddMonths(-1);
+            var key = $"global:{previous:yyyy-MM}";
+            if (!await _context.NotificationLogs.AnyAsync(l => l.OrganizationId == org && l.Key == key, cancellationToken))
+            {
+                var preview = await invoicing.GlobalPreviewAsync(org, previous.Year, previous.Month, cancellationToken);
+                if (preview.Existing is null && preview.Orders.Count > 0)
+                    await SendGlobalCardAsync(token, settings, preview, ready, key, cancellationToken);
+                else
+                    await LogAsync(org, key, "global", null, chatId, 0, cancellationToken);
+            }
+        }
+    }
+
+    private async Task SendGlobalCardAsync(string token, NotificationSettings settings, MarketplaceSync.Services.Invoicing.GlobalPreview preview, bool ready, string? logKey, CancellationToken cancellationToken)
+    {
+        var org = settings.OrganizationId;
+        var chatId = settings.TelegramChatId!.Value;
+        var monthName = new DateTime(preview.Year, preview.Month, 1).ToString("MMMM yyyy", MxCulture);
+        var html = new StringBuilder($"🧾 <b>Factura global de {monthName}</b>\n")
+            .Append(preview.Orders.Count).Append(preview.Orders.Count == 1 ? " venta sin factura por " : " ventas sin factura por ")
+            .Append("<b>").Append(preview.Total.ToString("C2", MxCulture)).Append("</b> (IVA incluido), al público en general.");
+        if (preview.WithBuyerRfc.Count > 0)
+            html.Append("\n⚠️ ").Append(preview.WithBuyerRfc.Count).Append(preview.WithBuyerRfc.Count == 1 ? " comprador te dio RFC: factúrala aparte (no va en la global)." : " compradores te dieron RFC: factúralas aparte (no van en la global).");
+
+        var buttons = new List<IReadOnlyList<TelegramButton>>();
+        long? actionId = null;
+        if (ready)
+        {
+            var action = new BotAction
+            {
+                OrganizationId = org,
+                Kind = BotActionKinds.GlobalInvoice,
+                Description = $"Emitir la factura global de {monthName} ({preview.Orders.Count} ventas, {preview.Total.ToString("C2", MxCulture)})",
+                Payload = System.Text.Json.JsonSerializer.Serialize(new { year = preview.Year, month = preview.Month }),
+                Source = "invoicing"
+            };
+            _context.BotActions.Add(action);
+            await _context.SaveChangesAsync(cancellationToken);
+            actionId = action.Id;
+            buttons.Add(new[] { new TelegramButton("🧾 Emitir factura global", CallbackData: $"ax:{action.Id}") });
+        }
+        if (settings.PublicBaseUrl is not null)
+            buttons.Add(new[] { new TelegramButton(ready ? "Revisar en la app" : "Configurar facturación", Url: AppUrl(settings, ready ? $"/Invoices?year={preview.Year}&month={preview.Month}" : "/Invoices/Settings")) });
+
+        var messageId = await _telegram.SendMessageAsync(token, chatId, html.ToString(), buttons, cancellationToken: cancellationToken);
+        if (actionId is { } aid)
+            await _context.BotActions.Where(a => a.Id == aid).ExecuteUpdateAsync(u => u.SetProperty(a => a.TelegramMessageId, messageId), cancellationToken);
+        if (logKey is not null)
+            await LogAsync(org, logKey, "global", null, chatId, messageId, cancellationToken);
+    }
+
+    /// <summary>/facturas: pedidos de factura pendientes y la global del mes pasado.</summary>
+    private async Task SendInvoicesStatusAsync(string token, NotificationSettings settings, CancellationToken cancellationToken)
+    {
+        var org = settings.OrganizationId;
+        var chatId = settings.TelegramChatId!.Value;
+        var invoicing = Service<MarketplaceSync.Services.Invoicing.InvoicingService>();
+        var invoiceSettings = await invoicing.GetSettingsAsync(org, cancellationToken);
+        var missing = invoicing.MissingSetup(invoiceSettings);
+        await invoicing.CheckBuyerRequestsAsync(org, 15, cancellationToken);
+
+        var since = DateTime.UtcNow.AddDays(-30);
+        var pending = await _context.SalesOrders.AsNoTracking()
+            .Where(o => o.OrganizationId == org && o.Status == "paid" && o.BuyerRfc != null && o.SalesInvoiceId == null && o.DateCreated >= since)
+            .OrderByDescending(o => o.DateCreated)
+            .Take(10)
+            .ToListAsync(cancellationToken);
+        var monthStart = new DateTime(LocalNow.Year, LocalNow.Month, 1);
+        var (from, _) = MarketplaceSync.Services.Invoicing.InvoicingService.MonthRange(monthStart.Year, monthStart.Month);
+        var issued = await _context.SalesInvoices.AsNoTracking()
+            .Where(i => i.OrganizationId == org && i.IssuedAt >= from && i.Status == MarketplaceSync.Web.Models.Invoicing.InvoiceStatus.Issued)
+            .ToListAsync(cancellationToken);
+
+        var html = new StringBuilder("🧾 <b>Facturas</b>\n");
+        if (missing.Count > 0)
+            html.Append("Para facturar falta: ").Append(E(string.Join(", ", missing))).Append(".\n");
+        html.Append("Este mes: ").Append(issued.Count).Append(issued.Count == 1 ? " factura" : " facturas").Append(" por ").Append(issued.Sum(i => i.Total).ToString("C2", MxCulture)).Append('\n');
+        if (pending.Count == 0)
+            html.Append("Nadie está esperando factura.");
+        else
+        {
+            html.Append("\n<b>Te pidieron factura</b> (").Append(pending.Count).Append("):\n");
+            foreach (var o in pending)
+                html.Append("• #").Append(E(o.ExternalOrderId)).Append(" · ").Append(E(o.BuyerRfc)).Append(" · ").Append(Money(o.TotalAmount)).Append('\n');
+        }
+        await _telegram.SendMessageAsync(token, chatId, html.ToString().Trim(),
+            settings.PublicBaseUrl is null ? null : new[] { new[] { new TelegramButton("Abrir Facturas", Url: AppUrl(settings, "/Invoices")) } },
+            cancellationToken: cancellationToken);
+
+        var previous = monthStart.AddMonths(-1);
+        var preview = await invoicing.GlobalPreviewAsync(org, previous.Year, previous.Month, cancellationToken);
+        if (preview.Existing is null && preview.Orders.Count > 0)
+            await SendGlobalCardAsync(token, settings, preview, missing.Count == 0, null, cancellationToken);
     }
 
     /// <summary>Revisión de precios (después de actualizar el tipo de cambio): avisa o aplica según Automático.</summary>

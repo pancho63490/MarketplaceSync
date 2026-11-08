@@ -1,0 +1,146 @@
+@model MarketplaceSync.Web.ViewModels.Orders.OrderDetailsViewModel
+@using System.Globalization
+@using MarketplaceSync.Web.Models.Invoicing
+@{
+    var d = Model.Invoice!;
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    var buyer = d.Buyer;
+    var invoice = d.Invoice;
+    var ready = Model.InvoiceMissing.Count == 0;
+    var hasRfc = buyer?.HasRfc == true;
+    var lineIndex = 0;
+}
+
+<section class="panel" aria-labelledby="od-inv" id="factura">
+    <div class="panel-head">
+        <h2 id="od-inv">@Html.Icon("receipt") Factura</h2>
+        @if (d.Orders.Count > 1) { <p class="mb-0">Carrito de @d.Orders.Count ventas: una sola factura por @d.Total.ToString("C2", mx).</p> }
+    </div>
+    <div class="panel-body inv-panel">
+        @if (invoice is { Status: InvoiceStatus.Issued, Kind: InvoiceKinds.Individual })
+        {
+            <div class="promo-now">
+                <span><span class="pill pill-ok">Timbrada</span> <b>@invoice.Serie@invoice.Folio</b> · @invoice.IssuedAt.AddHours(-7).ToString("d MMM HH:mm", mx)</span>
+                <span class="promo-price-line">@invoice.Total.ToString("C2", mx)</span>
+                <span class="small">@invoice.ReceiverName · @invoice.ReceiverRfc</span>
+                <span class="small text-muted text-break">@invoice.Uuid</span>
+                @if (invoice.UploadedToMercadoLibreAt is not null)
+                {
+                    <span class="small text-ok">@Html.Icon("circle-check") El comprador la ve en su compra de Mercado Libre.</span>
+                }
+                else if (invoice.UploadError is not null)
+                {
+                    <span class="small text-bad">@invoice.UploadError</span>
+                }
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <a asp-controller="Invoices" asp-action="Download" asp-route-id="@invoice.Id" asp-route-format="pdf" class="btn btn-outline-secondary btn-sm">@Html.Icon("download") PDF</a>
+                <a asp-controller="Invoices" asp-action="Download" asp-route-id="@invoice.Id" asp-route-format="xml" class="btn btn-outline-secondary btn-sm">XML</a>
+                @if (invoice.UploadedToMercadoLibreAt is null)
+                {
+                    <form asp-controller="Invoices" asp-action="Upload" method="post" data-busy="Subiendo…">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@invoice.Id" /><input type="hidden" name="orderId" value="@Model.Order.Id" />
+                        <button type="submit" class="btn btn-outline-secondary btn-sm">@Html.Icon("upload") Subir a Mercado Libre</button>
+                    </form>
+                }
+            </div>
+            <details class="inv-cancel">
+                <summary class="small">Cancelar factura</summary>
+                <form asp-controller="Invoices" asp-action="Cancel" method="post" class="d-grid gap-2 mt-2" data-busy="Cancelando…" onsubmit="return confirm('¿Cancelar la factura ante el SAT?')">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@invoice.Id" /><input type="hidden" name="orderId" value="@Model.Order.Id" />
+                    <select name="motive" class="form-select form-select-sm" aria-label="Motivo">
+                        <option value="02">Tiene errores (después la vuelves a timbrar)</option>
+                        <option value="03">La venta no se llevó a cabo (cancelada o devuelta)</option>
+                    </select>
+                    <button type="submit" class="btn btn-outline-danger btn-sm justify-self-start">Cancelar ante el SAT</button>
+                    <span class="small text-muted">Si pasa de $1,000 o de 24 horas, el comprador puede tener que aceptarla.</span>
+                </form>
+            </details>
+        }
+        else if (invoice is { Status: InvoiceStatus.Issued, Kind: InvoiceKinds.Global })
+        {
+            <p class="mb-0">Va en la <b>factura global @invoice.Serie@invoice.Folio</b> de @(new DateTime(invoice.PeriodYear ?? 2000, invoice.PeriodMonth ?? 1, 1).ToString("MMMM yyyy", mx)). <a asp-controller="Invoices" asp-action="Index" asp-route-year="@invoice.PeriodYear" asp-route-month="@invoice.PeriodMonth">Ver</a></p>
+        }
+        else
+        {
+            @if (!ready)
+            {
+                <p class="small mb-0">@Html.Icon("info") Para facturar falta: @string.Join(", ", Model.InvoiceMissing). <a asp-controller="Invoices" asp-action="Settings">Completar</a></p>
+            }
+            @if (hasRfc)
+            {
+                <p class="small mb-0"><span class="pill pill-warn">Pidió factura</span> El comprador capturó sus datos fiscales en Mercado Libre. Revísalos y timbra.</p>
+            }
+            else
+            {
+                <p class="small text-muted mb-0">@(d.BuyerError ?? "El comprador no dio RFC en Mercado Libre.") Si no te pide factura, esta venta va en la factura global del mes.</p>
+            }
+
+            <details class="inv-issue" open="@hasRfc">
+                <summary class="small">@(hasRfc ? "Datos de la factura" : "Facturar con datos que te mande el comprador")</summary>
+                <form asp-controller="Invoices" asp-action="Issue" method="post" class="d-grid gap-2 mt-2 inv-form" data-busy="Timbrando…">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="orderId" value="@Model.Order.Id" />
+                    <div class="row-2">
+                        <div>
+                            <label class="form-label small" for="rRfc">RFC</label>
+                            <input id="rRfc" name="receiver.Rfc" class="form-control form-control-sm text-uppercase" value="@(hasRfc ? buyer!.Rfc : "")" maxlength="13" required />
+                        </div>
+                        <div>
+                            <label class="form-label small" for="rZip">C.P. fiscal</label>
+                            <input id="rZip" name="receiver.Zip" class="form-control form-control-sm" value="@buyer?.Zip" inputmode="numeric" maxlength="5" required />
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label small" for="rName">Nombre o razón social</label>
+                        <input id="rName" name="receiver.Name" class="form-control form-control-sm text-uppercase" value="@(hasRfc ? buyer!.Name : "")" maxlength="300" required />
+                    </div>
+                    <div>
+                        <label class="form-label small" for="rReg">Régimen fiscal</label>
+                        <select id="rReg" name="receiver.FiscalRegime" class="form-select form-select-sm" required>
+                            <option value="">Escoge…</option>
+                            @foreach (var r in SatCatalogs.FiscalRegimes.Where(r => r.Code != "616"))
+                            {
+                                <option value="@r.Code" selected="@(buyer?.FiscalRegime == r.Code)">@r.Code · @r.Label</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label small" for="rUse">Uso del CFDI</label>
+                        <select id="rUse" name="receiver.CfdiUse" class="form-select form-select-sm">
+                            @foreach (var u in SatCatalogs.CfdiUses.Where(u => u.Code != "CP01"))
+                            {
+                                <option value="@u.Code" selected="@((buyer?.CfdiUse ?? "G03") == u.Code)">@u.Code · @u.Label</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="inv-lines">
+                        @foreach (var line in d.Lines)
+                        {
+                            var i = lineIndex++;
+                            <div class="inv-line">
+                                <span>@line.Quantity × @line.Title<span class="d-block text-muted small">@line.Total.ToString("C2", mx) IVA incluido</span></span>
+                                @if (line.ProductId is { } pid)
+                                {
+                                    <input name="satCodes[@pid]" class="form-control form-control-sm inv-code" value="@line.SatCode" inputmode="numeric" maxlength="8" placeholder="Clave SAT" aria-label="Clave SAT de @line.Title" title="Clave de producto del SAT (8 dígitos)" />
+                                }
+                                else
+                                {
+                                    <span class="small text-muted">@(line.SatCode ?? "sin clave")</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div class="form-check small">
+                        <input class="form-check-input" type="checkbox" id="rRemember" name="rememberCodes" value="true" checked />
+                        <label class="form-check-label" for="rRemember">Recordar la clave SAT en estos productos</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm justify-self-start" disabled="@(!ready)">@Html.Icon("receipt") Timbrar factura</button>
+                    <span class="small text-muted">El nombre, régimen y código postal deben ser iguales a los de la Constancia del comprador, o el SAT la rechaza.</span>
+                </form>
+            </details>
+        }
+    </div>
+</section>

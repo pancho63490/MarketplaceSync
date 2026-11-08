@@ -80,3 +80,12 @@ Notifications whose `application_id` does not match `MercadoLibre__ClientId` are
 
 No webhook is needed: a Hangfire job reads the bot every minute. Do not set a webhook on the same bot elsewhere (Telegram disables `getUpdates` while a webhook is active; the app removes it when you connect the bot).
 
+
+## Invoicing / CFDI 4.0 with Facturama (optional)
+
+1. Create a Facturama **API Multiemisor** account (free sandbox at dev.facturama.mx; production at facturama.mx with the API license and a folio package).
+2. In Render set `Facturama__User` and `Facturama__Password` (the Facturama portal credentials). Facturama runs in **sandbox** unless `Facturama__Sandbox=false`.
+3. In the app: Vender → Facturas → Datos para facturar. Enter RFC, name as on the Constancia de Situación Fiscal, régimen fiscal, código postal fiscal and the default SAT product code, then upload the CSD (`.cer`, `.key`, password). The CSD goes straight to Facturama; the app does not store the key or password.
+4. Uploading invoices to the purchase uses `POST /packs/{pack_id}/fiscal_documents`; the Mercado Libre app needs permission to manage the seller's orders/post-sale.
+
+`Facturama__BaseUrl` is only for tests.

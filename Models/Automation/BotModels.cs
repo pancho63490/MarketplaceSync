@@ -62,6 +62,12 @@ public static class BotActionKinds
 
     /// <summary>Entrar a una campaña de Mercado Libre con varias publicaciones (Payload con campaña y precios).</summary>
     public const string PromotionJoin = "promo";
+
+    /// <summary>Timbrar la factura de una venta con los datos que dio el comprador (Payload {"orderId":1}).</summary>
+    public const string Invoice = "invoice";
+
+    /// <summary>Timbrar la factura global de un mes (Payload {"year":2026,"month":10}).</summary>
+    public const string GlobalInvoice = "global_invoice";
 }
 
 public static class BotActionStatus

@@ -56,7 +56,11 @@ namespace MarketplaceSync.Web.Models
         /// Vehículos con los que es compatible la pieza (JSON de <c>VehicleFitment</c>): sugeridos por IA o capturados,
         /// validados contra el catálogo de Mercado Libre; se mandan a la publicación solo al confirmar.
         /// </summary>
-        public string? CompatibilityJson { get; set; }
+        /// <summary>Clave de producto o servicio del SAT (8 dígitos) para facturar; vacía = la de Facturación.</summary>
+    [System.ComponentModel.DataAnnotations.MaxLength(8)]
+    public string? SatProductCode { get; set; }
+
+    public string? CompatibilityJson { get; set; }
 
         /// <summary>Vehículos (versiones) que Mercado Libre tiene ligados a la publicación tras el último envío.</summary>
         public int? CompatibilityCount { get; set; }

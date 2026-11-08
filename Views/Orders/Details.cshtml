@@ -172,6 +172,10 @@
                 </dl>
             </div>
         </section>
+        @if (Model.Invoice is { } inv)
+        {
+            <partial name="_InvoicePanel" model="Model" />
+        }
         @if (!string.IsNullOrWhiteSpace(o.BuyerId))
         {
             <partial name="_BlockBuyer" model="@(new MarketplaceSync.Web.ViewModels.Orders.BlockBuyerPartial(o.Id, o.BuyerNickname, Model.Blocked, Model.BuyerOrders, null))" />

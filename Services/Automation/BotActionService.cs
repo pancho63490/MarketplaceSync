@@ -83,6 +83,8 @@ public sealed class BotActionService
                 BotActionKinds.Discount when action.Value is > 0 => await DiscountAsync(org, action, cancellationToken),
                 BotActionKinds.DiscountRemove => await LeavePromotionAsync(org, action, cancellationToken),
                 BotActionKinds.PromotionJoin => await JoinPromotionAsync(org, action, cancellationToken),
+                BotActionKinds.Invoice => await InvoiceAsync(org, action, cancellationToken),
+                BotActionKinds.GlobalInvoice => await GlobalInvoiceAsync(org, action, cancellationToken),
                 _ => "No sé hacer esa acción."
             };
         }
@@ -163,6 +165,33 @@ public sealed class BotActionService
                              (errors.Count > 0 ? " No entraron: " + string.Join(" · ", errors.Take(3)) : string.Empty);
         if (action.Description.Length > 400) action.Description = action.Description[..400];
         return null;
+    }
+
+    private static int PayloadInt(BotAction action, string name)
+    {
+        if (string.IsNullOrWhiteSpace(action.Payload)) return 0;
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(action.Payload);
+            return document.RootElement.TryGetProperty(name, out var v) && v.TryGetInt32(out var n) ? n : 0;
+        }
+        catch (System.Text.Json.JsonException) { return 0; }
+    }
+
+    private async Task<string?> InvoiceAsync(Guid org, BotAction action, CancellationToken cancellationToken)
+    {
+        var (ok, message) = await _services.GetRequiredService<MarketplaceSync.Services.Invoicing.InvoicingService>()
+            .IssueFromBuyerDataAsync(org, PayloadInt(action, "orderId"), cancellationToken);
+        if (ok) action.Description = message.Length > 400 ? message[..400] : message;
+        return ok ? null : message;
+    }
+
+    private async Task<string?> GlobalInvoiceAsync(Guid org, BotAction action, CancellationToken cancellationToken)
+    {
+        var (ok, message, _) = await _services.GetRequiredService<MarketplaceSync.Services.Invoicing.InvoicingService>()
+            .IssueGlobalAsync(org, PayloadInt(action, "year"), PayloadInt(action, "month"), includeBuyersWithRfc: false, cancellationToken);
+        if (ok) action.Description = message.Length > 400 ? message[..400] : message;
+        return ok ? null : message;
     }
 
     private async Task<string?> PriceAsync(Guid org, BotAction action, CancellationToken cancellationToken)

@@ -12,6 +12,11 @@ public sealed class OrderDetailsViewModel
     public IReadOnlyList<OrderClaim> Claims { get; init; } = Array.Empty<OrderClaim>();
     public BlockedBuyer? Blocked { get; init; }
     public int BuyerOrders { get; init; }
+
+    /// <summary>Factura de la venta (null si no está pagada).</summary>
+    public MarketplaceSync.Services.Invoicing.InvoiceDraft? Invoice { get; init; }
+
+    public List<string> InvoiceMissing { get; init; } = new();
 }
 
 /// <summary>Panel “Bloquear comprador” (en el pedido y en el reclamo).</summary>

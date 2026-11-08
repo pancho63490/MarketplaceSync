@@ -630,6 +630,188 @@ namespace MarketplaceSync.Web.Migrations
                     b.ToTable("InventoryMovements");
                 });
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Invoicing.InvoicingSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CsdStatus")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("CsdUploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DefaultProductCode")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("ExpeditionZip")
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)");
+
+                    b.Property<string>("FiscalRegime")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("GlobalSerie")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("IssuerName")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("IssuerRfc")
+                        .HasMaxLength(13)
+                        .HasColumnType("character varying(13)");
+
+                    b.Property<decimal>("IvaRate")
+                        .HasColumnType("numeric(5,4)");
+
+                    b.Property<int>("NextFolio")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NextGlobalFolio")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("NotifyTelegram")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PaymentForm")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<string>("Serie")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("UploadToMercadoLibre")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId")
+                        .IsUnique();
+
+                    b.ToTable("InvoicingSettings");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Invoicing.SalesInvoice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CancelMotive")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CfdiUse")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<int>("Folio")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("IssuedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<int?>("MarketplaceAccountId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MercadoLibrePackId")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("OrdersCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("PeriodMonth")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PeriodYear")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProviderId")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("ReceiverName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("ReceiverRfc")
+                        .IsRequired()
+                        .HasMaxLength(13)
+                        .HasColumnType("character varying(13)");
+
+                    b.Property<string>("Serie")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("Tax")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("Total")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<string>("UploadError")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime?>("UploadedToMercadoLibreAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Uuid")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "IssuedAt");
+
+                    b.HasIndex("OrganizationId", "Kind", "PeriodYear", "PeriodMonth");
+
+                    b.ToTable("SalesInvoices");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.MarketInsights.CompetitorListing", b =>
                 {
                     b.Property<long>("Id")
@@ -1373,6 +1555,9 @@ namespace MarketplaceSync.Web.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime?>("BillingCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("BuyerId")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -1380,6 +1565,10 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<string>("BuyerNickname")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<string>("BuyerRfc")
+                        .HasMaxLength(13)
+                        .HasColumnType("character varying(13)");
 
                     b.Property<string>("CurrencyId")
                         .HasMaxLength(20)
@@ -1431,6 +1620,9 @@ namespace MarketplaceSync.Web.Migrations
 
                     b.Property<decimal?>("RealProfitMxn")
                         .HasColumnType("numeric");
+
+                    b.Property<int?>("SalesInvoiceId")
+                        .HasColumnType("integer");
 
                     b.Property<decimal?>("SellerShippingCostMxn")
                         .HasColumnType("numeric");
@@ -1857,6 +2049,10 @@ namespace MarketplaceSync.Web.Migrations
 
                     b.Property<int?>("PhotoWidth")
                         .HasColumnType("integer");
+
+                    b.Property<string>("SatProductCode")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
 
                     b.Property<string>("SourceAvailabilityText")
                         .HasMaxLength(100)

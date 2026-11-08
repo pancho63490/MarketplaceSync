@@ -1,0 +1,134 @@
+@model MarketplaceSync.Web.Controllers.InvoicesController.InvoicesIndexViewModel
+@using System.Globalization
+@using MarketplaceSync.Web.Models.Invoicing
+@{
+    ViewData["Title"] = "Facturas";
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    string Mxn(decimal v) => v.ToString("C2", mx);
+    var current = new DateOnly(Model.Year, Model.Month, 1);
+    var prev = current.AddMonths(-1);
+    var next = current.AddMonths(1);
+    var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-7));
+    var isCurrentMonth = today.Year == Model.Year && today.Month == Model.Month;
+    var monthName = current.ToString("MMMM yyyy", mx);
+    var issued = Model.Invoices.Where(i => i.Status == InvoiceStatus.Issued).ToList();
+    var g = Model.Global;
+    var ready = Model.Missing.Count == 0;
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Facturas</h1>
+        <p>Facturas CFDI de tus ventas: la de cada comprador que te la pide y la global del mes con el resto.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <nav class="fin-month" aria-label="Mes">
+            <a class="icon-btn" asp-action="Index" asp-route-year="@prev.Year" asp-route-month="@prev.Month" aria-label="Mes anterior">‹</a>
+            <strong>@char.ToUpper(monthName[0])@monthName[1..]</strong>
+            @if (!isCurrentMonth) { <a class="icon-btn" asp-action="Index" asp-route-year="@next.Year" asp-route-month="@next.Month" aria-label="Mes siguiente">›</a> }
+        </nav>
+        <a asp-action="Settings" class="btn btn-outline-secondary btn-sm">@Html.Icon("settings") Datos para facturar</a>
+    </div>
+</header>
+
+@if (!ready)
+{
+    <div class="inv-banner mb-3">@Html.Icon("info") <span>Para facturar falta: <b>@string.Join(", ", Model.Missing)</b>. <a asp-action="Settings">Completar</a></span></div>
+}
+else if (Model.Sandbox)
+{
+    <div class="inv-banner mb-3">@Html.Icon("triangle-alert") <span>Modo de pruebas: las facturas no valen ante el SAT.</span></div>
+}
+
+<dl class="stats stagger">
+    <div class="stat"><dt>Facturas del mes</dt><dd>@issued.Count <small>@Mxn(issued.Sum(i => i.Total))</small></dd></div>
+    <div class="stat @(Model.PendingRequests > 0 ? "is-warn" : "")"><dt>Te pidieron factura</dt><dd>@Model.PendingRequests <small>sin facturar (30 días)</small></dd></div>
+    <div class="stat"><dt>Ventas sin factura</dt><dd>@g.Orders.Count <small>@Mxn(g.Total)</small></dd></div>
+    <div class="stat @(g.Existing is not null ? "is-ok" : "")"><dt>Global de @current.ToString("MMMM", mx)</dt><dd>@(g.Existing is { } e ? $"{e.Serie}{e.Folio}" : "Pendiente")</dd></div>
+</dl>
+
+<section class="panel mt-3" aria-labelledby="inv-global">
+    <div class="panel-head">
+        <h2 id="inv-global">Factura global de @monthName</h2>
+        <p class="mb-0">Al público en general (XAXX010101000), con las ventas del mes que no tienen factura propia. Se emite al cerrar el mes.</p>
+    </div>
+    <div class="panel-body inv-global">
+        @if (g.Existing is { } existing)
+        {
+            <p class="mb-2"><span class="pill pill-ok">Emitida</span> <b>@existing.Serie@existing.Folio</b> · @existing.OrdersCount ventas · @Mxn(existing.Total) · @existing.IssuedAt.AddHours(-7).ToString("d MMM", mx)</p>
+        }
+        @if (g.Orders.Count == 0 && g.WithBuyerRfc.Count == 0)
+        {
+            <p class="text-muted mb-0">@(g.Existing is null ? "No hay ventas sin factura en este mes." : "Todas las ventas del mes tienen factura.")</p>
+        }
+        else
+        {
+            <p class="mb-2"><b>@g.Orders.Count @(g.Orders.Count == 1 ? "venta" : "ventas")</b> sin factura por <b>@Mxn(g.Total)</b> (IVA incluido).</p>
+            @if (g.WithBuyerRfc.Count > 0)
+            {
+                <p class="small mb-2">@Html.Icon("triangle-alert") <b>@g.WithBuyerRfc.Count</b> @(g.WithBuyerRfc.Count == 1 ? "comprador te dio RFC" : "compradores te dieron RFC") y no @(g.WithBuyerRfc.Count == 1 ? "tiene" : "tienen") factura: factúralas aparte antes de la global.
+                    @foreach (var o in g.WithBuyerRfc.Take(5)) { <a asp-controller="Orders" asp-action="Details" asp-route-id="@o.Id" asp-fragment="factura" class="me-1">#@o.ExternalOrderId</a> }
+                </p>
+            }
+            @if (isCurrentMonth)
+            {
+                <p class="small text-muted mb-0">El mes no ha terminado: la global se emite a partir del día 1. Te aviso por Telegram.</p>
+            }
+            else if (g.Orders.Count > 0)
+            {
+                <form asp-action="IssueGlobal" method="post" data-busy="Timbrando…" onsubmit="return confirm('¿Emitir la factura global de @monthName con @g.Orders.Count ventas por @Mxn(g.Total)?')">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="year" value="@Model.Year" />
+                    <input type="hidden" name="month" value="@Model.Month" />
+                    <button type="submit" class="btn btn-primary btn-sm" disabled="@(!ready)">@Html.Icon("receipt") Emitir factura global</button>
+                </form>
+            }
+        }
+    </div>
+</section>
+
+<section class="panel mt-3" aria-labelledby="inv-list">
+    <div class="panel-head"><h2 id="inv-list">Facturas emitidas</h2></div>
+    @if (Model.Invoices.Count == 0)
+    {
+        <div class="panel-body"><p class="text-muted mb-0">Sin facturas en @monthName. Para facturar una venta: Pedidos → la venta → Factura.</p></div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="data-table promo-table">
+                <thead><tr><th>Folio</th><th>Para</th><th>Fecha</th><th class="num">Total</th><th>Estado</th><th aria-label="Acciones"></th></tr></thead>
+                <tbody>
+                    @foreach (var i in Model.Invoices)
+                    {
+                        <tr>
+                            <td class="promo-title"><b>@i.Serie@i.Folio</b>@if (i.Kind == InvoiceKinds.Global) { <span class="pill ms-1">Global</span> }<span class="sub">@i.Uuid</span></td>
+                            <td data-label="Para">@i.ReceiverName<span class="sub">@i.ReceiverRfc · @i.OrdersCount @(i.OrdersCount == 1 ? "venta" : "ventas")</span></td>
+                            <td data-label="Fecha" class="text-nowrap">@i.IssuedAt.AddHours(-7).ToString("d MMM HH:mm", mx)</td>
+                            <td data-label="Total" class="num"><b>@Mxn(i.Total)</b><span class="sub">IVA @Mxn(i.Tax)</span></td>
+                            <td data-label="Estado">
+                                @if (i.Status == InvoiceStatus.Cancelled) { <span class="pill pill-bad">Cancelada</span> }
+                                else if (i.Kind == InvoiceKinds.Global) { <span class="pill pill-ok">Vigente</span> }
+                                else if (i.UploadedToMercadoLibreAt is not null) { <span class="pill pill-ok">En Mercado Libre</span> }
+                                else { <span class="pill pill-warn" title="@i.UploadError">Sin subir</span> }
+                            </td>
+                            <td class="promo-action text-nowrap">
+                                <a asp-action="Download" asp-route-id="@i.Id" asp-route-format="pdf" class="btn btn-link btn-sm p-0 me-2">PDF</a>
+                                <a asp-action="Download" asp-route-id="@i.Id" asp-route-format="xml" class="btn btn-link btn-sm p-0 me-2">XML</a>
+                                @if (i.Status == InvoiceStatus.Issued)
+                                {
+                                    <form asp-action="Cancel" method="post" class="d-inline" data-busy="Cancelando…" onsubmit="return confirm('¿Cancelar @i.Serie@i.Folio ante el SAT? Las ventas quedan sin factura.')">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@i.Id" />
+                                        <input type="hidden" name="motive" value="02" />
+                                        <button type="submit" class="btn btn-link btn-sm p-0 text-bad">Cancelar</button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

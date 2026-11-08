@@ -1,0 +1,177 @@
+@model MarketplaceSync.Web.Models.Invoicing.InvoicingSettings
+@using MarketplaceSync.Web.Models.Invoicing
+@{
+    ViewData["Title"] = "Datos para facturar";
+    var configured = (bool)(ViewBag.Configured ?? false);
+    var sandbox = (bool)(ViewBag.Sandbox ?? true);
+    var missing = (List<string>)(ViewBag.Missing ?? new List<string>());
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Datos para facturar</h1>
+        <p>Tus datos fiscales y tu Certificado de Sello Digital (CSD) para timbrar facturas CFDI 4.0 con Facturama.</p>
+    </div>
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">@Html.Icon("receipt") Ver facturas</a>
+</header>
+
+@if (missing.Count == 0)
+{
+    <div class="inv-banner is-ok mb-3">@Html.Icon("circle-check") <span>Todo listo para facturar@(sandbox ? " en modo de pruebas (las facturas no valen ante el SAT)" : "").</span></div>
+}
+else
+{
+    <div class="inv-banner mb-3">@Html.Icon("info") <span>Para facturar falta: <b>@string.Join(", ", missing)</b>.</span></div>
+}
+
+<div class="inv-grid">
+    <section class="panel" aria-labelledby="inv-data">
+        <div class="panel-head">
+            <h2 id="inv-data">1. Tus datos fiscales</h2>
+            <p class="mb-0">Cópialos de tu Constancia de Situación Fiscal (la descargas en sat.gob.mx).</p>
+        </div>
+        <form asp-action="Settings" method="post" class="panel-body inv-form">
+            @Html.AntiForgeryToken()
+            <div class="row-2">
+                <div>
+                    <label class="form-label" for="iRfc">RFC</label>
+                    <input id="iRfc" name="issuerRfc" class="form-control text-uppercase" value="@Model.IssuerRfc" maxlength="13" autocomplete="off" placeholder="ROFF900101AB1" />
+                </div>
+                <div>
+                    <label class="form-label" for="iZip">Código postal fiscal</label>
+                    <input id="iZip" name="expeditionZip" class="form-control" value="@Model.ExpeditionZip" inputmode="numeric" maxlength="5" placeholder="32000" />
+                </div>
+            </div>
+            <div>
+                <label class="form-label" for="iName">Nombre o razón social</label>
+                <input id="iName" name="issuerName" class="form-control text-uppercase" value="@Model.IssuerName" maxlength="300" placeholder="FRANCISCO RODRIGUEZ …" />
+                <div class="form-text">Exactamente como en la Constancia, sin «S.A. de C.V.».</div>
+            </div>
+            <div>
+                <label class="form-label" for="iReg">Régimen fiscal</label>
+                <select id="iReg" name="fiscalRegime" class="form-select">
+                    <option value="">Escoge…</option>
+                    @foreach (var r in SatCatalogs.FiscalRegimes.Where(r => r.Code is not ("605" or "616")))
+                    {
+                        <option value="@r.Code" selected="@(Model.FiscalRegime == r.Code)">@r.Code · @r.Label</option>
+                    }
+                </select>
+                <div class="form-text">Si vendes por Mercado Libre como persona física suele ser 625 (Plataformas Tecnológicas) o 626 (RESICO). Confírmalo con tu contador.</div>
+            </div>
+            <div class="row-2">
+                <div>
+                    <label class="form-label" for="iCode">Clave SAT de tus productos</label>
+                    <input id="iCode" name="defaultProductCode" class="form-control" value="@Model.DefaultProductCode" inputmode="numeric" maxlength="8" placeholder="8 dígitos" />
+                    <div class="form-text">Pídela a tu contador o búscala en el catálogo del SAT (c_ClaveProdServ). Se usa cuando el producto no tiene la suya; puedes cambiarla al facturar.</div>
+                </div>
+                <div>
+                    <label class="form-label" for="iIva">IVA en tus precios</label>
+                    <select id="iIva" name="ivaRate" class="form-select">
+                        <option value="0.16" selected="@(Model.IvaRate != 0.08m)">16%</option>
+                        <option value="0.08" selected="@(Model.IvaRate == 0.08m)">8% (estímulo región fronteriza)</option>
+                    </select>
+                    <div class="form-text">Los precios de Mercado Libre ya incluyen IVA; la factura lo separa.</div>
+                </div>
+            </div>
+            <div class="row-3">
+                <div>
+                    <label class="form-label" for="iSerie">Serie</label>
+                    <input id="iSerie" name="serie" class="form-control text-uppercase" value="@Model.Serie" maxlength="10" />
+                </div>
+                <div>
+                    <label class="form-label" for="iFolio">Siguiente folio</label>
+                    <input id="iFolio" name="nextFolio" type="number" min="@Model.NextFolio" class="form-control" value="@Model.NextFolio" title="Solo puede subir (por ejemplo, para seguir la numeración de otro sistema)" />
+                </div>
+                <div>
+                    <label class="form-label" for="iGSerie">Serie de la global</label>
+                    <input id="iGSerie" name="globalSerie" class="form-control text-uppercase" value="@Model.GlobalSerie" maxlength="10" />
+                </div>
+            </div>
+            <div>
+                <label class="form-label" for="iPay">Forma de pago</label>
+                <select id="iPay" name="paymentForm" class="form-select">
+                    @foreach (var p in SatCatalogs.PaymentForms)
+                    {
+                        <option value="@p.Code" selected="@(Model.PaymentForm == p.Code)">@p.Label</option>
+                    }
+                </select>
+            </div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="iUp" name="uploadToMercadoLibre" value="true" checked="@Model.UploadToMercadoLibre" />
+                <input type="hidden" name="uploadToMercadoLibre" value="false" />
+                <label class="form-check-label" for="iUp">Subir la factura (XML y PDF) a la compra en Mercado Libre</label>
+            </div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="iTg" name="notifyTelegram" value="true" checked="@Model.NotifyTelegram" />
+                <input type="hidden" name="notifyTelegram" value="false" />
+                <label class="form-check-label" for="iTg">Avisarme por Telegram cuando me pidan factura y recordarme la global</label>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm justify-self-start">Guardar</button>
+        </form>
+    </section>
+
+    <div class="inv-side">
+        <section class="panel" aria-labelledby="inv-csd">
+            <div class="panel-head">
+                <h2 id="inv-csd">2. Tu sello digital (CSD)</h2>
+                <p class="mb-0">
+                    @if (Model.CsdUploadedAt is { } at)
+                    {
+                        <span class="pill pill-ok">Subido</span> <text>el @at.AddHours(-7).ToString("d MMM yyyy")</text>
+                    }
+                    else
+                    {
+                        <text>No es la e.firma: es el certificado para facturar. Se tramita gratis en el SAT con tu e.firma (programa Certisat Web).</text>
+                    }
+                </p>
+            </div>
+            <form asp-action="UploadCsd" method="post" enctype="multipart/form-data" class="panel-body inv-form" data-busy="Mandando a Facturama…">
+                @Html.AntiForgeryToken()
+                <div>
+                    <label class="form-label" for="cCer">Certificado (.cer)</label>
+                    <input id="cCer" name="certificate" type="file" accept=".cer" class="form-control" />
+                </div>
+                <div>
+                    <label class="form-label" for="cKey">Llave privada (.key)</label>
+                    <input id="cKey" name="privateKey" type="file" accept=".key" class="form-control" />
+                </div>
+                <div>
+                    <label class="form-label" for="cPass">Contraseña de la llave</label>
+                    <input id="cPass" name="password" type="password" class="form-control" autocomplete="new-password" />
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm justify-self-start" disabled="@(string.IsNullOrWhiteSpace(Model.IssuerRfc) || !configured)">@Html.Icon("upload") @(Model.CsdUploadedAt is null ? "Subir CSD" : "Reemplazar CSD")</button>
+                <p class="small text-muted mb-0">Los archivos van directo a Facturama, que los guarda para timbrar. La app no se queda con tu llave ni tu contraseña.</p>
+                @if (!string.IsNullOrWhiteSpace(Model.CsdStatus) && Model.CsdUploadedAt is null)
+                {
+                    <p class="small text-bad mb-0">Último intento: @Model.CsdStatus</p>
+                }
+            </form>
+        </section>
+
+        <section class="panel" aria-labelledby="inv-pac">
+            <div class="panel-head"><h2 id="inv-pac">3. Cuenta de Facturama</h2></div>
+            <div class="panel-body small">
+                @if (configured)
+                {
+                    <p class="mb-2"><span class="pill @(sandbox ? "pill-warn" : "pill-ok")">@(sandbox ? "Modo de pruebas" : "Producción")</span></p>
+                    @if (sandbox)
+                    {
+                        <p class="mb-0">Las facturas de prueba no valen ante el SAT. Para facturar de verdad pon <code>Facturama__Sandbox</code> = <code>false</code> en Render (con tu cuenta de producción y folios).</p>
+                    }
+                    else
+                    {
+                        <p class="mb-0">Cada factura usa un folio de tu paquete de Facturama.</p>
+                    }
+                }
+                else
+                {
+                    <ol class="mb-0 ps-3">
+                        <li>Crea tu cuenta de API Multiemisor en facturama.mx (para probar: dev.facturama.mx, gratis).</li>
+                        <li>En Render agrega <code>Facturama__User</code> y <code>Facturama__Password</code> con tu usuario y contraseña de Facturama.</li>
+                        <li>Para facturas reales agrega también <code>Facturama__Sandbox</code> = <code>false</code>.</li>
+                    </ol>
+                }
+            </div>
+        </section>
+    </div>
+</div>

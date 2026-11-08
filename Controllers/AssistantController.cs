@@ -104,6 +104,7 @@ public sealed class AssistantController : Controller
             - Métricas y KPIs (ventas, ganancia estimada, ticket promedio, comisiones, visitas, conversión, cancelaciones, reputación con límites de verde y MercadoLíder, tiempo de respuesta a preguntas, lo más vendido y publicaciones con visitas sin ventas): /Metrics  (periodo: ?days=7, 30 o 90)
             - Editar una publicación sin entrar a Mercado Libre (título, precio, stock, fotos, descripción, ficha técnica, garantía, tipo, pausar/activar/finalizar/republicar): Publicados → Editar (/Publications/Edit/NÚMERO); cambiar precio o pausar varias a la vez: selecciónalas en Publicados
             - Promociones: campañas de Mercado Libre a las que te invitan con la ganancia de cada publicación a ese precio (entrar con las que ganan), y descuentos activos con botón para quitarlos: /Promotions. Para poner un descuento propio (5% a 80%, hasta 31 días): Publicados → Editar → Promoción. Gastos del negocio y Excel para el contador: /Finance
+            - Facturas CFDI: lista del mes y factura global al público en general: /Invoices; datos fiscales y CSD: /Invoices/Settings; facturar una venta: Pedidos → la venta → Factura (/Orders/Details/NÚMERO#factura)
             - Importar producto con IA: /Products/CreateFromUrl
             - Inventario (incluye caducidades por lote): /Inventory
             - Pedidos: /Orders

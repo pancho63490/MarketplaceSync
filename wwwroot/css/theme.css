@@ -2197,3 +2197,21 @@ body {
   .data-table.promo-table tbody td.num { text-align: left; }
   .promo-table tr.promo-loss { background: color-mix(in srgb, var(--bad) 4%, transparent); }
 }
+
+/* ── Facturas ── */
+.inv-banner { display: flex; align-items: center; gap: .6rem; padding: .75rem 1rem; border-radius: 12px; background: var(--warn-soft, #fff7e6); color: var(--ink); font-size: var(--fs-sm); }
+.inv-banner.is-ok { background: var(--ok-soft); }
+.inv-banner .icon { flex: none; }
+.inv-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 1rem; align-items: start; }
+.inv-side { display: grid; gap: 1rem; }
+.inv-form { display: grid; gap: .85rem; }
+.inv-form .row-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .75rem; }
+.inv-form .row-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+.inv-panel { display: grid; gap: .75rem; }
+.inv-panel details summary { cursor: pointer; color: var(--signal); font-weight: 500; }
+.inv-lines { display: grid; gap: .5rem; padding: .5rem 0; border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); }
+.inv-line { display: flex; justify-content: space-between; align-items: center; gap: .5rem; font-size: var(--fs-sm); }
+.inv-code { width: 7rem; flex: none; font-variant-numeric: var(--num); }
+.inv-global { display: grid; gap: .25rem; }
+@media (max-width: 900px) { .inv-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { .inv-form .row-3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }

@@ -200,9 +200,28 @@ public sealed class OrdersController : Controller
             .OrderByDescending(c => c.DateCreated)
             .ToListAsync(cancellationToken);
 
+        MarketplaceSync.Services.Invoicing.InvoiceDraft? invoiceDraft = null;
+        var invoiceMissing = new List<string>();
+        if (order.Status == "paid")
+        {
+            var invoicing = HttpContext.RequestServices.GetRequiredService<MarketplaceSync.Services.Invoicing.InvoicingService>();
+            try
+            {
+                invoiceDraft = await invoicing.DraftAsync(organizationId, id, readBuyer: true, cancellationToken);
+                if (invoiceDraft is not null)
+                    invoiceMissing = invoicing.MissingSetup(invoiceDraft.Settings);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogInformation(exception, "Invoice draft unavailable for order {Order}.", id);
+            }
+        }
+
         return View(new MarketplaceSync.Web.ViewModels.Orders.OrderDetailsViewModel
         {
             Order = order,
+            Invoice = invoiceDraft,
+            InvoiceMissing = invoiceMissing,
             Messages = messages,
             MessagesError = messagesError,
             Claims = claims,
