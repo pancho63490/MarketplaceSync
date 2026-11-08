@@ -145,6 +145,7 @@ public sealed class MetricsService
                 o.DateCreated,
                 o.Status,
                 o.TotalAmount,
+                o.RealProfitMxn,
                 Items = o.Items.Select(i => new { i.ExternalItemId, i.Title, i.Quantity, i.UnitPrice, i.SaleFee })
             })
             .ToListAsync(cancellationToken);
@@ -187,11 +188,20 @@ public sealed class MetricsService
             {
                 count++;
                 sales += (decimal)o.TotalAmount;
+                // Venta ya calculada con el envío real: se usa tal cual.
+                var real = (decimal?)o.RealProfitMxn;
+                if (real.HasValue)
+                    profit += real.Value;
                 foreach (var i in o.Items)
                 {
                     units += (int)i.Quantity;
                     var fee = (decimal?)i.SaleFee;
                     if (fee.HasValue) fees += fee.Value * (int)i.Quantity;
+                    if (real.HasValue)
+                    {
+                        unitsWithCost += (int)i.Quantity;
+                        continue;
+                    }
                     var landed = landedCache.GetValueOrDefault((string)i.ExternalItemId);
                     if (landed is { } l && (decimal)i.UnitPrice > 0)
                     {

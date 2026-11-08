@@ -92,7 +92,31 @@ namespace MarketplaceSync.Services.Jobs
         public async Task SyncMercadoLibreOrders()
         {
             await _orderSyncService.SyncAllAccountsAsync();
+            await ComputeOrderProfitsAsync();
             await _telegram.SweepAllAsync();
+        }
+
+        /// <summary>Ganancia real de las ventas nuevas o recientes de cada organización.</summary>
+        private async Task ComputeOrderProfitsAsync()
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<MarketplaceSync.Web.Data.AppDbContext>();
+            var orgs = await context.MarketplaceAccounts.AsNoTracking()
+                .Select(a => a.OrganizationId)
+                .Distinct()
+                .ToListAsync();
+            foreach (var org in orgs)
+            {
+                try
+                {
+                    using var orgScope = _serviceProvider.CreateScope();
+                    await orgScope.ServiceProvider.GetRequiredService<MarketplaceSync.Services.Automation.OrderProfitService>().ComputePendingAsync(org);
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogWarning(exception, "Order profit failed for {Org}.", org);
+                }
+            }
         }
 
         [DisableConcurrentExecution(timeoutInSeconds: 1800)]
@@ -163,6 +187,15 @@ namespace MarketplaceSync.Services.Jobs
             catch (Exception exception)
             {
                 _logger.LogInformation(exception, "Thank-you after order sync failed for {Org}.", organizationId);
+            }
+            try
+            {
+                // Ganancia real de las ventas nuevas (envío que cobró Mercado Libre, comisión y retención).
+                await _serviceProvider.GetRequiredService<MarketplaceSync.Services.Automation.OrderProfitService>().ComputePendingAsync(organizationId);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(exception, "Order profit failed for {Org}.", organizationId);
             }
             await _telegram.SweepAsync(organizationId);
         }

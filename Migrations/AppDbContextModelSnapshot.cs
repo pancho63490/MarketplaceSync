@@ -1326,8 +1326,23 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<decimal>("PaidAmount")
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<decimal?>("ProductCostMxn")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("ProfitComputedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("RealProfitMxn")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("SellerShippingCostMxn")
+                        .HasColumnType("numeric");
+
                     b.Property<DateTime?>("ShippingCheckedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("ShippingCostIsReal")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime?>("ShippingDeadline")
                         .HasColumnType("timestamp with time zone");
@@ -1359,6 +1374,9 @@ namespace MarketplaceSync.Web.Migrations
 
                     b.Property<DateTime>("SyncedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("TaxWithheldMxn")
+                        .HasColumnType("numeric");
 
                     b.Property<DateTime?>("ThankYouSentAt")
                         .HasColumnType("timestamp with time zone");

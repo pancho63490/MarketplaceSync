@@ -1,6 +1,14 @@
 @model MarketplaceSync.Web.ViewModels.Orders.OrdersIndexViewModel
 
 @functions {
+    static string ProfitTitle(MarketplaceSync.Web.Models.Orders.SalesOrder o)
+    {
+        var mx = System.Globalization.CultureInfo.GetCultureInfo("es-MX");
+        var fees = o.Items.Sum(i => (i.SaleFee ?? 0) * i.Quantity);
+        string M(decimal? v) => (v ?? 0).ToString("C0", mx);
+        return $"Cobrado {M(o.TotalAmount)} − comisión {M(fees)} − envío {M(o.SellerShippingCostMxn)}{(o.ShippingCostIsReal == true ? " (Mercado Libre)" : " (estimado)")} − retención {M(o.TaxWithheldMxn)} − costo {M(o.ProductCostMxn)}";
+    }
+
     private static string StatusLabel(string status) => status.ToLowerInvariant() switch
     {
         "paid" => "Pagado",
@@ -200,7 +208,12 @@
                                 }
                                 @if (order.Items.Count > 2) { <span class="sub">+@(order.Items.Count - 2) más</span> }
                             </span>
-                            <span class="order-card-total">@order.TotalAmount.ToString("C0", mx)</span>
+                            <span class="order-card-total">@order.TotalAmount.ToString("C0", mx)
+                                @if (order.RealProfitMxn is { } cardProfit)
+                                {
+                                    <span class="order-profit @(cardProfit < 0 ? "is-loss" : "")" title="@ProfitTitle(order)">@(cardProfit < 0 ? "pierdes" : "ganas") @Math.Abs(cardProfit).ToString("C0", mx)</span>
+                                }
+                            </span>
                         </span>
                         <span class="order-card-pills">
                             @if (ship is { } sh) { <span class="pill @sh.Tone">@sh.Label</span> }
@@ -246,7 +259,16 @@
                             @if (Deadline(order) is { } dl) { <span class="sub">@dl</span> }
                             @if (order.PackedAt is not null) { <span class="pill pill-ok d-table mt-1">Empacado ✓</span> }
                         </td>
-                        <td class="num fw-bold">@order.TotalAmount.ToString("C2", mx)@if (order.CurrencyId != "MXN") { <span class="sub">@order.CurrencyId</span> }</td>
+                        <td class="num fw-bold">@order.TotalAmount.ToString("C2", mx)@if (order.CurrencyId != "MXN") { <span class="sub">@order.CurrencyId</span> }
+                            @if (order.RealProfitMxn is { } rowProfit)
+                            {
+                                <span class="order-profit d-block @(rowProfit < 0 ? "is-loss" : "")" title="@ProfitTitle(order)">@(rowProfit < 0 ? "pierdes" : "ganas") @Math.Abs(rowProfit).ToString("C0", mx)</span>
+                            }
+                            else if (order.ProfitComputedAt is not null && order.Status == "paid")
+                            {
+                                <span class="sub" title="Captura el costo del producto para ver la ganancia">sin costo</span>
+                            }
+                        </td>
                         <td class="text-nowrap">@local.ToString("dd/MM/yyyy")<span class="sub">@local.ToString("HH:mm")</span></td>
                     </tr>
                 }

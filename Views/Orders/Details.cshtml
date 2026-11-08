@@ -159,6 +159,16 @@
                         <div><dt>Comisión de ML</dt><dd>@o.Items.Sum(i => (i.SaleFee ?? 0) * i.Quantity).ToString("C0", mx)</dd></div>
                     }
                     @if (!string.IsNullOrWhiteSpace(o.ExternalPackId)) { <div><dt>Carrito</dt><dd>@o.ExternalPackId</dd></div> }
+                    @if (o.ProfitComputedAt is not null)
+                    {
+                        <div><dt>Envío a tu cargo</dt><dd>@((o.SellerShippingCostMxn ?? 0).ToString("C0", mx))<span class="sub">@(o.ShippingCostIsReal == true ? " según Mercado Libre" : " estimado")</span></dd></div>
+                        <div><dt>Retención ISR + IVA</dt><dd>@((o.TaxWithheldMxn ?? 0).ToString("C0", mx))<span class="sub"> calculada (Costos de cruce)</span></dd></div>
+                        <div><dt>Costo del producto</dt><dd>@(o.ProductCostMxn is { } pc ? pc.ToString("C0", mx) : "sin costo capturado")</dd></div>
+                        @if (o.RealProfitMxn is { } profit)
+                        {
+                            <div><dt>@(profit < 0 ? "Pérdida" : "Ganancia")</dt><dd class="fw-bold @(profit < 0 ? "text-danger" : "text-success")">@Math.Abs(profit).ToString("C0", mx)</dd></div>
+                        }
+                    }
                 </dl>
             </div>
         </section>

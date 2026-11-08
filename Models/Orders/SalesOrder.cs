@@ -80,6 +80,25 @@ public class SalesOrder
         ShippingStatus is "pending" or "handling" or "ready_to_ship" &&
         ShippingSubstatus is not ("in_hub" or "in_packing_list" or "picked_up" or "dropped_off" or "in_warehouse");
 
+    // ── Ganancia de la venta (OrderProfitService) ──
+
+    /// <summary>Envío que pagó el vendedor según Mercado Libre (GET /shipments/{id}/costs, senders[].cost).</summary>
+    public decimal? SellerShippingCostMxn { get; set; }
+
+    /// <summary>Retención de ISR + IVA calculada con la tasa de Costos de cruce (con o sin RFC).</summary>
+    public decimal? TaxWithheldMxn { get; set; }
+
+    /// <summary>Costo puesto en Juárez de lo vendido (con el tipo de cambio del día del cálculo).</summary>
+    public decimal? ProductCostMxn { get; set; }
+
+    /// <summary>Cobrado − comisión − envío − retención − costo. Null si falta el costo de algún producto.</summary>
+    public decimal? RealProfitMxn { get; set; }
+
+    /// <summary>true si el envío salió de Mercado Libre; false si se usó el estimado de Costos de cruce.</summary>
+    public bool? ShippingCostIsReal { get; set; }
+
+    public DateTime? ProfitComputedAt { get; set; }
+
     public DateTime DateCreated { get; set; }
     public DateTime? DateClosed { get; set; }
     public DateTime LastUpdated { get; set; }

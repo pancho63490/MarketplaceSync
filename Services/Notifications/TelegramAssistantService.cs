@@ -208,7 +208,7 @@ public sealed class TelegramAssistantService
 
         var orders = await _context.SalesOrders.AsNoTracking()
             .Where(o => o.OrganizationId == org && o.Status == "paid" && o.DateCreated >= from && o.DateCreated < to)
-            .Select(o => new { o.TotalAmount, Items = o.Items.Select(i => new { i.Title, i.Quantity, i.SaleFee }) })
+            .Select(o => new { o.TotalAmount, o.RealProfitMxn, Items = o.Items.Select(i => new { i.Title, i.Quantity, i.SaleFee }) })
             .ToListAsync(cancellationToken);
         var top = orders.SelectMany(o => o.Items)
             .GroupBy(i => i.Title ?? "(sin título)")
@@ -221,6 +221,9 @@ public sealed class TelegramAssistantService
             total = Money(orders.Sum(o => o.TotalAmount)),
             piezas = orders.Sum(o => o.Items.Sum(i => i.Quantity)),
             comisiones_ml = Money(orders.Sum(o => o.Items.Sum(i => (i.SaleFee ?? 0) * i.Quantity))),
+            ganancia_real = orders.Any(o => o.RealProfitMxn.HasValue) ? Money(orders.Sum(o => o.RealProfitMxn ?? 0)) : "sin calcular aún",
+            ventas_con_ganancia_calculada = orders.Count(o => o.RealProfitMxn.HasValue),
+            ventas_con_perdida = orders.Count(o => o.RealProfitMxn < 0),
             mas_vendido = top
         });
     }

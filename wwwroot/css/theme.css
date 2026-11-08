@@ -2128,3 +2128,7 @@ body {
 .au-tg-grid fieldset { min-width: 0; display: flex; flex-direction: column; gap: .35rem; }
 .au-tg-grid legend { font-size: .95rem; margin-bottom: .25rem; }
 .au-tg-grid > .btn { grid-column: 1 / -1; }
+
+.order-profit { font-size: .75rem; font-weight: 600; color: var(--ok, #15803d); white-space: nowrap; }
+.order-profit.is-loss { color: var(--bad, #b91c1c); }
+.order-card-total .order-profit { display: block; text-align: right; }

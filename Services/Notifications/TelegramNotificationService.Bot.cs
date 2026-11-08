@@ -59,6 +59,7 @@ public sealed partial class TelegramNotificationService
             {
                 o.DateCreated,
                 o.TotalAmount,
+                o.RealProfitMxn,
                 Items = o.Items.Select(i => new { i.Title, i.ExternalItemId, i.Quantity, i.UnitPrice, i.SaleFee })
             })
             .ToListAsync(cancellationToken);
@@ -86,7 +87,19 @@ public sealed partial class TelegramNotificationService
 
         // Comisiones de Mercado Libre del mes (cuando vienen en el pedido).
         var monthUtc = Utc(monthStart);
-        var monthItems = orders.Where(o => o.DateCreated >= monthUtc).SelectMany(o => o.Items).ToList();
+        var monthOrders = orders.Where(o => o.DateCreated >= monthUtc).ToList();
+        var withProfit = monthOrders.Where(o => o.RealProfitMxn.HasValue).ToList();
+        if (withProfit.Count > 0)
+        {
+            var monthProfit = withProfit.Sum(o => o.RealProfitMxn!.Value);
+            html.Append($"\n{(monthProfit < 0 ? "🔴 Pérdida" : "🟢 Ganancia")} del mes: <b>{E(Math.Abs(monthProfit).ToString("C0", Mx))}</b>")
+                .Append(withProfit.Count < monthOrders.Count ? $" ({withProfit.Count} de {monthOrders.Count} ventas con costo)" : "")
+                .Append("\n<i>Con el envío que cobró Mercado Libre, comisión y retención.</i>\n");
+            var losses = withProfit.Count(o => o.RealProfitMxn < 0);
+            if (losses > 0)
+                html.Append($"⚠️ {losses} {(losses == 1 ? "venta dejó" : "ventas dejaron")} pérdida este mes.\n");
+        }
+        var monthItems = monthOrders.SelectMany(o => o.Items).ToList();
         var fees = monthItems.Where(i => i.SaleFee.HasValue).Sum(i => i.SaleFee!.Value * i.Quantity);
         if (fees > 0)
             html.Append("Comisiones de ML este mes: ").Append(E(fees.ToString("C0", Mx))).Append('\n');
