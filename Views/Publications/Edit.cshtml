@@ -250,6 +250,90 @@
                 </div>
             }
         </form>
+
+        @if (!item.IsClosed)
+        {
+            var compat = Model.Compatibilities;
+            var validRows = compat.Where(r => r.Vehicles is > 0).ToList();
+            <section class="panel" aria-labelledby="pe-compat" id="pe-compat-panel">
+                <div class="panel-head">
+                    <h2 id="pe-compat">Compatibilidades con vehículos</h2>
+                    <p class="mb-0">
+                        @if (Model.CompatibilitySentAt is { } sentAt)
+                        {
+                            <text>En Mercado Libre: <b>@(Model.CompatibilityCount ?? 0) versiones</b> · mandadas el @sentAt.AddHours(-7).ToString("d MMM", mx).</text>
+                        }
+                        else
+                        {
+                            <text>Las autopartes con compatibilidades salen en las búsquedas por vehículo y reciben menos preguntas de «¿le queda?».</text>
+                        }
+                    </p>
+                </div>
+                <div class="panel-body">
+                    <form asp-action="CompatSuggest" asp-route-id="@item.PublicationId" method="post" id="compatSuggestForm" data-busy="Pensando…">
+                        @Html.AntiForgeryToken()
+                    </form>
+                    <form asp-action="CompatSave" asp-route-id="@item.PublicationId" method="post" id="compatForm" data-busy="Validando con Mercado Libre…">
+                        @Html.AntiForgeryToken()
+                        <div class="pe-compat" role="table" aria-label="Vehículos compatibles">
+                            <div class="compat-row compat-head" role="row">
+                                <span role="columnheader">Marca</span><span role="columnheader">Modelo</span><span role="columnheader">Desde</span><span role="columnheader">Hasta</span><span></span>
+                            </div>
+                            <div id="compatRows">
+                                @for (var i = 0; i < compat.Count; i++)
+                                {
+                                    var r = compat[i];
+                                    <div class="compat-row" role="row">
+                                        <input name="rows[@i].Brand" value="@r.Brand" class="form-control form-control-sm c-brand" placeholder="Chevrolet" aria-label="Marca" />
+                                        <input name="rows[@i].Model" value="@r.Model" class="form-control form-control-sm c-model" placeholder="Silverado" aria-label="Modelo" />
+                                        <input name="rows[@i].YearFrom" value="@r.YearFrom" type="number" inputmode="numeric" min="1950" max="2100" class="form-control form-control-sm c-from" aria-label="Desde" />
+                                        <input name="rows[@i].YearTo" value="@r.YearTo" type="number" inputmode="numeric" min="1950" max="2100" class="form-control form-control-sm c-to" aria-label="Hasta" />
+                                        <button type="button" class="icon-btn compat-remove c-x" aria-label="Quitar renglón">@Html.Icon("x")</button>
+                                        <input name="rows[@i].Note" value="@r.Note" class="form-control form-control-sm c-note" maxlength="200" placeholder="Nota opcional: motor, lado, tracción…" aria-label="Nota" />
+                                        <span class="c-status">
+                                            @if (r.Vehicles is > 0) { <span class="pill pill-ok" title="Versiones que Mercado Libre tiene para esa marca, modelo y años">✓ @r.Vehicles versiones</span> }
+                                            else if (r.Vehicles == 0) { <span class="pill pill-bad" title="Mercado Libre no tiene ese vehículo escrito así: revisa marca y modelo">✗ No existe así</span> }
+                                            @if (r.Source == "ia") { <span class="pill pill-signal" title="Lo sugirió la IA: revísalo">IA</span> }
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        @if (compat.Count == 0)
+                        {
+                            <p class="text-muted small mb-2" id="compatEmpty">Todavía no hay vehículos. Pide una sugerencia a la IA o agrégalos a mano.</p>
+                        }
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            <button type="submit" form="compatSuggestForm" class="btn btn-outline-primary btn-sm">@Html.Icon("sparkles") Sugerir con IA</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="compatAdd">+ Agregar vehículo</button>
+                            <button type="submit" class="btn btn-outline-secondary btn-sm">Guardar y validar</button>
+                        </div>
+                        <div class="pe-compat-send">
+                            <label class="form-check">
+                                <input type="checkbox" class="form-check-input" name="replace" value="true" @(Model.CompatibilitySentAt is null ? "" : "checked") />
+                                <span class="form-check-label">Reemplazar las que ya tiene en Mercado Libre</span>
+                            </label>
+                            <button type="submit" name="send" value="true" class="btn btn-primary btn-sm" @(validRows.Count == 0 ? "disabled" : "")
+                                    data-confirm="Mandar a Mercado Libre @validRows.Sum(r => r.Vehicles ?? 0) versiones de vehículos compatibles? Revisa que la pieza de verdad les quede.">
+                                @Html.Icon("upload") Mandar a Mercado Libre@(validRows.Count > 0 ? $" ({validRows.Sum(r => r.Vehicles ?? 0)} versiones)" : "")
+                            </button>
+                        </div>
+                        <p class="form-text mb-0">Solo se mandan los renglones con ✓. Una compatibilidad mal puesta hace que al comprador le llegue una pieza que no le queda: revisa lo que sugiere la IA.</p>
+                    </form>
+                    <template id="compatRowTemplate">
+                        <div class="compat-row" role="row">
+                            <input data-name="Brand" class="form-control form-control-sm c-brand" placeholder="Chevrolet" aria-label="Marca" />
+                            <input data-name="Model" class="form-control form-control-sm c-model" placeholder="Silverado" aria-label="Modelo" />
+                            <input data-name="YearFrom" type="number" inputmode="numeric" min="1950" max="2100" class="form-control form-control-sm c-from" aria-label="Desde" />
+                            <input data-name="YearTo" type="number" inputmode="numeric" min="1950" max="2100" class="form-control form-control-sm c-to" aria-label="Hasta" />
+                            <button type="button" class="icon-btn compat-remove c-x" aria-label="Quitar renglón">@Html.Icon("x")</button>
+                            <input data-name="Note" class="form-control form-control-sm c-note" maxlength="200" placeholder="Nota opcional: motor, lado, tracción…" aria-label="Nota" />
+                            <span class="c-status"></span>
+                        </div>
+                    </template>
+                </div>
+            </section>
+        }
     </div>
 
     <aside class="pe-side">
@@ -329,6 +413,45 @@
 </div>
 
 @section Scripts {
+<script>
+    (function () {
+        var body = document.getElementById('compatRows');
+        if (!body) return;
+        function renumber() {
+            body.querySelectorAll('.compat-row').forEach(function (tr, i) {
+                tr.querySelectorAll('input').forEach(function (input) {
+                    var field = input.dataset.name || (input.name.match(/\]\.(\w+)$/) || [])[1];
+                    if (field) { input.dataset.name = field; input.name = 'rows[' + i + '].' + field; }
+                });
+            });
+        }
+        document.getElementById('compatAdd').addEventListener('click', function () {
+            var row = document.getElementById('compatRowTemplate').content.firstElementChild.cloneNode(true);
+            body.appendChild(row);
+            var empty = document.getElementById('compatEmpty'); if (empty) empty.hidden = true;
+            renumber();
+            row.querySelector('input').focus();
+        });
+        body.addEventListener('click', function (e) {
+            var btn = e.target.closest('.compat-remove');
+            if (!btn) return;
+            btn.closest('.compat-row').remove();
+            renumber();
+        });
+        body.addEventListener('change', function (e) {
+            // "Desde" sin "Hasta": mismo año.
+            if (e.target.dataset.name === 'YearFrom') {
+                var to = e.target.closest('.compat-row').querySelector('[data-name="YearTo"]');
+                if (to && !to.value) to.value = e.target.value;
+            }
+        });
+        document.querySelectorAll('#compatForm [data-confirm]').forEach(function (b) {
+            b.addEventListener('click', function (e) { if (!confirm(b.dataset.confirm)) e.preventDefault(); });
+        });
+        renumber();
+    })();
+</script>
+
     <script>
         (function () {
             var form = document.getElementById('editForm');

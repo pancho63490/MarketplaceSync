@@ -46,6 +46,9 @@ public static class BotActionKinds
     public const string Price = "price";
     public const string Pause = "pause";
     public const string Activate = "activate";
+
+    /// <summary>Mandar a Mercado Libre las compatibilidades guardadas en el producto.</summary>
+    public const string Compatibilities = "compat";
 }
 
 public static class BotActionStatus

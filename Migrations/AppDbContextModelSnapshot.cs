@@ -1705,6 +1705,15 @@ namespace MarketplaceSync.Web.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<int?>("CompatibilityCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CompatibilityJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("CompatibilitySentAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 

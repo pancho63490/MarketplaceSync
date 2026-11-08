@@ -149,8 +149,34 @@ public sealed partial class TelegramNotificationService
     // Lo diario: precios, etiquetas y compra semanal
     // ─────────────────────────────────────────────────────────────
 
+    /// <summary>Propuestas que hizo el piloto (compatibilidades) y todavía no se mandaron a Telegram.</summary>
+    private async Task SendPendingProposalsAsync(string token, NotificationSettings settings, CancellationToken cancellationToken)
+    {
+        var since = DateTime.UtcNow.AddDays(-2);
+        var pending = await _context.BotActions
+            .Where(a => a.OrganizationId == settings.OrganizationId && a.Source == "autopilot" &&
+                        a.Status == BotActionStatus.Pending && a.TelegramMessageId == null && a.CreatedAt >= since)
+            .OrderBy(a => a.Id)
+            .Take(5)
+            .ToListAsync(cancellationToken);
+        foreach (var action in pending)
+        {
+            var buttons = new List<IReadOnlyList<TelegramButton>>
+            {
+                new[] { new TelegramButton("✅ Enviar a Mercado Libre", CallbackData: $"ax:{action.Id}"), new TelegramButton("No", CallbackData: $"an:{action.Id}") }
+            };
+            if (settings.PublicBaseUrl is not null && action.PublicationId is { } pid)
+                buttons.Add(new[] { new TelegramButton("Revisar en la app", Url: AppUrl(settings, $"/Publications/Edit/{pid}#pe-compat")) });
+            var html = "🚗 <b>Compatibilidades sugeridas</b>\n" + E(action.Description) +
+                       "\n<i>Revisa que la pieza de verdad les quede antes de enviarlas.</i>";
+            action.TelegramMessageId = await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, html, buttons, cancellationToken: cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+    }
+
     private async Task RunDailyAutomationsAsync(string token, NotificationSettings settings, CancellationToken cancellationToken)
     {
+        await SendPendingProposalsAsync(token, settings, cancellationToken);
         var automation = await Service<AutomationService>().GetAsync(settings.OrganizationId, cancellationToken);
         var now = LocalNow;
         var today = DateOnly.FromDateTime(now);

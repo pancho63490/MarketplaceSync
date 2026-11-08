@@ -19,11 +19,14 @@ public sealed class BotActionService
     private readonly MercadoLibreItemEditorService _editor;
     private readonly ILogger<BotActionService> _logger;
 
-    public BotActionService(AppDbContext context, MercadoLibreItemEditorService editor, ILogger<BotActionService> logger)
+    private readonly IServiceProvider _services;
+
+    public BotActionService(AppDbContext context, MercadoLibreItemEditorService editor, ILogger<BotActionService> logger, IServiceProvider services)
     {
         _context = context;
         _editor = editor;
         _logger = logger;
+        _services = services;
     }
 
     public async Task<BotAction> ProposeAsync(Guid org, string kind, int publicationId, decimal? value, string description, string source, CancellationToken cancellationToken = default)
@@ -76,6 +79,7 @@ public sealed class BotActionService
                 BotActionKinds.Price when action.Value is > 0 => await PriceAsync(org, action, cancellationToken),
                 BotActionKinds.Pause => await _editor.SetStatusAsync(org, action.PublicationId!.Value, "paused", cancellationToken),
                 BotActionKinds.Activate => await _editor.SetStatusAsync(org, action.PublicationId!.Value, "active", cancellationToken),
+                BotActionKinds.Compatibilities => await CompatibilitiesAsync(org, action, cancellationToken),
                 _ => "No sé hacer esa acción."
             };
         }
@@ -105,6 +109,15 @@ public sealed class BotActionService
         action.DecidedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
         return "Cancelado: no cambié nada.";
+    }
+
+    private async Task<string?> CompatibilitiesAsync(Guid org, BotAction action, CancellationToken cancellationToken)
+    {
+        var compat = _services.GetRequiredService<CompatibilityService>();
+        var (ok, _, message) = await compat.SendToItemAsync(org, action.PublicationId!.Value, replace: false, cancellationToken);
+        if (ok)
+            action.Description = message;
+        return ok ? null : message;
     }
 
     private async Task<string?> PriceAsync(Guid org, BotAction action, CancellationToken cancellationToken)

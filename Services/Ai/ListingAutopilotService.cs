@@ -403,6 +403,7 @@ public sealed class ListingAutopilotService : IListingAutopilotService
                     publication.AttributesJson = JsonSerializer.Serialize(attributes.Where(a => a.Id != "SELLER_SKU"));
                     product.LastErrorMessage = null;
                     done.Add("Publicado en Mercado Libre");
+                    await ProposeCompatibilitiesAsync(organizationId, product, publication, done, cancellationToken);
                 }
                 else
                 {
@@ -436,6 +437,48 @@ public sealed class ListingAutopilotService : IListingAutopilotService
     }
 
     /// <summary>Elige la opción oficial si existe (value_id); si no, usa el texto como value_name.</summary>
+    /// <summary>
+    /// Autopartes: la IA sugiere con qué vehículos es compatible, se validan contra Mercado Libre y se proponen
+    /// por Telegram (✅ Enviar). Nunca se mandan solas: una compatibilidad falsa es una devolución segura.
+    /// </summary>
+    private async Task ProposeCompatibilitiesAsync(
+        Guid organizationId,
+        Product product,
+        MarketplaceSync.Web.Models.Marketplace.MarketplacePublication publication,
+        List<string> done,
+        CancellationToken cancellationToken)
+    {
+        var compat = _services.GetService<MarketplaceSync.Services.MercadoLibre.CompatibilityService>();
+        var actions = _services.GetService<MarketplaceSync.Services.Automation.BotActionService>();
+        if (compat is null || actions is null || publication.MarketplaceAccountId is null ||
+            MarketplaceSync.Services.MercadoLibre.CompatibilityService.Read(product).Count > 0)
+            return;
+
+        try
+        {
+            var (rows, _) = await compat.SuggestAsync(product, cancellationToken);
+            if (rows.Count == 0)
+                return;
+            await compat.ValidateAsync(organizationId, publication.MarketplaceAccountId.Value, rows, cancellationToken);
+            MarketplaceSync.Services.MercadoLibre.CompatibilityService.Write(product, rows);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            var valid = rows.Where(r => r.IsValid).ToList();
+            if (valid.Count == 0)
+                return;
+            var list = string.Join(", ", valid.Take(4).Select(r => r.Label)) + (valid.Count > 4 ? $" y {valid.Count - 4} más" : "");
+            var title = product.Title is { Length: > 50 } t ? t[..50] + "…" : product.Title;
+            await actions.ProposeAsync(organizationId, MarketplaceSync.Web.Models.Automation.BotActionKinds.Compatibilities,
+                publication.Id, valid.Sum(r => r.Vehicles ?? 0),
+                $"Agregar compatibilidades a «{title}»: {list} ({valid.Sum(r => r.Vehicles ?? 0)} versiones)", "autopilot", cancellationToken);
+            done.Add($"Compatibilidades sugeridas ({valid.Count}); confírmalas en Telegram o en Editar");
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(exception, "Compatibility suggestion failed for product {ProductId}.", product.Id);
+        }
+    }
+
     /// <summary>
     /// Busca el código en la base pública de códigos y lo usa solo si coincide marca, tamaño y piezas.
     /// Se busca una vez por producto.

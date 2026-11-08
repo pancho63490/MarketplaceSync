@@ -52,6 +52,17 @@ namespace MarketplaceSync.Web.Models
         /// <summary>Cuándo se buscó el código en el anuncio de origen (aunque no lo trajera).</summary>
         public DateTime? SourceGtinCheckedAt { get; set; }
 
+        /// <summary>
+        /// Vehículos con los que es compatible la pieza (JSON de <c>VehicleFitment</c>): sugeridos por IA o capturados,
+        /// validados contra el catálogo de Mercado Libre; se mandan a la publicación solo al confirmar.
+        /// </summary>
+        public string? CompatibilityJson { get; set; }
+
+        /// <summary>Vehículos (versiones) que Mercado Libre tiene ligados a la publicación tras el último envío.</summary>
+        public int? CompatibilityCount { get; set; }
+
+        public DateTime? CompatibilitySentAt { get; set; }
+
         /// <summary>De dónde salió <see cref="SourceGtin"/>: eBay, Walmart o internet (UPCitemdb).</summary>
         [MaxLength(80)]
         public string? SourceGtinOrigin { get; set; }

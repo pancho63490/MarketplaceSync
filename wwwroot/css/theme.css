@@ -2132,3 +2132,14 @@ body {
 .order-profit { font-size: .75rem; font-weight: 600; color: var(--ok, #15803d); white-space: nowrap; }
 .order-profit.is-loss { color: var(--bad, #b91c1c); }
 .order-card-total .order-profit { display: block; text-align: right; }
+
+.pe-compat { margin-bottom: .75rem; }
+.compat-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) 76px 76px 32px; grid-template-areas: "brand model from to x" "note note note status status"; gap: .4rem; align-items: center; padding: .55rem 0; border-bottom: 1px solid var(--line); }
+.compat-head { grid-template-areas: "brand model from to x"; padding: 0 0 .3rem; font-size: .75rem; font-weight: 600; color: var(--ink-3, #6b7280); }
+.compat-row .c-brand { grid-area: brand; } .compat-row .c-model { grid-area: model; } .compat-row .c-from { grid-area: from; } .compat-row .c-to { grid-area: to; }
+.compat-row .c-x { grid-area: x; } .compat-row .c-note { grid-area: note; } .compat-row .c-status { grid-area: status; display: flex; flex-wrap: wrap; gap: .25rem; justify-content: flex-end; }
+.compat-row input[type=number] { -moz-appearance: textfield; appearance: textfield; padding-left: .5rem; padding-right: .4rem; }
+.compat-row input[type=number]::-webkit-inner-spin-button, .compat-row input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.compat-row .c-status .pill { font-size: .72rem; white-space: nowrap; }
+@media (max-width: 480px) { .compat-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px; grid-template-areas: "brand model x" "from to ." "note note note" "status status status"; } .compat-head { display: none; } .compat-row .c-status { justify-content: flex-start; } }
+.pe-compat-send { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; margin-top: 1rem; padding-top: .9rem; border-top: 1px solid var(--line); }

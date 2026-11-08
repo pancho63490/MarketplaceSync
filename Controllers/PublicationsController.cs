@@ -272,8 +272,86 @@ public sealed class PublicationsController : Controller
         }
 
         var (landed, profit) = await ProfitAsync(organizationId, item.ProductId, item.Price, id, cancellationToken);
-        return View(new PublicationEditViewModel { Item = item, LandedCostMxn = landed, Profit = profit });
+        var product = await _context.Products.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == item.ProductId && p.OrganizationId == organizationId, cancellationToken);
+        return View(new PublicationEditViewModel
+        {
+            Item = item,
+            LandedCostMxn = landed,
+            Profit = profit,
+            Compatibilities = product is null ? new() : CompatibilityService.Read(product),
+            CompatibilityCount = product?.CompatibilityCount,
+            CompatibilitySentAt = product?.CompatibilitySentAt
+        });
     }
+
+    // ── Compatibilidades con vehículos ──
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CompatSuggest(int id, [FromServices] CompatibilityService compat, CancellationToken cancellationToken)
+    {
+        var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var publication = await LoadForCompatAsync(organizationId, id, cancellationToken);
+        if (publication is null) return NotFound();
+
+        var (rows, note) = await compat.SuggestAsync(publication.Product, cancellationToken);
+        if (rows.Count == 0)
+        {
+            TempData["Warning"] = "La IA no pudo saber con seguridad con qué vehículos es compatible" +
+                                  (string.IsNullOrWhiteSpace(note) ? "." : $": {note}") + " Captúralos a mano.";
+            return Redirect(Url.Action(nameof(Edit), new { id }) + "#pe-compat");
+        }
+
+        await compat.ValidateAsync(organizationId, publication.MarketplaceAccountId!.Value, rows, cancellationToken);
+        CompatibilityService.Write(publication.Product, rows);
+        await _context.SaveChangesAsync(cancellationToken);
+        var bad = rows.Count(r => r.Vehicles == 0);
+        TempData["Success"] = $"La IA sugirió {rows.Count} {(rows.Count == 1 ? "vehículo" : "vehículos")}" +
+                              (bad > 0 ? $"; {bad} no existe así en Mercado Libre (corrígelo)" : "") +
+                              ". Revísalos antes de mandarlos.";
+        return Redirect(Url.Action(nameof(Edit), new { id }) + "#pe-compat");
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CompatSave(int id, List<VehicleFitment> rows, bool send, bool replace, [FromServices] CompatibilityService compat, CancellationToken cancellationToken)
+    {
+        var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var publication = await LoadForCompatAsync(organizationId, id, cancellationToken);
+        if (publication is null) return NotFound();
+
+        var previous = CompatibilityService.Read(publication.Product);
+        var clean = CompatibilityService.Normalize(rows ?? new());
+        foreach (var row in clean)
+        {
+            // Si el renglón es igual a uno de la IA, conserva el origen.
+            var same = previous.FirstOrDefault(p => p.Label.Equals(row.Label, StringComparison.OrdinalIgnoreCase));
+            row.Source = same?.Source ?? "manual";
+        }
+        await compat.ValidateAsync(organizationId, publication.MarketplaceAccountId!.Value, clean, cancellationToken);
+        CompatibilityService.Write(publication.Product, clean);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var bad = clean.Where(r => r.Vehicles == 0).Select(r => r.Label).ToList();
+        if (!send)
+        {
+            TempData[bad.Count > 0 ? "Warning" : "Success"] = bad.Count > 0
+                ? $"Guardado. Mercado Libre no reconoce: {string.Join(", ", bad.Take(3))}. Revisa cómo se escribe la marca o el modelo."
+                : $"Guardado: {clean.Count} {(clean.Count == 1 ? "renglón" : "renglones")} validados.";
+            return Redirect(Url.Action(nameof(Edit), new { id }) + "#pe-compat");
+        }
+
+        var (ok, _, message) = await compat.SendToItemAsync(organizationId, id, replace, cancellationToken);
+        TempData[ok ? "Success" : "Error"] = message + (bad.Count > 0 ? $" No se mandaron: {string.Join(", ", bad.Take(3))}." : "");
+        return Redirect(Url.Action(nameof(Edit), new { id }) + "#pe-compat");
+    }
+
+    private Task<MarketplacePublication?> LoadForCompatAsync(Guid organizationId, int id, CancellationToken cancellationToken) =>
+        _context.MarketplacePublications
+            .Include(p => p.Product)
+            .FirstOrDefaultAsync(p => p.Id == id && p.Product.OrganizationId == organizationId &&
+                                      p.ExternalItemId != null && p.MarketplaceAccountId != null, cancellationToken);
 
     [HttpPost]
     [ValidateAntiForgeryToken]
