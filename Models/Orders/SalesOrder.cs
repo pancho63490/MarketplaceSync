@@ -111,6 +111,28 @@ public class SalesOrder
     /// <summary>Última vez que se leyeron sus datos de facturación en Mercado Libre.</summary>
     public DateTime? BillingCheckedAt { get; set; }
 
+    // ── Mercado Pago ──
+
+    [System.ComponentModel.DataAnnotations.MaxLength(30)]
+    public string? MpPaymentId { get; set; }
+
+    /// <summary>Lo que Mercado Pago dice que te deja la venta (neto después de comisiones, envío y retenciones).</summary>
+    public decimal? MpNetReceived { get; set; }
+
+    /// <summary>Lo que la app esperaba recibir (cobrado − comisión − envío − retención).</summary>
+    public decimal? MpExpectedNet { get; set; }
+
+    public DateTime? MpReleaseDate { get; set; }
+
+    /// <summary>released, pending u otro estado de liberación.</summary>
+    [System.ComponentModel.DataAnnotations.MaxLength(20)]
+    public string? MpReleaseStatus { get; set; }
+
+    public DateTime? MpCheckedAt { get; set; }
+
+    [System.ComponentModel.DataAnnotations.MaxLength(200)]
+    public string? MpError { get; set; }
+
     public DateTime DateCreated { get; set; }
     public DateTime? DateClosed { get; set; }
     public DateTime LastUpdated { get; set; }

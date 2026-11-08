@@ -93,6 +93,13 @@ public sealed class HealthMonitorService
             problems.Add(new("invoice-upload", $"{invoiceUploads} {(invoiceUploads == 1 ? "factura no se subió" : "facturas no se subieron")} a Mercado Libre",
                 "El comprador no la ve en su compra. Ábrela y pulsa «Subir a Mercado Libre» o mándala por mensaje.", "/Invoices"));
 
+        // 3b) Mercado Pago sin permiso para leer los pagos.
+        var mpDenied = await _context.SalesOrders.AsNoTracking()
+            .CountAsync(o => o.OrganizationId == org && o.MpError != null && o.MpError.Contains("permiso") && o.MpCheckedAt >= now.AddDays(-2), cancellationToken);
+        if (mpDenied > 0)
+            problems.Add(new("mp-permission", "Mercado Pago no deja leer los pagos",
+                "En el panel de desarrolladores de Mercado Libre dale a la app permiso de Mercado Pago y vuelve a conectar la cuenta.", "/Money"));
+
         // 4) Llaves que faltan para lo que sí se usa.
         var claude = _services.GetRequiredService<MarketplaceSync.Services.Ai.ClaudeClient>();
         if (!claude.IsConfigured)
@@ -140,6 +147,7 @@ public sealed class HealthMonitorService
         "ai-key" => "La IA ya está encendida",
         "facturama-key" => "Facturama ya está configurado",
         "jobs-failed" => "Las tareas automáticas ya no fallan",
+        "mp-permission" => "Mercado Pago ya deja leer los pagos",
         _ => "Ya quedó"
     };
 

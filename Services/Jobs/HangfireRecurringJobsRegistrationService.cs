@@ -80,6 +80,16 @@ public sealed class HangfireRecurringJobsRegistrationService : BackgroundService
                     job => job.SweepTelegramNotifications(),
                     "*/5 * * * *");
 
+                // Paquetes a El Paso cada 2 horas y pagos de Mercado Pago cada 3 horas.
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "refresh-packages",
+                    job => job.RefreshPackages(),
+                    "10 */2 * * *");
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "reconcile-payments",
+                    job => job.ReconcilePayments(),
+                    "40 */3 * * *");
+
                 // Avisos de fallas: cada hora (minuto 20).
                 _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
                     "health-check",

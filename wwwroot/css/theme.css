@@ -2228,3 +2228,18 @@ body {
 .tt-count { font-variant-numeric: var(--num); }
 .inv-reserve { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .inv-reserve .input-group { width: 8.5rem; }
+
+/* ── Viajes y paquetes ── */
+.trip-new { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.trip-new .form-control { width: auto; min-width: 0; max-width: 14rem; }
+.trip-costs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
+.trip-num { width: 5.5rem; margin-left: auto; text-align: right; }
+.trip-add { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.trip-add > .form-control[name=product] { flex: 2 1 14rem; }
+.trip-add > .form-control[name=store] { flex: 1 1 9rem; }
+.trip-money { width: 9rem; }
+.pk-add { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; border-bottom: 1px solid var(--line); }
+.pk-add .form-control { flex: 1 1 12rem; }
+.pk-add .form-select { width: auto; }
+@media (max-width: 700px) { .trip-costs { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@media (max-width: 640px) { .promo-table .trip-num { margin-left: 0; } }

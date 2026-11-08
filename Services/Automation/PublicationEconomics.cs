@@ -19,8 +19,7 @@ public sealed class PublicationEconomics
 
     public PublicationEconomics(ICrossBorderPricingService pricing) => _pricing = pricing;
 
-    public static bool CostKnown(Product product) =>
-        product.SourcePrice is > 0 && product.SourceMarketplace is not ("MercadoLibre" or "MercadoLibreInsights");
+    public static bool CostKnown(Product product) => ProductCost.Known(product);
 
     public PublicationMoney? Calculate(MarketplacePublication publication, Product product, CrossBorderSettings settings, decimal? atPrice = null)
     {
@@ -28,7 +27,7 @@ public sealed class PublicationEconomics
         if (!CostKnown(product) || price is not > 0)
             return null;
 
-        var landed = _pricing.LandedCostMxn(product.SourcePrice!.Value, product.SourceCurrency, settings);
+        var landed = ProductCost.Landed(product, settings, _pricing)!.Value;
         var realFee = atPrice is null && publication.SaleFeeForPrice == publication.Price ? publication.SaleFeeMxn : null;
         var profit = _pricing.CalculateProfitFromLandedCost(landed, price.Value, settings, realFee);
 

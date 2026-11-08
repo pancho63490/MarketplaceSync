@@ -25,6 +25,8 @@ public sealed class PublicationRow
     public bool CostKnown { get; init; }
     public decimal? CostValue { get; init; }
     public string? CostCurrency { get; init; }
+    /// <summary>El costo viene de un viaje recibido (costo real), no del estimado.</summary>
+    public bool CostIsReal { get; init; }
     public decimal? LandedCostMxn { get; init; }
     public CrossBorderProfitEstimate? Profit { get; init; }
     public KitSuggestion? Kit { get; init; }

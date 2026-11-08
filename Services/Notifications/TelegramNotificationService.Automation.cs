@@ -428,6 +428,213 @@ public sealed partial class TelegramNotificationService
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Paquetes y viajes
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>Cada 2 horas: estado de los paquetes a El Paso; avisa salidas a entrega, entregas y problemas.</summary>
+    public async Task RefreshPackagesAllAsync(CancellationToken cancellationToken = default)
+    {
+        var tracking = Service<MarketplaceSync.Services.Purchasing.PackageTrackingService>();
+        if (!tracking.IsConfigured)
+            return;
+        var orgIds = await _context.InboundPackages.AsNoTracking()
+            .Where(p => p.ArchivedAt == null && p.Status != "Delivered")
+            .Select(p => p.OrganizationId).Distinct().ToListAsync(cancellationToken);
+        foreach (var org in orgIds)
+        {
+            try
+            {
+                var changes = await tracking.RefreshAsync(org, null, cancellationToken);
+                await NotifyPackageChangesAsync(org, changes, cancellationToken);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(exception, "Package refresh failed for {Org}.", org);
+            }
+            finally
+            {
+                _context.ChangeTracker.Clear();
+            }
+        }
+    }
+
+    private async Task NotifyPackageChangesAsync(Guid org, List<MarketplaceSync.Services.Purchasing.PackageChange> changes, CancellationToken cancellationToken)
+    {
+        var settings = await _context.NotificationSettings.FirstOrDefaultAsync(x => x.OrganizationId == org, cancellationToken);
+        var token = settings is null ? null : TokenFor(settings);
+        if (settings?.TelegramChatId is not { } chatId || token is null)
+            return;
+
+        foreach (var change in changes.Where(c => MarketplaceSync.Services.Purchasing.PackageTrackingService.IsAlert(c.NewStatus)))
+        {
+            var p = change.Package;
+            if (p.NotifiedStatus == p.Status) continue;
+            var icon = p.Status switch { "Delivered" => "✅", "OutForDelivery" => "🚚", "AvailableForPickup" => "📬", _ => "⚠️" };
+            var html = $"{icon} <b>{E(MarketplaceSync.Services.Purchasing.PackageTrackingService.StatusLabel(p.Status))}</b>: " +
+                       $"{MarketplaceSync.Services.Purchasing.PackageTrackingService.CarrierLabel(p.Carrier)} {E(p.TrackingNumber)}" +
+                       (string.IsNullOrWhiteSpace(p.Description) ? "" : $" ({E(p.Description)})") +
+                       (string.IsNullOrWhiteSpace(p.LastEvent) ? "" : $"\n{E(p.LastEvent)}{(string.IsNullOrWhiteSpace(p.Location) ? "" : " · " + E(p.Location))}");
+            var buttons = new[] { new[] { new TelegramButton("Ver rastreo", Url: MarketplaceSync.Services.Purchasing.PackageTrackingService.TrackingUrl(p.Carrier, p.TrackingNumber)) } };
+            await _telegram.SendMessageAsync(token, chatId, html, buttons, cancellationToken: cancellationToken);
+            p.NotifiedStatus = p.Status;
+        }
+        await _context.SaveChangesAsync(cancellationToken);
+
+        // Viajes cuyo último paquete acaba de llegar.
+        var tripIds = changes.Where(c => c.NewStatus == "Delivered" && c.Package.SupplyTripId != null).Select(c => c.Package.SupplyTripId!.Value).Distinct().ToList();
+        foreach (var tripId in tripIds)
+        {
+            var key = "tripready:" + tripId;
+            if (await _context.NotificationLogs.AnyAsync(l => l.OrganizationId == org && l.Key == key, cancellationToken)) continue;
+            var trip = await _context.SupplyTrips.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tripId && t.OrganizationId == org && t.Status == "planning", cancellationToken);
+            if (trip is null) continue;
+            var packages = await _context.InboundPackages.AsNoTracking().Where(p => p.SupplyTripId == tripId && p.ArchivedAt == null).ToListAsync(cancellationToken);
+            if (packages.Count == 0 || packages.Any(p => p.Status != "Delivered")) continue;
+            var messageId = await _telegram.SendMessageAsync(token, chatId,
+                $"🎉 <b>Ya llegó todo lo de «{E(trip.Name)}»</b> a El Paso ({packages.Count} {(packages.Count == 1 ? "paquete" : "paquetes")}). Ya puedes ir por ello.",
+                settings.PublicBaseUrl is null ? null : new[] { new[] { new TelegramButton("Abrir el viaje", Url: AppUrl(settings, $"/Trips/Details/{tripId}")) } },
+                cancellationToken: cancellationToken);
+            await LogAsync(org, key, "trip", tripId.ToString(CultureInfo.InvariantCulture), chatId, messageId, cancellationToken);
+        }
+    }
+
+    /// <summary>/guia 1Z999… faros ranger</summary>
+    private async Task HandleTrackingCommandAsync(string token, NotificationSettings settings, string args, long? messageId, CancellationToken cancellationToken)
+    {
+        var parts = args.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value,
+                "Mándame la guía y qué es, por ejemplo:\n<code>/guia 1Z999AA10123456784 faros Ranger</code>", replyToMessageId: messageId, cancellationToken: cancellationToken);
+            return;
+        }
+        var tracking = Service<MarketplaceSync.Services.Purchasing.PackageTrackingService>();
+        var openTrip = await _context.SupplyTrips.AsNoTracking()
+            .Where(t => t.OrganizationId == settings.OrganizationId && t.Status == "planning")
+            .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id).FirstOrDefaultAsync(cancellationToken);
+        var (package, message) = await tracking.AddAsync(settings.OrganizationId, parts[0], parts.Length > 1 ? parts[1] : null, openTrip?.Id, cancellationToken);
+        var html = package is null
+            ? "⚠️ " + E(message)
+            : $"📦 {E(message)} {MarketplaceSync.Services.Purchasing.PackageTrackingService.CarrierLabel(package.Carrier)} {E(package.TrackingNumber)}" +
+              (openTrip is not null ? $" · viaje «{E(openTrip.Name)}»" : "") +
+              $"\nEstado: {E(MarketplaceSync.Services.Purchasing.PackageTrackingService.StatusLabel(package.Status))}" +
+              (tracking.IsConfigured ? "\nTe aviso cuando salga a entrega y cuando llegue." : "");
+        var buttons = package is null ? null : new[] { new[] { new TelegramButton("Ver rastreo", Url: MarketplaceSync.Services.Purchasing.PackageTrackingService.TrackingUrl(package.Carrier, package.TrackingNumber)) } };
+        await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, html, buttons, replyToMessageId: messageId, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>/paquetes y /viaje: lo que viene en camino y el viaje abierto.</summary>
+    private async Task SendPackagesStatusAsync(string token, NotificationSettings settings, CancellationToken cancellationToken)
+    {
+        var org = settings.OrganizationId;
+        var packages = await _context.InboundPackages.AsNoTracking()
+            .Where(p => p.OrganizationId == org && p.ArchivedAt == null && (p.Status != "Delivered" || p.DeliveredAt >= DateTime.UtcNow.AddDays(-7)))
+            .OrderBy(p => p.Status == "Delivered").ThenBy(p => p.EstimatedDelivery)
+            .Take(15).ToListAsync(cancellationToken);
+        var trip = await _context.SupplyTrips.AsNoTracking().Include(t => t.Items)
+            .Where(t => t.OrganizationId == org && t.Status == "planning")
+            .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id).FirstOrDefaultAsync(cancellationToken);
+
+        var html = new StringBuilder();
+        if (trip is not null)
+        {
+            var breakdown = await Service<MarketplaceSync.Services.Purchasing.SupplyTripService>().BreakdownAsync(org, trip, cancellationToken);
+            html.Append("🚗 <b>").Append(E(trip.Name)).Append("</b>: ").Append(breakdown.Pieces).Append(" piezas, US$")
+                .Append(breakdown.GoodsUsd.ToString("N2", MxCulture)).Append(" de mercancía.\n\n");
+        }
+        if (packages.Count == 0)
+            html.Append("No hay paquetes en camino. Agrega uno con <code>/guia NÚMERO qué es</code>.");
+        else
+        {
+            html.Append("📦 <b>Paquetes</b>\n");
+            foreach (var p in packages)
+                html.Append(p.Status == "Delivered" ? "✅ " : "• ")
+                    .Append(MarketplaceSync.Services.Purchasing.PackageTrackingService.CarrierLabel(p.Carrier)).Append(' ')
+                    .Append(E(p.Description ?? p.TrackingNumber)).Append(": ")
+                    .Append(E(MarketplaceSync.Services.Purchasing.PackageTrackingService.StatusLabel(p.Status)))
+                    .Append(p.Status != "Delivered" && p.EstimatedDelivery is { } eta ? " · llega " + eta.ToString("d MMM", MxCulture) : "")
+                    .Append('\n');
+        }
+        await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, html.ToString().Trim(),
+            settings.PublicBaseUrl is null ? null : new[] { new[] { new TelegramButton("Abrir Viajes y paquetes", Url: AppUrl(settings, "/Trips")) } },
+            cancellationToken: cancellationToken);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Mercado Pago
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>Cada 3 horas: revisa los pagos con Mercado Pago y avisa las ventas que dejan diferente de lo esperado.</summary>
+    public async Task ReconcilePaymentsAllAsync(CancellationToken cancellationToken = default)
+    {
+        var orgIds = await _context.MarketplaceAccounts.AsNoTracking()
+            .Where(a => a.Marketplace == "MercadoLibre" && a.Status == "Connected")
+            .Select(a => a.OrganizationId).Distinct().ToListAsync(cancellationToken);
+        foreach (var org in orgIds)
+        {
+            try
+            {
+                var differences = await Service<MarketplaceSync.Services.Finance.MercadoPagoService>().ReconcileAsync(org, 40, cancellationToken);
+                if (differences.Count > 0)
+                    await NotifyPaymentDifferencesAsync(org, differences, cancellationToken);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(exception, "Payment reconciliation failed for {Org}.", org);
+            }
+            finally
+            {
+                _context.ChangeTracker.Clear();
+            }
+        }
+    }
+
+    private async Task NotifyPaymentDifferencesAsync(Guid org, List<MarketplaceSync.Web.Models.Orders.SalesOrder> orders, CancellationToken cancellationToken)
+    {
+        var settings = await _context.NotificationSettings.FirstOrDefaultAsync(x => x.OrganizationId == org, cancellationToken);
+        var token = settings is null ? null : TokenFor(settings);
+        if (settings?.TelegramChatId is not { } chatId || token is null)
+            return;
+        foreach (var order in orders.Take(5))
+        {
+            var key = "mpdiff:" + order.Id;
+            if (await _context.NotificationLogs.AnyAsync(l => l.OrganizationId == org && l.Key == key, cancellationToken)) continue;
+            var diff = order.MpNetReceived!.Value - order.MpExpectedNet!.Value;
+            var html = $"💸 <b>{(diff < 0 ? "Mercado Pago te deja menos" : "Mercado Pago te deja más")}</b> en la venta #{E(order.ExternalOrderId)}\n" +
+                       $"Esperabas {Money(order.MpExpectedNet.Value)} y te deja <b>{Money(order.MpNetReceived.Value)}</b> ({(diff < 0 ? "-" : "+")}{Money(Math.Abs(diff))})." +
+                       (diff < 0 ? "\nPuede ser un cargo de envío, una retención distinta o un descuento que no esperabas." : "");
+            var messageId = await _telegram.SendMessageAsync(token, chatId, html,
+                settings.PublicBaseUrl is null ? null : new[] { new[] { new TelegramButton("Ver venta", Url: AppUrl(settings, $"/Orders/Details/{order.Id}")), new TelegramButton("Dinero", Url: AppUrl(settings, "/Money")) } },
+                cancellationToken: cancellationToken);
+            await LogAsync(org, key, "mpdiff", order.Id.ToString(CultureInfo.InvariantCulture), chatId, messageId, cancellationToken);
+        }
+    }
+
+    /// <summary>/dinero: por liberar, próximas fechas y diferencias.</summary>
+    private async Task SendMoneyStatusAsync(string token, NotificationSettings settings, CancellationToken cancellationToken)
+    {
+        var payments = Service<MarketplaceSync.Services.Finance.MercadoPagoService>();
+        await payments.ReconcileAsync(settings.OrganizationId, 20, cancellationToken);
+        var summary = await payments.SummaryAsync(settings.OrganizationId, cancellationToken);
+        var html = new StringBuilder("💰 <b>Mercado Pago</b>\n")
+            .Append("Por liberar: <b>").Append(Money(summary.Pending)).Append("</b>\n")
+            .Append("Liberado este mes: ").Append(Money(summary.ReleasedThisMonth)).Append('\n');
+        if (summary.Upcoming.Count > 0)
+        {
+            html.Append("\nPróximas:\n");
+            foreach (var (day, amount, sales) in summary.Upcoming.Take(5))
+                html.Append("• ").Append(day.ToString("ddd d MMM", MxCulture)).Append(": ").Append(Money(amount)).Append(" (").Append(sales).Append(sales == 1 ? " venta)" : " ventas)").Append('\n');
+        }
+        if (summary.Differences.Count > 0)
+            html.Append("\n⚠️ ").Append(summary.Differences.Count).Append(summary.Differences.Count == 1 ? " venta deja diferente de lo esperado." : " ventas dejan diferente de lo esperado.");
+        else if (summary.Recent.All(o => o.MpNetReceived is null) && summary.Error is not null)
+            html.Append("\n⚠️ ").Append(E(summary.Error));
+        await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, html.ToString().Trim(),
+            settings.PublicBaseUrl is null ? null : new[] { new[] { new TelegramButton("Abrir Dinero", Url: AppUrl(settings, "/Money")) } },
+            cancellationToken: cancellationToken);
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Avisos de fallas
     // ─────────────────────────────────────────────────────────────
 

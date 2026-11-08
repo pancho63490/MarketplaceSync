@@ -428,6 +428,15 @@ public sealed partial class TelegramNotificationService
             case "/etiquetas":
                 await SendLabelsAsync(token, settings, force: true, cancellationToken);
                 break;
+            case "/guia" or "/guía" or "/rastreo":
+                await HandleTrackingCommandAsync(token, settings, text.Split(' ', 2) is { Length: 2 } tp ? tp[1] : string.Empty, update.MessageId, cancellationToken);
+                break;
+            case "/paquetes" or "/viaje":
+                await SendPackagesStatusAsync(token, settings, cancellationToken);
+                break;
+            case "/dinero":
+                await SendMoneyStatusAsync(token, settings, cancellationToken);
+                break;
             case "/estado":
                 await SendHealthStatusAsync(token, settings, cancellationToken);
                 break;
@@ -463,6 +472,9 @@ public sealed partial class TelegramNotificationService
                     "/facturas — quién te pidió factura y la global del mes\n" +
                     "/anuncios — gasto en Mercado Ads y anuncios que pierden\n" +
                     "/estado — si todo está funcionando (sesión, pedidos, tareas)\n" +
+                    "/guia 1Z… faros — rastrear un paquete a El Paso\n" +
+                    "/paquetes — qué viene en camino y el viaje abierto\n" +
+                    "/dinero — lo que Mercado Pago tiene por liberar\n" +
                     "/gasto 250 gasolina — anotar un gasto del negocio\n" +
                     "/precios — revisar qué publicaciones ya no ganan lo mínimo\n\n" +
                     "💬 <b>O escríbeme normal</b>: «¿cuánto vendí hoy?», «sube el faro de Tacoma a 3500», «pausa las balatas».\n\n" +

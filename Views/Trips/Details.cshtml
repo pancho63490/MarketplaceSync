@@ -1,0 +1,134 @@
+@model MarketplaceSync.Web.Controllers.TripsController.TripDetailsViewModel
+@using System.Globalization
+@using MarketplaceSync.Web.Models.Purchasing
+@{
+    var b = Model.Breakdown;
+    var trip = b.Trip;
+    ViewData["Title"] = trip.Name;
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    string Mxn(decimal v) => v.ToString("C0", mx);
+    string Num(decimal v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+    var received = trip.Status == SupplyTripStatus.Received;
+    var i = 0;
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">@trip.Name</h1>
+        <p>@trip.Date.ToString("dddd d 'de' MMMM yyyy", mx) · @(received ? $"recibido el {trip.ReceivedAt?.AddHours(-7).ToString("d MMM", mx)}" : "comprando")</p>
+    </div>
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">Todos los viajes</a>
+</header>
+
+<dl class="stats">
+    <div class="stat"><dt>Mercancía</dt><dd>US$@b.GoodsUsd.ToString("N2", mx) <small>@Mxn(b.GoodsMxn) a @trip.ExchangeRate.ToString("0.00##", mx)</small></dd></div>
+    <div class="stat"><dt>Gastos del viaje</dt><dd>@Mxn(trip.ExtrasMxn) <small>@b.RealCrossingPercent.ToString("0.#", mx)% de la mercancía</small></dd></div>
+    <div class="stat"><dt>Costo real total</dt><dd>@Mxn(b.TotalMxn) <small>@b.Pieces piezas</small></dd></div>
+    <div class="stat @(b.TotalMxn > b.EstimatedMxn * 1.03m ? "is-bad" : b.TotalMxn < b.EstimatedMxn * 0.97m ? "is-ok" : "")"><dt>Contra lo estimado</dt><dd>@(b.EstimatedMxn > 0 ? ((b.TotalMxn - b.EstimatedMxn) / b.EstimatedMxn * 100m).ToString("+0.#;-0.#;0", mx) + "%" : "—") <small>estimado @Mxn(b.EstimatedMxn)</small></dd></div>
+</dl>
+
+@if (b.Lines.Count > 0 && trip.ExtrasMxn > 0)
+{
+    var diff = b.RealCrossingPercent - b.SettingsPercent;
+    <div class="inv-banner @(Math.Abs(diff) < 2 ? "is-ok" : "") mb-3">@Html.Icon("info")
+        <span>Gasolina, cruce, impuestos y otros fueron <b>@b.RealCrossingPercent.ToString("0.#", mx)%</b> de lo que compraste; en Costos de cruce tienes <b>@b.SettingsPercent.ToString("0.#", mx)%</b>.
+            @if (Math.Abs(diff) >= 2) { <text>Si tus viajes suelen salir así, <a asp-controller="CrossBorder" asp-action="Index">ajústalo</a> para que los precios sugeridos de piezas nuevas sean correctos.</text> }</span>
+    </div>
+}
+
+<form asp-action="Update" asp-route-id="@trip.Id" method="post" id="tripForm">
+    @Html.AntiForgeryToken()
+    <section class="panel" aria-labelledby="tr-costs" id="costos">
+        <div class="panel-head"><h2 id="tr-costs">Gastos del viaje</h2><p class="mb-0">Lo que pagaste para traer todo a Juárez. Se reparte entre las piezas según su valor.</p></div>
+        <div class="panel-body inv-form">
+            <div class="row-3">
+                <div><label class="form-label small" for="tName">Nombre</label><input id="tName" name="name" class="form-control form-control-sm" value="@trip.Name" maxlength="120" /></div>
+                <div><label class="form-label small" for="tDate">Fecha</label><input id="tDate" name="date" type="date" class="form-control form-control-sm" value="@trip.Date.ToString("yyyy-MM-dd")" /></div>
+                <div><label class="form-label small" for="tRate">Tipo de cambio que pagaste</label><input id="tRate" name="exchangeRate" class="form-control form-control-sm" inputmode="decimal" value="@trip.ExchangeRate.ToString("0.####", CultureInfo.InvariantCulture)" /></div>
+            </div>
+            <div class="trip-costs">
+                <div><label class="form-label small" for="tFuel">Gasolina</label><div class="input-group input-group-sm"><span class="input-group-text">$</span><input id="tFuel" name="fuel" class="form-control" inputmode="decimal" value="@Num(trip.FuelMxn)" /></div></div>
+                <div><label class="form-label small" for="tCross">Cruce o comercializadora</label><div class="input-group input-group-sm"><span class="input-group-text">$</span><input id="tCross" name="crossing" class="form-control" inputmode="decimal" value="@Num(trip.CrossingMxn)" /></div></div>
+                <div><label class="form-label small" for="tTax">Impuestos en aduana</label><div class="input-group input-group-sm"><span class="input-group-text">$</span><input id="tTax" name="taxes" class="form-control" inputmode="decimal" value="@Num(trip.CustomsTaxesMxn)" /></div></div>
+                <div><label class="form-label small" for="tOther">Otros (puente, comida…)</label><div class="input-group input-group-sm"><span class="input-group-text">$</span><input id="tOther" name="other" class="form-control" inputmode="decimal" value="@Num(trip.OtherMxn)" /></div></div>
+            </div>
+            <div><label class="form-label small" for="tNotes">Notas</label><input id="tNotes" name="notes" class="form-control form-control-sm" value="@trip.Notes" maxlength="1000" /></div>
+        </div>
+    </section>
+
+    <section class="panel mt-3" aria-labelledby="tr-items" id="piezas">
+        <div class="panel-head ad-head">
+            <div><h2 id="tr-items">Lo que compraste</h2><p class="mb-0">Precio por pieza en dólares y el envío hasta El Paso de cada renglón.</p></div>
+            @if (!received && Model.HasApprovedList)
+            {
+                <button type="submit" form="importForm" class="btn btn-outline-secondary btn-sm">@Html.Icon("list-checks") Traer la lista de compra aprobada</button>
+            }
+        </div>
+        @if (b.Lines.Count == 0)
+        {
+            <div class="panel-body"><p class="text-muted mb-0">Aún no hay piezas. Agrégalas abajo.</p></div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="data-table promo-table">
+                    <thead><tr><th>Pieza</th><th class="num">Piezas</th><th class="num">US$ c/u</th><th class="num">Envío US$</th><th class="num">Gastos del viaje</th><th class="num">Costo real c/u</th><th class="num">Estimado c/u</th><th aria-label="Quitar"></th></tr></thead>
+                    <tbody>
+                        @foreach (var l in b.Lines)
+                        {
+                            var idx = i++;
+                            <tr>
+                                <td class="promo-title">@l.Item.Description<span class="sub">@(l.Sku ?? "sin SKU en la app")@(l.Item.Store is { } s ? " · " + s : "")</span></td>
+                                <td class="num" data-label="Piezas">
+                                    <input type="hidden" name="items[@idx].Id" value="@l.Item.Id" />
+                                    @if (received) { @l.Item.Quantity } else { <input name="items[@idx].Quantity" type="number" min="1" class="form-control form-control-sm trip-num" value="@l.Item.Quantity" aria-label="Piezas" /> }
+                                </td>
+                                <td class="num" data-label="US$ c/u">@if (received) { @l.Item.UnitCostUsd.ToString("N2", mx) } else { <input name="items[@idx].UnitCostUsd" class="form-control form-control-sm trip-num @(l.Item.UnitCostUsd <= 0 ? "is-invalid" : "")" inputmode="decimal" value="@Num(l.Item.UnitCostUsd)" aria-label="Precio en dólares" /> }</td>
+                                <td class="num" data-label="Envío US$">@if (received) { @l.Item.ShippingUsd.ToString("N2", mx) } else { <input name="items[@idx].ShippingUsd" class="form-control form-control-sm trip-num" inputmode="decimal" value="@Num(l.Item.ShippingUsd)" aria-label="Envío a El Paso" /> }</td>
+                                <td class="num" data-label="Gastos del viaje">@Mxn(l.ExtrasShareMxn)</td>
+                                <td class="num" data-label="Costo real c/u"><b>@l.RealUnitMxn.ToString("C2", mx)</b></td>
+                                <td class="num" data-label="Estimado c/u">@l.EstimatedUnitMxn.ToString("C2", mx)<span class="sub @(l.DifferencePercent > 3 ? "text-bad" : l.DifferencePercent < -3 ? "text-ok" : "")">@l.DifferencePercent.ToString("+0.#;-0.#;0", mx)%</span></td>
+                                <td class="promo-action">@if (!received) { <button type="submit" form="rm-@l.Item.Id" class="icon-btn" aria-label="Quitar">@Html.Icon("trash-2")</button> }</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        <div class="panel-body promo-foot">
+            <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+            <span class="small text-muted">@(received ? "Si corriges un gasto, se vuelve a calcular el costo real de las piezas." : "El costo real se guarda en cada producto al recibir el viaje.")</span>
+        </div>
+    </section>
+</form>
+
+@if (!received)
+{
+    <form asp-action="AddItem" asp-route-id="@trip.Id" method="post" class="panel mt-3 panel-body trip-add" aria-label="Agregar pieza">
+        @Html.AntiForgeryToken()
+        <input name="product" list="tripVariants" class="form-control form-control-sm" placeholder="SKU o qué es" aria-label="Pieza" required />
+        <datalist id="tripVariants">@foreach (var v in Model.VariantOptions) { <option value="@v"></option> }</datalist>
+        <input name="quantity" type="number" min="1" value="1" class="form-control form-control-sm trip-num" aria-label="Piezas" />
+        <div class="input-group input-group-sm trip-money"><span class="input-group-text">US$</span><input name="unitCostUsd" class="form-control" inputmode="decimal" placeholder="c/u" aria-label="Precio por pieza en dólares" required /></div>
+        <div class="input-group input-group-sm trip-money"><span class="input-group-text">Envío</span><input name="shippingUsd" class="form-control" inputmode="decimal" placeholder="0" aria-label="Envío a El Paso en dólares" /></div>
+        <input name="store" class="form-control form-control-sm" placeholder="Tienda (eBay, Amazon…)" aria-label="Tienda" maxlength="60" />
+        <button type="submit" class="btn btn-outline-secondary btn-sm">@Html.Icon("plus") Agregar</button>
+    </form>
+
+    <form asp-action="Receive" asp-route-id="@trip.Id" method="post" class="panel mt-3 panel-body promo-foot" data-busy="Recibiendo…" onsubmit="return confirm('¿Recibir el viaje? Se guarda el costo real de cada pieza@(" ")y se suman al inventario si lo dejas marcado.')">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn btn-primary btn-sm" disabled="@(b.Lines.Count == 0)">@Html.Icon("circle-check") Ya está en Juárez: recibir</button>
+        <label class="small"><input type="checkbox" class="form-check-input me-1" name="addToInventory" value="true" checked /><input type="hidden" name="addToInventory" value="false" />Sumar las piezas al inventario</label>
+        <span class="small text-muted">Quítale la marca si ya las sumaste con «Ya llegó todo» en la compra semanal.</span>
+    </form>
+
+    @foreach (var l in b.Lines)
+    {
+        <form asp-action="RemoveItem" asp-route-id="@trip.Id" method="post" id="rm-@l.Item.Id" class="d-none">
+            @Html.AntiForgeryToken()<input type="hidden" name="itemId" value="@l.Item.Id" />
+        </form>
+    }
+    <form asp-action="ImportList" asp-route-id="@trip.Id" method="post" id="importForm" class="d-none">@Html.AntiForgeryToken()</form>
+}
+
+<partial name="_Packages" model="(Model.Packages, Model.TrackingConfigured, (int?)trip.Id, (Dictionary<int, string>?)null, (List<(int Id, string Name)>?)null)" />

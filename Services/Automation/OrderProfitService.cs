@@ -117,16 +117,15 @@ public sealed class OrderProfitService
         var itemIds = items.Select(i => i.ExternalItemId).Distinct().ToList();
         var products = await _context.MarketplacePublications.AsNoTracking()
             .Where(p => p.Product.OrganizationId == org && p.ExternalItemId != null && itemIds.Contains(p.ExternalItemId))
-            .Select(p => new { p.ExternalItemId, p.Product.SourcePrice, p.Product.SourceCurrency, p.Product.SourceMarketplace })
+            .Select(p => new { p.ExternalItemId, p.Product.SourcePrice, p.Product.SourceCurrency, p.Product.SourceMarketplace, p.Product.RealLandedCostMxn })
             .ToListAsync(cancellationToken);
 
         var result = new Dictionary<string, decimal?>(StringComparer.OrdinalIgnoreCase);
         foreach (var id in itemIds)
         {
             var product = products.FirstOrDefault(p => string.Equals(p.ExternalItemId, id, StringComparison.OrdinalIgnoreCase));
-            result[id] = product is { SourcePrice: > 0 } && product.SourceMarketplace is not ("MercadoLibre" or "MercadoLibreInsights")
-                ? _pricing.LandedCostMxn(product.SourcePrice!.Value, product.SourceCurrency, settings)
-                : null;
+            result[id] = product is null ? null
+                : ProductCost.Landed(product.RealLandedCostMxn, product.SourcePrice, product.SourceCurrency, product.SourceMarketplace, settings, _pricing);
         }
         return result;
     }

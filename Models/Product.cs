@@ -78,6 +78,21 @@ namespace MarketplaceSync.Web.Models
 
         public decimal? SourcePrice { get; set; }
 
+
+        /// <summary>Costo real por pieza puesto en Juárez del último viaje a El Paso (compra, envío, gasolina, cruce e impuestos repartidos).
+
+        /// Cuando existe, la ganancia se calcula con este y no con el estimado de Costos de cruce.</summary>
+
+        [System.ComponentModel.DataAnnotations.Schema.Column(TypeName = "numeric(12,2)")]
+
+        public decimal? RealLandedCostMxn { get; set; }
+
+
+        public DateTime? RealLandedCostAt { get; set; }
+
+
+        public int? RealLandedTripId { get; set; }
+
         [MaxLength(20)]
         public string? SourceCurrency { get; set; }
 

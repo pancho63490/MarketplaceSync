@@ -63,11 +63,8 @@ public sealed class PublicationsController : Controller
         {
             var product = p.Product;
             var variants = product.Variants.Where(v => v.IsActive).ToList();
-            var costKnown = product.SourcePrice is > 0 &&
-                            product.SourceMarketplace is not ("MercadoLibre" or "MercadoLibreInsights");
-            decimal? landed = costKnown
-                ? _pricing.LandedCostMxn(product.SourcePrice!.Value, product.SourceCurrency, settings)
-                : null;
+            var costKnown = MarketplaceSync.Services.Automation.ProductCost.Known(product);
+            decimal? landed = MarketplaceSync.Services.Automation.ProductCost.Landed(product, settings, _pricing);
             CrossBorderProfitEstimate? profit = landed.HasValue && p.Price is > 0
                 ? _pricing.CalculateProfitFromLandedCost(
                     landed.Value, p.Price.Value, settings,
@@ -102,6 +99,7 @@ public sealed class PublicationsController : Controller
                 CostKnown = costKnown,
                 CostValue = product.SourcePrice,
                 CostCurrency = product.SourceCurrency,
+                CostIsReal = product.RealLandedCostMxn is > 0,
                 LandedCostMxn = landed,
                 Profit = profit,
                 Kit = landed.HasValue && p.Price is > 0 ? _pricing.SuggestKit(landed.Value, p.Price.Value, settings) : null,
@@ -607,14 +605,14 @@ public sealed class PublicationsController : Controller
         {
             var product = publication.Product;
             var label = product.Title is { Length: > 40 } t ? t[..40] + "…" : product.Title ?? publication.ExternalItemId!;
-            var costKnown = product.SourcePrice is > 0 && product.SourceMarketplace is not ("MercadoLibre" or "MercadoLibreInsights");
+            var costKnown = MarketplaceSync.Services.Automation.ProductCost.Known(product);
             if (!costKnown || publication.Price is not > 0)
             {
                 skipped.Add($"{label}: sin costo");
                 continue;
             }
 
-            var landed = _pricing.LandedCostMxn(product.SourcePrice!.Value, product.SourceCurrency, settings);
+            var landed = MarketplaceSync.Services.Automation.ProductCost.Landed(product, settings, _pricing)!.Value;
             var current = _pricing.CalculateProfitFromLandedCost(landed, publication.Price.Value, settings,
                 publication.SaleFeeForPrice == publication.Price ? publication.SaleFeeMxn : null);
             var target = SuggestedPrice(landed, publication, settings);
@@ -680,10 +678,10 @@ public sealed class PublicationsController : Controller
         Guid organizationId, int productId, decimal price, int publicationId, CancellationToken cancellationToken)
     {
         var product = await _context.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == productId, cancellationToken);
-        if (product is null || product.SourcePrice is not > 0 || product.SourceMarketplace is "MercadoLibre" or "MercadoLibreInsights")
+        if (product is null || !MarketplaceSync.Services.Automation.ProductCost.Known(product))
             return (null, null);
         var settings = await _pricing.GetOrCreateSettingsAsync(organizationId, cancellationToken);
-        var landed = _pricing.LandedCostMxn(product.SourcePrice.Value, product.SourceCurrency, settings);
+        var landed = MarketplaceSync.Services.Automation.ProductCost.Landed(product, settings, _pricing)!.Value;
         var publication = await _context.MarketplacePublications.AsNoTracking().FirstOrDefaultAsync(p => p.Id == publicationId, cancellationToken);
         var realFee = publication?.SaleFeeForPrice == price ? publication.SaleFeeMxn : null;
         return (landed, _pricing.CalculateProfitFromLandedCost(landed, price, settings, realFee));

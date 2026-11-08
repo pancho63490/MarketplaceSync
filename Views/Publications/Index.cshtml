@@ -143,7 +143,7 @@ else
                     @if (r.CostKnown)
                     {
                         <div class="pl-value">@Mxn(r.LandedCostMxn)</div>
-                        <div class="pl-sub">@(r.CostCurrency == "MXN" ? "en Juárez" : $"US${r.CostValue:0.00} + cruce")</div>
+                        <div class="pl-sub">@(r.CostIsReal ? "real del viaje" : r.CostCurrency == "MXN" ? "en Juárez" : $"US${r.CostValue:0.00} + cruce")</div>
                     }
                     else
                     {

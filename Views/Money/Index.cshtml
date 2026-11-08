@@ -1,0 +1,93 @@
+@model MarketplaceSync.Services.Finance.MoneySummary
+@using System.Globalization
+@using MarketplaceSync.Services.Finance
+@{
+    ViewData["Title"] = "Dinero";
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    string Mxn(decimal? v) => v.HasValue ? v.Value.ToString("C0", mx) : "—";
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Dinero</h1>
+        <p>Lo que Mercado Pago te deja de cada venta, cuándo se libera y si coincide con lo que la app esperaba (cobrado − comisión − envío − retención).</p>
+    </div>
+    <form asp-action="Refresh" method="post" data-busy="Revisando con Mercado Pago…">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn btn-outline-secondary btn-sm">@Html.Icon("refresh-cw") Revisar pagos</button>
+    </form>
+</header>
+
+@if (Model.Error is not null && Model.Recent.All(o => o.MpNetReceived is null))
+{
+    <div class="inv-banner mb-3">@Html.Icon("triangle-alert") <span>@Model.Error Si dice «permiso», en el panel de desarrolladores de Mercado Libre la app necesita acceso a Mercado Pago.</span></div>
+}
+
+<dl class="stats">
+    <div class="stat"><dt>Por liberar</dt><dd>@Mxn(Model.Pending)</dd></div>
+    <div class="stat is-ok"><dt>Liberado este mes</dt><dd>@Mxn(Model.ReleasedThisMonth)</dd></div>
+    <div class="stat @(Model.Differences.Count > 0 ? "is-bad" : "")"><dt>Ventas con diferencia</dt><dd>@Model.Differences.Count</dd></div>
+    <div class="stat"><dt>Sin revisar</dt><dd>@Model.NotChecked <small>se revisan solas cada 3 horas</small></dd></div>
+</dl>
+
+<div class="fin-grid">
+    <section class="panel" aria-labelledby="mn-next">
+        <div class="panel-head"><h2 id="mn-next">Próximas liberaciones</h2></div>
+        <div class="panel-body">
+            @if (Model.Upcoming.Count == 0)
+            {
+                <p class="text-muted mb-0">Nada pendiente de liberar.</p>
+            }
+            else
+            {
+                <dl class="fin-waterfall">
+                    @foreach (var (day, amount, sales) in Model.Upcoming)
+                    {
+                        <div><dt>@day.ToString("dddd d MMM", mx) <span class="sub">@sales @(sales == 1 ? "venta" : "ventas")</span></dt><dd>@Mxn(amount)</dd></div>
+                    }
+                </dl>
+            }
+        </div>
+    </section>
+    <section class="panel" aria-labelledby="mn-diff">
+        <div class="panel-head"><h2 id="mn-diff">Diferencias</h2><p class="mb-0">Mercado Pago te deja más o menos de lo esperado (más de $10 o 2%). Revisa la venta en Mercado Libre: puede ser un cargo extra, un descuento o una retención distinta.</p></div>
+        <div class="panel-body">
+            @if (Model.Differences.Count == 0)
+            {
+                <p class="text-muted mb-0">Todo coincide.</p>
+            }
+            else
+            {
+                <dl class="fin-waterfall">
+                    @foreach (var o in Model.Differences.Take(10))
+                    {
+                        var diff = o.MpNetReceived!.Value - o.MpExpectedNet!.Value;
+                        <div><dt><a asp-controller="Orders" asp-action="Details" asp-route-id="@o.Id">#@o.ExternalOrderId</a> <span class="sub">esperabas @Mxn(o.MpExpectedNet) · te deja @Mxn(o.MpNetReceived)</span></dt><dd class="@(diff < 0 ? "text-bad" : "text-ok")">@diff.ToString("+$#,##0;-$#,##0", mx)</dd></div>
+                    }
+                </dl>
+            }
+        </div>
+    </section>
+</div>
+
+<section class="panel mt-3" aria-labelledby="mn-list">
+    <div class="panel-head"><h2 id="mn-list">Ventas recientes</h2></div>
+    <div class="table-responsive">
+        <table class="data-table promo-table">
+            <thead><tr><th>Venta</th><th class="num">Cobrado</th><th class="num">Esperabas</th><th class="num">Te deja</th><th>Se libera</th></tr></thead>
+            <tbody>
+                @foreach (var o in Model.Recent)
+                {
+                    var charged = o.Items.Count > 0 ? o.Items.Sum(i => i.UnitPrice * i.Quantity) : o.TotalAmount;
+                    <tr class="@(MercadoPagoService.HasDifference(o) ? "promo-loss" : "")">
+                        <td class="promo-title"><a asp-controller="Orders" asp-action="Details" asp-route-id="@o.Id">#@o.ExternalOrderId</a><span class="sub">@o.DateCreated.AddHours(-7).ToString("d MMM", mx) · @(o.BuyerNickname ?? "")</span></td>
+                        <td class="num" data-label="Cobrado">@Mxn(charged)</td>
+                        <td class="num" data-label="Esperabas">@Mxn(o.MpExpectedNet)</td>
+                        <td class="num" data-label="Te deja">@if (o.MpNetReceived is { } net) { <b>@Mxn(net)</b> } else { <span class="text-muted small">@(o.MpError ?? "sin revisar")</span> }</td>
+                        <td data-label="Se libera">@if (o.MpReleaseStatus == "released") { <span class="pill pill-ok">Liberado</span> } else if (o.MpReleaseDate is { } r) { <span class="pill pill-info">@r.AddHours(-7).ToString("d MMM", mx)</span> } else { <span class="text-muted">—</span> }</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>

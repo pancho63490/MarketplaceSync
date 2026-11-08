@@ -1662,6 +1662,30 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<int>("MarketplaceAccountId")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("MpCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MpError")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal?>("MpExpectedNet")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("MpNetReceived")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("MpPaymentId")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("MpReleaseDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MpReleaseStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
@@ -2109,6 +2133,15 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<int?>("PhotoWidth")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("RealLandedCostAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("RealLandedCostMxn")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<int?>("RealLandedTripId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("SatProductCode")
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)");
@@ -2237,6 +2270,82 @@ namespace MarketplaceSync.Web.Migrations
                     b.HasIndex("ProductId", "IsActive");
 
                     b.ToTable("ProductVariants");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Purchasing.InboundPackage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Carrier")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeliveredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateOnly?>("EstimatedDelivery")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime?>("LastCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastEvent")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime?>("LastEventAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("NotifiedStatus")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Registered")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<int?>("SupplyTripId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TrackingNumber")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "Status");
+
+                    b.HasIndex("OrganizationId", "TrackingNumber")
+                        .IsUnique();
+
+                    b.ToTable("InboundPackages");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.Purchasing.PurchaseCandidate", b =>
@@ -2416,6 +2525,110 @@ namespace MarketplaceSync.Web.Migrations
                     b.HasIndex("OrganizationId", "Status", "DemandScore");
 
                     b.ToTable("PurchaseCandidates");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Purchasing.SupplyTrip", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("CrossingMxn")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("CustomsTaxesMxn")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("ExchangeRate")
+                        .HasColumnType("numeric(10,4)");
+
+                    b.Property<decimal>("FuelMxn")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("OtherMxn")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<int?>("PurchaseListId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "Date");
+
+                    b.ToTable("SupplyTrips");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Purchasing.SupplyTripItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<decimal?>("EstimatedUnitCostMxn")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<int?>("ProductVariantId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("RealUnitCostMxn")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("ShippingUsd")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<string>("Store")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<int>("SupplyTripId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("UnitCostUsd")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SupplyTripId");
+
+                    b.ToTable("SupplyTripItems");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.Questions.BuyerQuestion", b =>
@@ -3016,6 +3229,17 @@ namespace MarketplaceSync.Web.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Purchasing.SupplyTripItem", b =>
+                {
+                    b.HasOne("MarketplaceSync.Web.Models.Purchasing.SupplyTrip", "SupplyTrip")
+                        .WithMany("Items")
+                        .HasForeignKey("SupplyTripId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SupplyTrip");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.Questions.BuyerQuestion", b =>
                 {
                     b.HasOne("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", "MarketplaceAccount")
@@ -3150,6 +3374,11 @@ namespace MarketplaceSync.Web.Migrations
                     b.Navigation("InventoryMovements");
 
                     b.Navigation("MarketplacePublications");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Purchasing.SupplyTrip", b =>
+                {
+                    b.Navigation("Items");
                 });
 #pragma warning restore 612, 618
         }

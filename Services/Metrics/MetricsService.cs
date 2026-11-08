@@ -169,14 +169,15 @@ public sealed class MetricsService
                 p.Product.ImageUrl,
                 p.Product.SourcePrice,
                 p.Product.SourceCurrency,
-                p.Product.SourceMarketplace
+                p.Product.SourceMarketplace,
+                p.Product.RealLandedCostMxn
             })
             .ToListAsync(cancellationToken);
         var byItem = publications.GroupBy(p => p.ItemId).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
         decimal? LandedFor(string itemId) =>
-            byItem.TryGetValue(itemId, out var p) && p.SourcePrice is > 0 && p.SourceMarketplace is not ("MercadoLibre" or "MercadoLibreInsights")
-                ? _pricing.LandedCostMxn(p.SourcePrice.Value, p.SourceCurrency, settings)
+            byItem.TryGetValue(itemId, out var p)
+                ? MarketplaceSync.Services.Automation.ProductCost.Landed(p.RealLandedCostMxn, p.SourcePrice, p.SourceCurrency, p.SourceMarketplace, settings, _pricing)
                 : null;
         var landedCache = itemIds.ToDictionary(id => id, LandedFor, StringComparer.OrdinalIgnoreCase);
 

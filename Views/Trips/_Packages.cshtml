@@ -1,0 +1,71 @@
+@model (List<MarketplaceSync.Web.Models.Purchasing.InboundPackage> Packages, bool TrackingConfigured, int? TripId, Dictionary<int, string>? TripNames, List<(int Id, string Name)>? OpenTrips)
+@using System.Globalization
+@using MarketplaceSync.Services.Purchasing
+@{
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    var (packages, configured, tripId, tripNames, openTrips) = Model;
+}
+<section class="panel mt-3" id="paquetes" aria-labelledby="pk-title">
+    <div class="panel-head ad-head">
+        <div>
+            <h2 id="pk-title">@Html.Icon("package") Paquetes a El Paso</h2>
+            <p class="mb-0">@(configured ? "Se revisan solos cada 2 horas y te aviso por Telegram cuando salen a entrega o se entregan." : "Pega el número de guía y abre el rastreo con un clic. Para que se actualicen solos y te avise por Telegram, agrega Tracking17__ApiKey (17TRACK) en Render.")</p>
+        </div>
+        @if (configured && packages.Any(p => p.Status != "Delivered"))
+        {
+            <form asp-controller="Trips" asp-action="RefreshPackages" method="post" data-busy="Revisando…">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="tripId" value="@tripId" />
+                <button type="submit" class="btn btn-outline-secondary btn-sm">@Html.Icon("refresh-cw") Revisar ahora</button>
+            </form>
+        }
+    </div>
+    <form asp-controller="Trips" asp-action="AddPackage" method="post" class="panel-body pk-add">
+        @Html.AntiForgeryToken()
+        <input name="trackingNumber" class="form-control form-control-sm" placeholder="Número de guía (1Z…, 9400…, TBA…)" aria-label="Número de guía" required />
+        <input name="description" class="form-control form-control-sm" placeholder="Qué es (ej. faros Ranger, eBay)" aria-label="Qué es" maxlength="200" />
+        @if (tripId is not null)
+        {
+            <input type="hidden" name="tripId" value="@tripId" />
+        }
+        else if (openTrips is { Count: > 0 })
+        {
+            <select name="tripId" class="form-select form-select-sm" aria-label="Viaje">
+                <option value="">Sin viaje</option>
+                @foreach (var t in openTrips) { <option value="@t.Id">@t.Name</option> }
+            </select>
+        }
+        <button type="submit" class="btn btn-primary btn-sm">@Html.Icon("plus") Agregar guía</button>
+    </form>
+    @if (packages.Count > 0)
+    {
+        <div class="table-responsive">
+            <table class="data-table promo-table">
+                <thead><tr><th>Guía</th><th>Estado</th><th>Último movimiento</th><th>Llega</th><th aria-label="Acciones"></th></tr></thead>
+                <tbody>
+                    @foreach (var p in packages)
+                    {
+                        var tone = p.Status switch { "Delivered" => "pill-ok", "OutForDelivery" or "AvailableForPickup" => "pill-signal", "DeliveryFailure" or "Exception" => "pill-bad", "InTransit" => "pill-info", _ => "" };
+                        <tr>
+                            <td class="promo-title">
+                                <a href="@PackageTrackingService.TrackingUrl(p.Carrier, p.TrackingNumber)" target="_blank" rel="noopener">@PackageTrackingService.CarrierLabel(p.Carrier) @p.TrackingNumber @Html.Icon("external-link")</a>
+                                <span class="sub">@(p.Description ?? "—")@(tripId is null && p.SupplyTripId is { } st && tripNames is not null && tripNames.TryGetValue(st, out var tn) ? " · " + tn : "")</span>
+                            </td>
+                            <td data-label="Estado"><span class="pill @tone">@PackageTrackingService.StatusLabel(p.Status)</span></td>
+                            <td data-label="Último movimiento" class="small">@(string.IsNullOrWhiteSpace(p.LastEvent) ? "—" : p.LastEvent)@if (!string.IsNullOrWhiteSpace(p.Location)) { <span class="sub">@p.Location@(p.LastEventAt is { } at ? " · " + at.AddHours(-7).ToString("d MMM HH:mm", mx) : "")</span> }</td>
+                            <td data-label="Llega" class="text-nowrap">@(p.DeliveredAt is { } d ? "Llegó " + d.AddHours(-7).ToString("d MMM", mx) : p.EstimatedDelivery is { } eta ? eta.ToString("d MMM", mx) : "—")</td>
+                            <td class="promo-action text-nowrap">
+                                <form asp-controller="Trips" asp-action="Package" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="packageId" value="@p.Id" /><input type="hidden" name="tripId" value="@tripId" />
+                                    @if (p.Status != "Delivered") { <button type="submit" name="action" value="delivered" class="btn btn-link btn-sm p-0 me-2">Ya llegó</button> }
+                                    <button type="submit" name="action" value="archive" class="btn btn-link btn-sm p-0 text-muted">Quitar</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

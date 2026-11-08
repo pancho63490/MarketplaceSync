@@ -289,6 +289,22 @@ namespace MarketplaceSync.Services.Jobs
             await _telegram.PollAllAsync();
         }
 
+        /// <summary>Estado de los paquetes que llegan a El Paso (17TRACK) con aviso por Telegram.</summary>
+        [AutomaticRetry(Attempts = 0)]
+        [DisableConcurrentExecution(timeoutInSeconds: 600)]
+        public async Task RefreshPackages()
+        {
+            await _telegram.RefreshPackagesAllAsync();
+        }
+
+        /// <summary>Pagos de Mercado Pago: neto y fecha de liberación de cada venta; avisa diferencias.</summary>
+        [AutomaticRetry(Attempts = 0)]
+        [DisableConcurrentExecution(timeoutInSeconds: 900)]
+        public async Task ReconcilePayments()
+        {
+            await _telegram.ReconcilePaymentsAllAsync();
+        }
+
         /// <summary>Revisa que todo funcione y avisa por Telegram lo que falla (y cuando se arregla).</summary>
         [AutomaticRetry(Attempts = 0)]
         [DisableConcurrentExecution(timeoutInSeconds: 600)]

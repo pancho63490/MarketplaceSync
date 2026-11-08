@@ -90,6 +90,17 @@ No webhook is needed: a Hangfire job reads the bot every minute. Do not set a we
 
 `Facturama__BaseUrl` is only for tests.
 
+## Package tracking with 17TRACK (optional)
+
+1. Create an account at 17track.net → API (new accounts get a free quota of tracking numbers).
+2. In Render set `Tracking17__ApiKey` (the API key from the 17TRACK dashboard). Without it packages can still be added and marked delivered by hand.
+
+`Tracking17__BaseUrl` is only for tests.
+
+## Mercado Pago (money released per sale)
+
+No new key: the Dinero screen reads `/v1/payments/{id}` with the seller's Mercado Libre token. If Mercado Pago answers 401/403, give the Mercado Libre app the Mercado Pago permission in the developer panel and reconnect the account. `MercadoPago__ApiBaseUrl` is only for tests.
+
 ## Mercado Ads (optional)
 
 The Publicidad screen reads Product Ads with the seller's token (`/advertising/advertisers?product_id=PADS`, `/marketplace/advertising/{site}/advertisers/{id}/product_ads/campaigns|ads`). The Mercado Libre app needs the advertising permission in the developer panel; if it is missing the screen says "Sin Mercado Ads".

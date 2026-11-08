@@ -107,6 +107,8 @@ public sealed class AssistantController : Controller
             - Facturas CFDI: lista del mes y factura global al público en general: /Invoices; datos fiscales y CSD: /Invoices/Settings; facturar una venta: Pedidos → la venta → Factura (/Orders/Details/NÚMERO#factura)
             - Publicidad (Mercado Ads): gasto, ventas y ACOS por campaña y por anuncio, cuánto ganas con cada anuncio contra su ACOS máximo, pausar anuncios y cambiar presupuesto u objetivo de ACOS: /Ads  (?days=7, 30 o 90)
             - Revisar títulos (palabras prohibidas, inglés, términos de México, mayúsculas, símbolos; sugerencia con IA y cambiar los que no tienen ventas): /Titles
+            - Viajes a El Paso (lo que compraste, gasolina, cruce, impuestos; costo real por pieza al recibir) y paquetes con guía (UPS, USPS, FedEx, Amazon): /Trips
+            - Dinero de Mercado Pago (por liberar, próximas liberaciones, ventas donde te dejan diferente de lo esperado): /Money
             - Importar producto con IA: /Products/CreateFromUrl
             - Inventario (incluye caducidades por lote): /Inventory
             - Pedidos: /Orders

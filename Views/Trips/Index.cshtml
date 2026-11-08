@@ -1,0 +1,61 @@
+@model MarketplaceSync.Web.Controllers.TripsController.TripsIndexViewModel
+@using System.Globalization
+@using MarketplaceSync.Web.Models.Purchasing
+@{
+    ViewData["Title"] = "Viajes y paquetes";
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    var open = Model.Trips.Where(t => t.Trip.Status == SupplyTripStatus.Planning).Select(t => (t.Trip.Id, t.Trip.Name)).ToList();
+    var inTransit = Model.Packages.Count(p => p.Status != "Delivered");
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Viajes y paquetes</h1>
+        <p>Lo que compras en EE.UU. y lo que de verdad te cuesta traerlo. Al recibir un viaje, la gasolina, el cruce y los impuestos se reparten entre las piezas y la ganancia se calcula con ese costo real.</p>
+    </div>
+    <form asp-action="Create" method="post" class="trip-new">
+        @Html.AntiForgeryToken()
+        <input name="name" class="form-control form-control-sm" placeholder="Nombre (opcional)" aria-label="Nombre del viaje" maxlength="120" />
+        <input name="date" type="date" class="form-control form-control-sm" value="@MarketplaceSync.Services.Purchasing.SupplyTripService.TodayJuarez.ToString("yyyy-MM-dd")" aria-label="Fecha" />
+        <button type="submit" class="btn btn-primary btn-sm">@Html.Icon("plus") Nuevo viaje</button>
+    </form>
+</header>
+
+<dl class="stats">
+    <div class="stat"><dt>Viajes abiertos</dt><dd>@open.Count</dd></div>
+    <div class="stat @(inTransit > 0 ? "is-warn" : "")"><dt>Paquetes en camino</dt><dd>@inTransit</dd></div>
+    <div class="stat"><dt>Entregados en El Paso</dt><dd>@Model.Packages.Count(p => p.Status == "Delivered")</dd></div>
+    @{ var last = Model.Trips.FirstOrDefault(t => t.Trip.Status == SupplyTripStatus.Received); }
+    <div class="stat"><dt>Gastos del último viaje</dt><dd>@(last.Trip is null ? "—" : last.Breakdown.RealCrossingPercent.ToString("0.#", mx) + "%") <small>@(last.Trip is null ? "" : $"en Costos de cruce: {last.Breakdown.SettingsPercent.ToString("0.#", mx)}%")</small></dd></div>
+</dl>
+
+<section class="panel" aria-labelledby="tr-list">
+    <div class="panel-head"><h2 id="tr-list">Viajes</h2></div>
+    @if (Model.Trips.Count == 0)
+    {
+        <div class="panel-body"><p class="text-muted mb-0">Crea un viaje y agrega lo que compraste (o tráelo de la lista de compra aprobada).</p></div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="data-table promo-table">
+                <thead><tr><th>Viaje</th><th>Estado</th><th class="num">Piezas</th><th class="num">Costo real</th><th class="num">Gastos del viaje</th><th>Paquetes</th></tr></thead>
+                <tbody>
+                    @foreach (var (trip, b, packages, delivered) in Model.Trips)
+                    {
+                        <tr>
+                            <td class="promo-title"><a asp-action="Details" asp-route-id="@trip.Id">@trip.Name</a><span class="sub">@trip.Date.ToString("d MMM yyyy", mx)</span></td>
+                            <td data-label="Estado">@if (trip.Status == SupplyTripStatus.Received) { <span class="pill pill-ok">Recibido</span> } else { <span class="pill pill-info">Comprando</span> }</td>
+                            <td class="num" data-label="Piezas">@b.Pieces</td>
+                            <td class="num" data-label="Costo real">@b.TotalMxn.ToString("C0", mx)<span class="sub">US$@b.GoodsUsd.ToString("N2", mx)</span></td>
+                            <td class="num" data-label="Gastos del viaje">@trip.ExtrasMxn.ToString("C0", mx)<span class="sub">@b.RealCrossingPercent.ToString("0.#", mx)% de la mercancía</span></td>
+                            <td data-label="Paquetes">@(packages == 0 ? "—" : $"{delivered} de {packages} llegaron")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<partial name="_Packages" model="(Model.Packages, Model.TrackingConfigured, (int?)null, Model.TripNames, open)" />

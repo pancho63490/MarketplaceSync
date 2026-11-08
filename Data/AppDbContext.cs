@@ -52,6 +52,9 @@ namespace MarketplaceSync.Web.Data
         public DbSet<MarketplaceSync.Web.Models.Invoicing.InvoicingSettings> InvoicingSettings { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Invoicing.SalesInvoice> SalesInvoices { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Marketplace.BulkEditImport> BulkEditImports { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Purchasing.SupplyTrip> SupplyTrips { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Purchasing.SupplyTripItem> SupplyTripItems { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Purchasing.InboundPackage> InboundPackages { get; set; }
         public DbSet<MarketplaceSync.Web.Models.PostSale.OrderClaim> OrderClaims { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Agents.AgentStep> AgentSteps { get; set; }
 
@@ -372,6 +375,16 @@ namespace MarketplaceSync.Web.Data
             builder.Entity<MarketplaceSync.Web.Models.MarketInsights.CompetitorStore>(entity =>
             {
                 entity.HasIndex(x => new { x.OrganizationId, x.SellerId }).IsUnique();
+            });
+            builder.Entity<MarketplaceSync.Web.Models.Purchasing.SupplyTrip>(entity =>
+            {
+                entity.HasIndex(x => new { x.OrganizationId, x.Date });
+                entity.HasMany(x => x.Items).WithOne(i => i.SupplyTrip).HasForeignKey(i => i.SupplyTripId).OnDelete(DeleteBehavior.Cascade);
+            });
+            builder.Entity<MarketplaceSync.Web.Models.Purchasing.InboundPackage>(entity =>
+            {
+                entity.HasIndex(x => new { x.OrganizationId, x.TrackingNumber }).IsUnique();
+                entity.HasIndex(x => new { x.OrganizationId, x.Status });
             });
             builder.Entity<MarketplaceSync.Web.Models.Marketplace.BulkEditImport>(entity =>
                 entity.HasIndex(x => new { x.OrganizationId, x.CreatedAt }));
