@@ -175,6 +175,7 @@ builder.Services.AddScoped<MarketplaceSync.Services.Automation.RepricingService>
 builder.Services.AddScoped<MarketplaceSync.Services.Automation.WeeklyPurchaseService>();
 builder.Services.AddScoped<MarketplaceSync.Services.Automation.OrderProfitService>();
 builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.CompatibilityService>();
+builder.Services.AddScoped<MarketplaceSync.Services.Finance.FinanceReportService>();
 builder.Services.AddScoped<MarketplaceSync.Services.Notifications.TelegramAssistantService>();
 
 builder.Services.AddScoped<MercadoLibreCategoryService>();

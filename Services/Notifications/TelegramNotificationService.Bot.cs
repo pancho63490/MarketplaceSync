@@ -95,6 +95,10 @@ public sealed partial class TelegramNotificationService
             html.Append($"\n{(monthProfit < 0 ? "🔴 Pérdida" : "🟢 Ganancia")} del mes: <b>{E(Math.Abs(monthProfit).ToString("C0", Mx))}</b>")
                 .Append(withProfit.Count < monthOrders.Count ? $" ({withProfit.Count} de {monthOrders.Count} ventas con costo)" : "")
                 .Append("\n<i>Con el envío que cobró Mercado Libre, comisión y retención.</i>\n");
+            var finance = _services.GetRequiredService<MarketplaceSync.Services.Finance.FinanceReportService>();
+            var month = await finance.MonthAsync(org, today.Year, today.Month, cancellationToken);
+            if (month.ExpensesTotal > 0)
+                html.Append($"🧾 Gastos del mes: {E(month.ExpensesTotal.ToString("C0", Mx))} · <b>Ganancia neta: {E(month.NetProfit.ToString("C0", Mx))}</b>\n");
             var losses = withProfit.Count(o => o.RealProfitMxn < 0);
             if (losses > 0)
                 html.Append($"⚠️ {losses} {(losses == 1 ? "venta dejó" : "ventas dejaron")} pérdida este mes.\n");

@@ -146,6 +146,52 @@ public sealed partial class TelegramNotificationService
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Gastos
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>"/gasto 250 gasolina", "/gasto 35 usd render mensual", "/gasto 180.50 cajas".</summary>
+    private async Task HandleExpenseCommandAsync(string token, NotificationSettings settings, string args, long? messageId, CancellationToken cancellationToken)
+    {
+        var parsed = ParseExpense(args);
+        if (parsed is null)
+        {
+            await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value,
+                "Dime monto y qué fue, por ejemplo:\n<code>/gasto 250 gasolina</code>\n<code>/gasto 180 cajas medianas</code>\n<code>/gasto 7 usd render mensual</code>",
+                replyToMessageId: messageId, cancellationToken: cancellationToken);
+            return;
+        }
+
+        var (amount, currency, description, monthly) = parsed.Value;
+        var finance = Service<MarketplaceSync.Services.Finance.FinanceReportService>();
+        var expense = await finance.AddExpenseAsync(settings.OrganizationId, MarketplaceSync.Services.Finance.FinanceReportService.TodayJuarez,
+            MarketplaceSync.Web.Models.Finance.ExpenseCategories.Guess(description), description, amount, currency, monthly, "telegram", cancellationToken);
+        var today = MarketplaceSync.Services.Finance.FinanceReportService.TodayJuarez;
+        var month = await finance.MonthAsync(settings.OrganizationId, today.Year, today.Month, cancellationToken);
+        await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value,
+            $"🧾 Anotado: <b>{E(expense.Description)}</b> · {Money(expense.AmountMxn)}" +
+            (expense.Currency == "USD" ? $" (US${expense.Amount.ToString("0.00", CultureInfo.InvariantCulture)})" : "") +
+            $" · {E(MarketplaceSync.Web.Models.Finance.ExpenseCategories.Label(expense.Category))}" + (monthly ? " · cada mes" : "") +
+            $"\nGastos del mes: {Money(month.ExpensesTotal)} · Ganancia neta: <b>{Money(month.NetProfit)}</b>",
+            replyToMessageId: messageId, cancellationToken: cancellationToken);
+    }
+
+    public static (decimal Amount, string Currency, string Description, bool Monthly)? ParseExpense(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+        var match = System.Text.RegularExpressions.Regex.Match(text, @"\$?\s*(\d+(?:[.,]\d{1,2})?)");
+        if (!match.Success || !decimal.TryParse(match.Groups[1].Value.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out var amount) || amount <= 0)
+            return null;
+        var rest = (text[..match.Index] + " " + text[(match.Index + match.Length)..]).Trim();
+        var lower = rest.ToLowerInvariant();
+        var currency = System.Text.RegularExpressions.Regex.IsMatch(lower, @"\b(usd|us\$|dlls?|d[oó]lares?)\b") ? "USD" : "MXN";
+        var monthly = System.Text.RegularExpressions.Regex.IsMatch(lower, @"\b(mensual|cada mes|al mes)\b");
+        var description = System.Text.RegularExpressions.Regex.Replace(rest, @"(?i)\b(usd|us\$|dlls?|d[oó]lares?|pesos|mxn|mensual|cada mes|al mes|en|de)\b", " ");
+        description = System.Text.RegularExpressions.Regex.Replace(description, @"\s+", " ").Trim(' ', '-', ':', ',');
+        return (amount, currency, description.Length == 0 ? "Gasto" : char.ToUpper(description[0]) + description[1..], monthly);
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Lo diario: precios, etiquetas y compra semanal
     // ─────────────────────────────────────────────────────────────
 

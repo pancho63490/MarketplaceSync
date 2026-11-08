@@ -35,6 +35,7 @@ public sealed class TelegramAssistantService
     private readonly BotActionService _actions;
     private readonly Hangfire.IBackgroundJobClient _jobs;
     private readonly ILogger<TelegramAssistantService> _logger;
+    private readonly IServiceProvider _services;
 
     public TelegramAssistantService(
         AppDbContext context,
@@ -43,8 +44,10 @@ public sealed class TelegramAssistantService
         PublicationEconomics economics,
         BotActionService actions,
         Hangfire.IBackgroundJobClient jobs,
-        ILogger<TelegramAssistantService> logger)
+        ILogger<TelegramAssistantService> logger,
+        IServiceProvider services)
     {
+        _services = services;
         _context = context;
         _claude = claude;
         _pricing = pricing;
@@ -122,6 +125,8 @@ public sealed class TelegramAssistantService
                         "proponer_pausar" => await ProposeStatusAsync(org, Int(input, "publicacion_id"), BotActionKinds.Pause, actions, cancellationToken),
                         "proponer_activar" => await ProposeStatusAsync(org, Int(input, "publicacion_id"), BotActionKinds.Activate, actions, cancellationToken),
                         "encargar_busqueda" => Enqueue(org, Str(input, "texto")),
+                        "registrar_gasto" => await AddExpenseAsync(org, input, cancellationToken),
+                        "ganancia_del_mes" => await MonthAsync(org, cancellationToken),
                         "mandar_etiquetas" => Flag(ref sendLabels, "Listo: las etiquetas se mandan en un mensaje aparte."),
                         "lista_de_compra" => Flag(ref sendPurchase, "Listo: la lista de compra se manda en un mensaje aparte."),
                         _ => "Herramienta desconocida."
@@ -185,6 +190,15 @@ public sealed class TelegramAssistantService
         Tool("proponer_activar", "Propone activar una publicación pausada.", new JsonObject { ["publicacion_id"] = Prop("integer", "id") }, "publicacion_id"),
         Tool("encargar_busqueda", "El agente de importación busca productos en Mercado Libre y eBay e importa lo que convenga.",
             new JsonObject { ["texto"] = Prop("string", "qué buscar, ej. 'faros Ford Ranger 2019'") }, "texto"),
+        Tool("registrar_gasto", "Anota un gasto del negocio que no pasa por Mercado Libre (gasolina, cruce, cajas, Render…). Úsalo cuando diga 'gasté', 'pagué', 'anota un gasto'.",
+            new JsonObject
+            {
+                ["monto"] = Prop("number", "monto"),
+                ["moneda"] = Enum("MXN", "USD"),
+                ["descripcion"] = Prop("string", "qué fue, corto: 'Cajas medianas', 'Gasolina viaje a El Paso'"),
+                ["mensual"] = Prop("boolean", "true si se repite cada mes (Render, internet)")
+            }, "monto", "descripcion"),
+        Tool("ganancia_del_mes", "Ganancia neta del mes: ventas, ganancia de las ventas, gastos y neta.", new JsonObject()),
         Tool("mandar_etiquetas", "Manda ahora el PDF de etiquetas y la lista de empaque de los pedidos por enviar.", new JsonObject()),
         Tool("lista_de_compra", "Manda ahora la lista de qué recomprar en EE.UU. para aprobarla.", new JsonObject())
     };
@@ -346,6 +360,45 @@ public sealed class TelegramAssistantService
         var action = await _actions.ProposeAsync(org, kind, publication.Id, null, description, "assistant", cancellationToken);
         actions.Add(action);
         return $"Propuesto: {description}. El vendedor debe confirmarlo con el botón.";
+    }
+
+    private async Task<string> AddExpenseAsync(Guid org, JsonElement input, CancellationToken cancellationToken)
+    {
+        var amount = Dec(input, "monto");
+        var description = Str(input, "descripcion");
+        if (amount is not > 0 || string.IsNullOrWhiteSpace(description))
+            return "Falta el monto o qué fue.";
+        var monthly = input.ValueKind == JsonValueKind.Object && input.TryGetProperty("mensual", out var m) && m.ValueKind == JsonValueKind.True;
+        var finance = _services.GetRequiredService<MarketplaceSync.Services.Finance.FinanceReportService>();
+        var expense = await finance.AddExpenseAsync(org, MarketplaceSync.Services.Finance.FinanceReportService.TodayJuarez,
+            MarketplaceSync.Web.Models.Finance.ExpenseCategories.Guess(description), description, amount.Value, Str(input, "moneda") ?? "MXN", monthly, "telegram", cancellationToken);
+        return JsonSerializer.Serialize(new
+        {
+            anotado = expense.Description,
+            monto_mxn = Money(expense.AmountMxn),
+            categoria = MarketplaceSync.Web.Models.Finance.ExpenseCategories.Label(expense.Category),
+            mensual = expense.IsMonthly
+        });
+    }
+
+    private async Task<string> MonthAsync(Guid org, CancellationToken cancellationToken)
+    {
+        var finance = _services.GetRequiredService<MarketplaceSync.Services.Finance.FinanceReportService>();
+        var today = MarketplaceSync.Services.Finance.FinanceReportService.TodayJuarez;
+        var r = await finance.MonthAsync(org, today.Year, today.Month, cancellationToken);
+        return JsonSerializer.Serialize(new
+        {
+            mes = r.Title,
+            ventas = Money(r.Charged),
+            numero_de_ventas = r.Sales.Count,
+            ganancia_de_ventas = Money(r.SalesProfit),
+            ventas_sin_costo = r.SalesWithoutCost,
+            gastos = Money(r.ExpensesTotal),
+            ganancia_neta = Money(r.NetProfit),
+            retenciones = Money(r.Tax),
+            comisiones = Money(r.Fees),
+            envios = Money(r.Shipping)
+        });
     }
 
     private string Enqueue(Guid org, string? request)

@@ -48,6 +48,7 @@ namespace MarketplaceSync.Web.Data
         public DbSet<MarketplaceSync.Web.Models.Automation.AssistantTurn> AssistantTurns { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Automation.PurchaseList> PurchaseLists { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Automation.PurchaseListItem> PurchaseListItems { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Finance.BusinessExpense> BusinessExpenses { get; set; }
         public DbSet<MarketplaceSync.Web.Models.PostSale.OrderClaim> OrderClaims { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Agents.AgentStep> AgentSteps { get; set; }
 
@@ -369,6 +370,8 @@ namespace MarketplaceSync.Web.Data
             {
                 entity.HasIndex(x => new { x.OrganizationId, x.SellerId }).IsUnique();
             });
+            builder.Entity<MarketplaceSync.Web.Models.Finance.BusinessExpense>(entity =>
+                entity.HasIndex(x => new { x.OrganizationId, x.Date }));
             builder.Entity<MarketplaceSync.Web.Models.Automation.BotAction>(entity =>
             {
                 entity.HasIndex(x => new { x.OrganizationId, x.Status });

@@ -1,0 +1,146 @@
+@model MarketplaceSync.Services.Finance.MonthReport
+@using System.Globalization
+@using MarketplaceSync.Web.Models.Finance
+@{
+    ViewData["Title"] = "Gastos y ganancia";
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    string Mxn(decimal v) => v.ToString("C0", mx);
+    var current = new DateOnly(Model.Year, Model.Month, 1);
+    var prev = current.AddMonths(-1);
+    var next = current.AddMonths(1);
+    var today = MarketplaceSync.Services.Finance.FinanceReportService.TodayJuarez;
+    var isCurrentMonth = today.Year == Model.Year && today.Month == Model.Month;
+    var defaultDate = isCurrentMonth ? today : new DateOnly(Model.Year, Model.Month, DateTime.DaysInMonth(Model.Year, Model.Month));
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Gastos y ganancia</h1>
+        <p>Lo que de verdad te queda en el mes: la ganancia de tus ventas menos los gastos del negocio que no pasan por Mercado Libre.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <nav class="fin-month" aria-label="Mes">
+            <a class="icon-btn" asp-action="Index" asp-route-year="@prev.Year" asp-route-month="@prev.Month" aria-label="Mes anterior">‹</a>
+            <strong>@Model.Title</strong>
+            @if (!isCurrentMonth)
+            {
+                <a class="icon-btn" asp-action="Index" asp-route-year="@next.Year" asp-route-month="@next.Month" aria-label="Mes siguiente">›</a>
+            }
+        </nav>
+        <a class="btn btn-primary btn-sm" asp-action="Export" asp-route-year="@Model.Year" asp-route-month="@Model.Month">@Html.Icon("download") Excel para el contador</a>
+    </div>
+</header>
+
+<dl class="stats stagger">
+    <div class="stat"><dt>Ventas cobradas</dt><dd>@Mxn(Model.Charged) <small>@Model.Sales.Count ventas</small></dd></div>
+    <div class="stat @(Model.SalesProfit < 0 ? "is-bad" : "is-ok")"><dt>Ganancia de las ventas</dt><dd>@Mxn(Model.SalesProfit)</dd></div>
+    <div class="stat"><dt>Gastos del negocio</dt><dd>@Mxn(Model.ExpensesTotal) <small>@Model.Expenses.Count gastos</small></dd></div>
+    <div class="stat @(Model.NetProfit < 0 ? "is-bad" : "is-ok")"><dt>Ganancia neta</dt><dd>@Mxn(Model.NetProfit)</dd></div>
+</dl>
+
+<div class="fin-grid">
+    <section class="panel" aria-labelledby="fin-add">
+        <div class="panel-head">
+            <h2 id="fin-add">@Html.Icon("plus") Anotar un gasto</h2>
+            <p>También desde Telegram: <code>/gasto 250 gasolina</code> o «gasté 180 en cajas».</p>
+        </div>
+        <form asp-action="Add" method="post" class="panel-body fin-form">
+            @Html.AntiForgeryToken()
+            <div class="fin-amount">
+                <label class="form-label" for="fAmount">Monto</label>
+                <div class="input-group">
+                    <span class="input-group-text">$</span>
+                    <input id="fAmount" name="amount" class="form-control" inputmode="decimal" placeholder="250" required autocomplete="off" />
+                    <select name="currency" class="form-select" style="max-width: 6rem" aria-label="Moneda">
+                        <option value="MXN">MXN</option>
+                        <option value="USD">US$</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="form-label" for="fCat">Categoría</label>
+                <select id="fCat" name="category" class="form-select">
+                    <option value="">Que la adivine</option>
+                    @foreach (var c in ExpenseCategories.All)
+                    {
+                        <option value="@c.Id" title="@c.Hint">@c.Label</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="fDesc">Qué fue</label>
+                <input id="fDesc" name="description" class="form-control" maxlength="200" placeholder="Cajas medianas (paquete de 25)" />
+            </div>
+            <div>
+                <label class="form-label" for="fDate">Fecha</label>
+                <input id="fDate" name="date" type="date" class="form-control" value="@defaultDate.ToString("yyyy-MM-dd")" />
+            </div>
+            <label class="form-check fin-monthly">
+                <input type="checkbox" class="form-check-input" name="monthly" value="true" />
+                <span class="form-check-label">Se repite cada mes (Render, internet, teléfono…)</span>
+            </label>
+            <button type="submit" class="btn btn-primary">Anotar</button>
+        </form>
+    </section>
+
+    <section class="panel" aria-labelledby="fin-sum">
+        <div class="panel-head"><h2 id="fin-sum">Cómo sale la ganancia</h2></div>
+        <div class="panel-body">
+            <dl class="fin-waterfall">
+                <div><dt>Ventas cobradas</dt><dd>@Mxn(Model.Charged)</dd></div>
+                <div class="is-minus"><dt>Comisiones de Mercado Libre</dt><dd>−@Mxn(Model.Fees)</dd></div>
+                <div class="is-minus"><dt>Envíos a tu cargo</dt><dd>−@Mxn(Model.Shipping)</dd></div>
+                <div class="is-minus"><dt>Retenciones ISR + IVA <small>(@Model.WithholdingPercent.ToString("0.##", mx)% del precio)</small></dt><dd>−@Mxn(Model.Tax)</dd></div>
+                <div class="is-minus"><dt>Costo de lo vendido</dt><dd>−@Mxn(Model.CostOfGoods)</dd></div>
+                <div class="is-total"><dt>Ganancia de las ventas</dt><dd>@Mxn(Model.SalesProfit)</dd></div>
+                <div class="is-minus"><dt>Gastos del negocio</dt><dd>−@Mxn(Model.ExpensesTotal)</dd></div>
+                <div class="is-total @(Model.NetProfit < 0 ? "is-bad" : "")"><dt>Ganancia neta</dt><dd>@Mxn(Model.NetProfit)</dd></div>
+            </dl>
+            @if (Model.SalesWithoutCost > 0)
+            {
+                <p class="small text-muted mt-2 mb-0">@Model.SalesWithoutCost @(Model.SalesWithoutCost == 1 ? "venta no tiene" : "ventas no tienen") costo capturado: su ganancia no se cuenta. Captúralo en <a asp-controller="Publications" asp-action="Index" asp-route-filter="nocost">Publicados</a>.</p>
+            }
+            @if (Model.PurchasesUsd > 0)
+            {
+                <p class="small text-muted mt-2 mb-0">Compraste US$@Model.PurchasesUsd.ToString("N2", CultureInfo.InvariantCulture) en EE.UU. este mes. No se resta aquí: entra como costo cuando se vende.</p>
+            }
+        </div>
+    </section>
+</div>
+
+<section class="panel" aria-labelledby="fin-list">
+    <div class="panel-head"><h2 id="fin-list">Gastos de @Model.Title.ToLower(mx)</h2></div>
+    @if (Model.Expenses.Count == 0)
+    {
+        <div class="panel-body"><p class="text-muted mb-0">Sin gastos anotados este mes.</p></div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead><tr><th>Fecha</th><th>Categoría</th><th>Qué fue</th><th class="num">Monto</th><th aria-label="Quitar"></th></tr></thead>
+                <tbody data-auto-animate>
+                    @foreach (var e in Model.Expenses)
+                    {
+                        <tr>
+                            <td class="text-nowrap">@e.Date.ToString("dd/MM")</td>
+                            <td>@ExpenseCategories.Label(e.Category)</td>
+                            <td>@e.Description
+                                @if (e.IsMonthly) { <span class="pill">cada mes</span> }
+                                @if (e.Source == "telegram") { <span class="pill pill-signal" title="Anotado desde Telegram">Telegram</span> }
+                            </td>
+                            <td class="num fw-bold">@e.AmountMxn.ToString("C2", mx)@if (e.Currency == "USD") { <span class="sub">US$@e.Amount.ToString("N2", CultureInfo.InvariantCulture)</span> }</td>
+                            <td>
+                                <form asp-action="Remove" method="post" onsubmit="return confirm('@(e.IsMonthly ? "¿Dejar de contar este gasto desde este mes?" : "¿Quitar este gasto?")')">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@e.Id" /><input type="hidden" name="year" value="@Model.Year" /><input type="hidden" name="month" value="@Model.Month" />
+                                    <button type="submit" class="icon-btn" aria-label="Quitar gasto">@Html.Icon("trash-2")</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

@@ -2143,3 +2143,23 @@ body {
 .compat-row .c-status .pill { font-size: .72rem; white-space: nowrap; }
 @media (max-width: 480px) { .compat-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px; grid-template-areas: "brand model x" "from to ." "note note note" "status status status"; } .compat-head { display: none; } .compat-row .c-status { justify-content: flex-start; } }
 .pe-compat-send { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; margin-top: 1rem; padding-top: .9rem; border-top: 1px solid var(--line); }
+
+/* Gastos y ganancia */
+.fin-month { display: inline-flex; align-items: center; gap: .35rem; padding: .15rem .35rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.fin-month strong { font-size: .9rem; padding: 0 .35rem; white-space: nowrap; }
+.fin-month .icon-btn { width: 30px; height: 30px; font-size: 1.1rem; text-decoration: none; }
+.fin-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.25rem; margin-bottom: 1.25rem; }
+@media (max-width: 860px) { .fin-grid { grid-template-columns: minmax(0, 1fr); } }
+.fin-form { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem 1rem; align-items: end; }
+.fin-form .fin-amount, .fin-form .fin-monthly, .fin-form > .btn { grid-column: 1 / -1; }
+.fin-form > .btn { justify-self: start; }
+@media (max-width: 480px) { .fin-form { grid-template-columns: 1fr; } }
+.fin-waterfall { margin: 0; }
+.fin-waterfall > div { display: flex; justify-content: space-between; gap: 1rem; padding: .4rem 0; border-bottom: 1px dashed var(--line); }
+.fin-waterfall dt { font-weight: 500; color: var(--ink-2, var(--ink)); }
+.fin-waterfall dt small { color: var(--muted); font-weight: 400; }
+.fin-waterfall dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.fin-waterfall .is-minus dd { color: var(--muted); }
+.fin-waterfall .is-total { border-bottom: 0; border-top: 1px solid var(--line); padding-top: .55rem; }
+.fin-waterfall .is-total dt, .fin-waterfall .is-total dd { font-weight: 800; color: var(--ink); }
+.fin-waterfall .is-total.is-bad dd { color: var(--bad); }

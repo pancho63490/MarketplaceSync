@@ -422,6 +422,9 @@ public sealed partial class TelegramNotificationService
             case "/resumen":
                 await SendSummaryAsync(token, settings, force: true, cancellationToken);
                 break;
+            case "/gasto":
+                await HandleExpenseCommandAsync(token, settings, text.Split(' ', 2) is { Length: 2 } gp ? gp[1] : string.Empty, update.MessageId, cancellationToken);
+                break;
             case "/etiquetas":
                 await SendLabelsAsync(token, settings, force: true, cancellationToken);
                 break;
@@ -444,6 +447,7 @@ public sealed partial class TelegramNotificationService
                     "/resumen — ventas de ayer y lo pendiente de hoy\n" +
                     "/etiquetas — el PDF de etiquetas y qué empacar\n" +
                     "/compra — qué recomprar en EE.UU. esta semana\n" +
+                    "/gasto 250 gasolina — anotar un gasto del negocio\n" +
                     "/precios — revisar qué publicaciones ya no ganan lo mínimo\n\n" +
                     "💬 <b>O escríbeme normal</b>: «¿cuánto vendí hoy?», «sube el faro de Tacoma a 3500», «pausa las balatas».\n\n" +
                     "📥 <b>Mándame un link</b> de Amazon, eBay, Walmart o AliExpress y lo importo como producto. " +

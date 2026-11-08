@@ -111,7 +111,7 @@ public sealed class OrderProfitService
     }
 
     /// <summary>Costo puesto en Juárez por pieza, por número de publicación MLM (null = sin costo capturado).</summary>
-    private async Task<Dictionary<string, decimal?>> LandedCostsAsync(
+    public async Task<Dictionary<string, decimal?>> LandedCostsAsync(
         Guid org, List<SalesOrderItem> items, MarketplaceSync.Web.Models.CrossBorder.CrossBorderSettings settings, CancellationToken cancellationToken)
     {
         var itemIds = items.Select(i => i.ExternalItemId).Distinct().ToList();
