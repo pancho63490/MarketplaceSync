@@ -1182,6 +1182,57 @@ namespace MarketplaceSync.Web.Migrations
                     b.ToTable("BulkEditImports");
                 });
 
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.ItemReview", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime?>("BuyingDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Content")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("PublicationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Rate")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PublicationId");
+
+                    b.HasIndex("OrganizationId", "CreatedAt");
+
+                    b.HasIndex("OrganizationId", "ExternalId")
+                        .IsUnique();
+
+                    b.ToTable("ItemReviews");
+                });
+
             modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", b =>
                 {
                     b.Property<int>("Id")
@@ -1403,6 +1454,22 @@ namespace MarketplaceSync.Web.Migrations
 
                     b.Property<int?>("QualityScore")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("QuantityPricesCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("QuantityPricesJson")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<decimal?>("RatingAverage")
+                        .HasColumnType("numeric(3,2)");
+
+                    b.Property<int?>("RatingCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ReviewsCheckedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal?>("SaleFeeForPrice")
                         .HasColumnType("numeric(18,2)");
@@ -1985,6 +2052,46 @@ namespace MarketplaceSync.Web.Migrations
                         .IsUnique();
 
                     b.ToTable("BlockedBuyers");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.PostSale.MessageTemplate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(350)
+                        .HasColumnType("character varying(350)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UseCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "SortOrder");
+
+                    b.ToTable("MessageTemplates");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.PostSale.OrderClaim", b =>
@@ -3104,6 +3211,17 @@ namespace MarketplaceSync.Web.Migrations
                     b.Navigation("Organization");
 
                     b.Navigation("ParentWatchedCategory");
+                });
+
+            modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.ItemReview", b =>
+                {
+                    b.HasOne("MarketplaceSync.Web.Models.Marketplace.MarketplacePublication", "Publication")
+                        .WithMany()
+                        .HasForeignKey("PublicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Publication");
                 });
 
             modelBuilder.Entity("MarketplaceSync.Web.Models.Marketplace.MarketplaceAccount", b =>

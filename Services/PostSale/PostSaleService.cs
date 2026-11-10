@@ -30,15 +30,6 @@ public sealed class PostSaleService
     /// <summary>Mercado Libre corta los mensajes de postventa a 350 caracteres.</summary>
     public const int MaxMessageLength = 350;
 
-    public static readonly string[] Templates =
-    {
-        "¡Gracias por tu compra! Ya estamos preparando tu pedido y te aviso en cuanto salga.",
-        "Tu pedido ya va en camino. Puedes seguirlo desde tu compra en Mercado Libre. ¡Saludos!",
-        "Para asegurar que te quede, ¿me confirmas el año, modelo y motor de tu vehículo?",
-        "¿Ya te llegó tu pedido? Cualquier duda con la instalación aquí estoy para ayudarte.",
-        "Lamento el inconveniente. Cuéntame qué pasó y con gusto lo resolvemos."
-    };
-
     private static readonly CultureInfo Mx = CultureInfo.GetCultureInfo("es-MX");
 
     private readonly AppDbContext _context;
@@ -458,6 +449,14 @@ public sealed class PostSaleService
         prompt.AppendLine("Conversación (más antigua primero):");
         foreach (var m in messages.AsEnumerable().Reverse())
             prompt.AppendLine((m.FromSeller ? "Vendedor: " : "Comprador: ") + m.Text);
+        var templates = await _context.MessageTemplates.AsNoTracking().Where(t => t.OrganizationId == org)
+            .OrderBy(t => t.SortOrder).Take(20).ToListAsync(cancellationToken);
+        if (templates.Count > 0)
+        {
+            prompt.AppendLine("Respuestas que el vendedor tiene guardadas (si una aplica, úsala adaptada; respeta su tono):");
+            foreach (var t in templates)
+                prompt.AppendLine("- " + MessageTemplateService.Render(t.Text, order));
+        }
         var reply = await _claude.CompleteAsync(
             "Eres el vendedor de una tienda de refacciones en Mercado Libre México. Escribe la respuesta al último mensaje del comprador: " +
             "amable, clara, en español de México, máximo 300 caracteres, sin teléfonos, correos, links ni datos de contacto, " +
@@ -528,6 +527,9 @@ public sealed class PostSaleService
     /// Quita la frase completa que trae teléfono, correo o link (Mercado Libre bloquea el mensaje entero),
     /// para que no queden pedazos como "Mi cel es".
     /// </summary>
+    /// <summary>El texto trae teléfono, correo o link (Mercado Libre lo bloquearía).</summary>
+    public bool HasContactData(string text) => CleanContact(text).Removed;
+
     private (string Text, bool Removed) CleanContact(string text)
     {
         var sentences = System.Text.RegularExpressions.Regex.Split(text.Trim(), @"(?<=[.!?¡¿\n])\s+");

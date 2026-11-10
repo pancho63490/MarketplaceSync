@@ -530,13 +530,65 @@ public sealed partial class TelegramNotificationService
             var order = await _context.SalesOrders.AsNoTracking().Include(o => o.Items).FirstOrDefaultAsync(o => o.Id == m.SalesOrderId, cancellationToken);
             var html = $"💬 <b>Mensaje de {E(order?.BuyerNickname ?? "un comprador")}</b>\n" +
                        (order?.Items.FirstOrDefault()?.Title is { } title ? $"<b>{E(Shorten(title, 70))}</b>\n" : "") +
-                       $"«{E(Shorten(m.Text, 600))}»\n\n<i>Responde a este mensaje para contestarle.</i>";
-            var buttons = settings.PublicBaseUrl is null
-                ? null
-                : new List<IReadOnlyList<TelegramButton>> { new[] { new TelegramButton("Abrir conversación", Url: AppUrl(settings, $"/Orders/Details/{m.SalesOrderId}#conversacion")) } };
-            var messageId = await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, html, buttons, cancellationToken: cancellationToken);
+                       $"«{E(Shorten(m.Text, 600))}»\n\n<i>Responde a este mensaje para contestarle, o elige un mensaje rápido.</i>";
+            var buttons = new List<IReadOnlyList<TelegramButton>>(await QuickReplyButtonsAsync(org, m.SalesOrderId!.Value, m.Text, cancellationToken));
+            if (settings.PublicBaseUrl is not null)
+                buttons.Add(new[] { new TelegramButton("Abrir conversación", Url: AppUrl(settings, $"/Orders/Details/{m.SalesOrderId}#conversacion")) });
+            var messageId = await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, html, buttons.Count == 0 ? null : buttons, cancellationToken: cancellationToken);
             await LogAsync(org, "msg:" + m.ExternalId, NotificationKind.BuyerMessage, m.SalesOrderId!.Value.ToString(CultureInfo.InvariantCulture), settings.TelegramChatId, messageId, cancellationToken);
         }
+    }
+
+    /// <summary>Hasta 3 mensajes rápidos (el que eligió la IA primero, luego los más usados) y «Respuesta con IA».</summary>
+    private async Task<List<IReadOnlyList<TelegramButton>>> QuickReplyButtonsAsync(Guid org, int orderId, string buyerText, CancellationToken cancellationToken)
+    {
+        var rows = new List<IReadOnlyList<TelegramButton>>();
+        try
+        {
+            var templatesService = Service<MarketplaceSync.Services.PostSale.MessageTemplateService>();
+            var templates = await templatesService.ListAsync(org, cancellationToken);
+            var picked = await templatesService.PickAsync(templates, buyerText, cancellationToken);
+            var choices = templates.OrderByDescending(t => t.Id == picked?.Id).ThenByDescending(t => t.UseCount).ThenBy(t => t.SortOrder).Take(3).ToList();
+            foreach (var t in choices)
+                rows.Add(new[] { new TelegramButton((t.Id == picked?.Id ? "⭐ " : "📋 ") + Shorten(t.Title, 40), CallbackData: $"mt:{t.Id}-{orderId}") });
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(exception, "Quick replies unavailable for order {Order}.", orderId);
+        }
+        if (Service<MarketplaceSync.Services.Ai.ClaudeClient>().IsConfigured)
+            rows.Add(new[] { new TelegramButton("✨ Respuesta con IA", CallbackData: $"ms:{orderId}") });
+        return rows;
+    }
+
+    /// <summary>Muestra el mensaje que se le mandaría al comprador con ✅ Enviar / ✖️ Cancelar.</summary>
+    private async Task ProposeBuyerMessageAsync(string token, NotificationSettings settings, int orderId, string text, int? templateId, long? replyTo, CancellationToken cancellationToken)
+    {
+        var org = settings.OrganizationId;
+        var order = await _context.SalesOrders.AsNoTracking().FirstOrDefaultAsync(o => o.Id == orderId && o.OrganizationId == org, cancellationToken);
+        if (order is null)
+        {
+            await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, "Ya no encontré ese pedido.", cancellationToken: cancellationToken);
+            return;
+        }
+        var action = new MarketplaceSync.Web.Models.Automation.BotAction
+        {
+            OrganizationId = org,
+            Kind = MarketplaceSync.Web.Models.Automation.BotActionKinds.BuyerMessage,
+            Description = $"Mandar mensaje a {Shorten(order.BuyerNickname ?? "el comprador", 40)}",
+            Payload = System.Text.Json.JsonSerializer.Serialize(new { orderId, text, templateId = templateId ?? 0 }),
+            Source = "postsale"
+        };
+        _context.BotActions.Add(action);
+        await _context.SaveChangesAsync(cancellationToken);
+        var buttons = new List<IReadOnlyList<TelegramButton>>
+        {
+            new[] { new TelegramButton("✅ Enviar", CallbackData: $"ax:{action.Id}"), new TelegramButton("✖️ Cancelar", CallbackData: $"an:{action.Id}") }
+        };
+        var messageId = await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value,
+            $"✉️ Le mandaré a <b>{E(order.BuyerNickname ?? "el comprador")}</b>:\n«{E(text)}»\n\n<i>Si quieres cambiarlo, mejor responde al aviso con tu texto.</i>",
+            buttons, replyToMessageId: replyTo, cancellationToken: cancellationToken);
+        await _context.BotActions.Where(a => a.Id == action.Id).ExecuteUpdateAsync(u => u.SetProperty(a => a.TelegramMessageId, messageId), cancellationToken);
     }
 
     /// <summary>Un aviso cuando se abre un reclamo y otro si pasa a disputa (interviene Mercado Libre).</summary>

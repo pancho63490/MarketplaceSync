@@ -110,6 +110,9 @@ public sealed class AssistantController : Controller
             - Viajes a El Paso (lo que compraste, gasolina, cruce, impuestos; costo real por pieza al recibir) y paquetes con guía (UPS, USPS, FedEx, Amazon): /Trips
             - Dinero de Mercado Pago (por liberar, próximas liberaciones, ventas donde te dejan diferente de lo esperado): /Money
             - Precio automático de Mercado Libre (sube y baja el precio para competir sin bajar de la ganancia mínima): en Editar publicación, sección Precio automático, o en Publicados seleccionando varias → «Precio automático»
+            - Opiniones de compradores (promedio de estrellas, opiniones malas recientes, peor calificadas): /Quality#opiniones
+            - Mensajes rápidos de postventa (respuestas guardadas con el nombre del comprador y el producto): /PostSale?tab=templates
+            - Precio por cantidad (descuento por llevar varias piezas, sin bajar del mínimo): en Editar publicación
             - Calidad y catálogo (publicaciones de catálogo que pierden el botón de compra y a qué precio ganarían; calificación de calidad de Mercado Libre y qué le falta a cada publicación): /Quality
             - Importar producto con IA: /Products/CreateFromUrl
             - Inventario (incluye caducidades por lote): /Inventory

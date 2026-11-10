@@ -86,6 +86,7 @@ public sealed class BotActionService
                 BotActionKinds.Invoice => await InvoiceAsync(org, action, cancellationToken),
                 BotActionKinds.GlobalInvoice => await GlobalInvoiceAsync(org, action, cancellationToken),
                 BotActionKinds.AdPause => await AdPauseAsync(org, action, cancellationToken),
+                BotActionKinds.BuyerMessage => await BuyerMessageAsync(org, action, cancellationToken),
                 _ => "No sé hacer esa acción."
             };
         }
@@ -210,6 +211,24 @@ public sealed class BotActionService
             .SetAdStatusAsync(org, PayloadInt(action, "accountId"), itemId, "paused", cancellationToken);
         if (ok) action.Description = message;
         return ok ? null : message;
+    }
+
+    private async Task<string?> BuyerMessageAsync(Guid org, BotAction action, CancellationToken cancellationToken)
+    {
+        string? text = null;
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(action.Payload ?? "{}");
+            if (document.RootElement.TryGetProperty("text", out var t) && t.ValueKind == System.Text.Json.JsonValueKind.String) text = t.GetString();
+        }
+        catch (System.Text.Json.JsonException) { }
+        var orderId = PayloadInt(action, "orderId");
+        if (orderId == 0 || string.IsNullOrWhiteSpace(text)) return "No encontré el mensaje.";
+        var error = await _services.GetRequiredService<MarketplaceSync.Services.PostSale.PostSaleService>().SendMessageAsync(org, orderId, text, cancellationToken);
+        if (error is null && PayloadInt(action, "templateId") is > 0 and var templateId)
+            await _services.GetRequiredService<MarketplaceSync.Services.PostSale.MessageTemplateService>().MarkUsedAsync(org, templateId, cancellationToken);
+        if (error is null) action.Description = "Mensaje enviado al comprador";
+        return error;
     }
 
     private async Task<string?> PriceAsync(Guid org, BotAction action, CancellationToken cancellationToken)

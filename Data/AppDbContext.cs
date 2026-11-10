@@ -55,6 +55,8 @@ namespace MarketplaceSync.Web.Data
         public DbSet<MarketplaceSync.Web.Models.Purchasing.SupplyTrip> SupplyTrips { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Purchasing.SupplyTripItem> SupplyTripItems { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Purchasing.InboundPackage> InboundPackages { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.Marketplace.ItemReview> ItemReviews { get; set; }
+        public DbSet<MarketplaceSync.Web.Models.PostSale.MessageTemplate> MessageTemplates { get; set; }
         public DbSet<MarketplaceSync.Web.Models.PostSale.OrderClaim> OrderClaims { get; set; }
         public DbSet<MarketplaceSync.Web.Models.Agents.AgentStep> AgentSteps { get; set; }
 
@@ -386,6 +388,14 @@ namespace MarketplaceSync.Web.Data
                 entity.HasIndex(x => new { x.OrganizationId, x.TrackingNumber }).IsUnique();
                 entity.HasIndex(x => new { x.OrganizationId, x.Status });
             });
+            builder.Entity<MarketplaceSync.Web.Models.Marketplace.ItemReview>(entity =>
+            {
+                entity.HasIndex(x => new { x.OrganizationId, x.ExternalId }).IsUnique();
+                entity.HasIndex(x => new { x.OrganizationId, x.CreatedAt });
+                entity.HasOne(x => x.Publication).WithMany().HasForeignKey(x => x.PublicationId).OnDelete(DeleteBehavior.Cascade);
+            });
+            builder.Entity<MarketplaceSync.Web.Models.PostSale.MessageTemplate>(entity =>
+                entity.HasIndex(x => new { x.OrganizationId, x.SortOrder }));
             builder.Entity<MarketplaceSync.Web.Models.Marketplace.BulkEditImport>(entity =>
                 entity.HasIndex(x => new { x.OrganizationId, x.CreatedAt }));
             builder.Entity<MarketplaceSync.Web.Models.Invoicing.InvoicingSettings>(entity =>

@@ -18,6 +18,7 @@ public sealed class PostSaleIndexViewModel
     public bool HasAccounts { get; init; }
     public IReadOnlyList<BlockedBuyerRow> Blocked { get; init; } = Array.Empty<BlockedBuyerRow>();
     public IReadOnlyList<OrderClaim> PendingReturns { get; init; } = Array.Empty<OrderClaim>();
+    public IReadOnlyList<MarketplaceSync.Web.Models.PostSale.MessageTemplate> Templates { get; init; } = Array.Empty<MarketplaceSync.Web.Models.PostSale.MessageTemplate>();
 }
 
 public sealed class ClaimDetailViewModel
@@ -75,7 +76,8 @@ public sealed class PostSaleController : Controller
 
         return View(new PostSaleIndexViewModel
         {
-            Tab = tab == "blocked" ? "blocked" : tab == "claims" || (tab is null && pending.Count == 0 && open.Count > 0) ? "claims" : "messages",
+            Tab = tab is "blocked" or "templates" ? tab : tab == "claims" || (tab is null && pending.Count == 0 && open.Count > 0) ? "claims" : "messages",
+            Templates = await HttpContext.RequestServices.GetRequiredService<MessageTemplateService>().ListAsync(org, cancellationToken),
             Blocked = await _blacklist.ListAsync(org, cancellationToken),
             PendingReturns = await _context.OrderClaims.AsNoTracking()
                 .Where(c => c.OrganizationId == org && c.HasReturn && c.ReturnRestockedAt == null)
@@ -103,14 +105,38 @@ public sealed class PostSaleController : Controller
         return RedirectToAction(nameof(Index), new { tab });
     }
 
+    // ── Mensajes rápidos ──
+
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SendMessage(int orderId, string? text, CancellationToken cancellationToken)
+    public async Task<IActionResult> SaveTemplate(int? id, string? title, string? text, CancellationToken cancellationToken)
+    {
+        var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var (ok, message) = await HttpContext.RequestServices.GetRequiredService<MessageTemplateService>().SaveAsync(org, id, title, text, cancellationToken);
+        TempData[ok ? "Success" : "Error"] = message;
+        return RedirectToAction(nameof(Index), null, new { tab = "templates" }, id is { } t ? $"tpl-{t}" : "nuevo");
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteTemplate(int id, CancellationToken cancellationToken)
+    {
+        var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var ok = await HttpContext.RequestServices.GetRequiredService<MessageTemplateService>().DeleteAsync(org, id, cancellationToken);
+        TempData[ok ? "Success" : "Error"] = ok ? "Mensaje rápido borrado." : "No encontré ese mensaje.";
+        return RedirectToAction(nameof(Index), new { tab = "templates" });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendMessage(int orderId, string? text, int? templateId, CancellationToken cancellationToken)
     {
         var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
         try
         {
             var error = await _postSale.SendMessageAsync(org, orderId, text ?? string.Empty, cancellationToken);
+            if (error is null && templateId is > 0)
+                await HttpContext.RequestServices.GetRequiredService<MessageTemplateService>().MarkUsedAsync(org, templateId.Value, cancellationToken);
             if (error is null)
                 TempData["Success"] = "Mensaje enviado al comprador.";
             else

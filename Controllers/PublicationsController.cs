@@ -102,6 +102,8 @@ public sealed class PublicationsController : Controller
                 CostIsReal = product.RealLandedCostMxn is > 0,
                 CatalogStatus = p.CatalogListing ? p.CatalogStatus : null,
                 AutoPriceStatus = p.AutoPriceStatus,
+                RatingAverage = p.RatingAverage,
+                RatingCount = p.RatingCount,
                 QualityScore = p.QualityScore,
                 QualityLevel = p.QualityLevel,
                 LandedCostMxn = landed,
@@ -309,9 +311,14 @@ public sealed class PublicationsController : Controller
         }
 
         AutoPricePanel? autoPrice = null;
+        QuantityPricePanel? quantityPrices = null;
         if (!item.IsClosed)
         {
-            try { autoPrice = await HttpContext.RequestServices.GetRequiredService<AutoPriceService>().PanelAsync(organizationId, id, cancellationToken); }
+            try
+            {
+                autoPrice = await HttpContext.RequestServices.GetRequiredService<AutoPriceService>().PanelAsync(organizationId, id, cancellationToken);
+                quantityPrices = await HttpContext.RequestServices.GetRequiredService<QuantityPriceService>().PanelAsync(organizationId, id, cancellationToken);
+            }
             catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
             {
                 HttpContext.RequestServices.GetRequiredService<ILogger<PublicationsController>>().LogInformation(exception, "Auto price panel failed for {Id}.", id);
@@ -322,6 +329,7 @@ public sealed class PublicationsController : Controller
         {
             Item = item,
             AutoPrice = autoPrice,
+            QuantityPrices = quantityPrices,
             LandedCostMxn = landed,
             Profit = profit,
             Compatibilities = product is null ? new() : CompatibilityService.Read(product),
@@ -349,6 +357,31 @@ public sealed class PublicationsController : Controller
             : await service.EnableAsync(organizationId, id, rule, Parse(min), Parse(max), cancellationToken);
         TempData[ok ? "Success" : "Error"] = message;
         return RedirectToAction(nameof(Edit), null, new { id }, "pe-auto-panel");
+    }
+
+    /// <summary>Guarda los tramos de precio por cantidad (vacío = quitar).</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> QuantityPrices(int id, string[]? units, string[]? amounts, string? qtyAction, CancellationToken cancellationToken)
+    {
+        var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var tiers = new List<(int, decimal)>();
+        if (qtyAction != "off" && units is not null && amounts is not null)
+            for (var i = 0; i < Math.Min(units.Length, amounts.Length); i++)
+            {
+                var hasUnits = int.TryParse(units[i], NumberStyles.None, CultureInfo.InvariantCulture, out var count) && count > 0;
+                var hasAmount = MercadoLibreItemEditorService.TryParseMoney(amounts[i], out var amount) && amount > 0;
+                if (!hasUnits && !hasAmount) continue;
+                tiers.Add((hasUnits ? count : 0, hasAmount ? amount : 0));
+            }
+        if (qtyAction != "off" && tiers.Count == 0)
+        {
+            TempData["Error"] = "Escribe al menos un tramo: desde cuántas piezas y el precio por pieza.";
+            return RedirectToAction(nameof(Edit), null, new { id }, "pe-qty-panel");
+        }
+        var (ok, message) = await HttpContext.RequestServices.GetRequiredService<QuantityPriceService>().SaveAsync(organizationId, id, tiers, cancellationToken);
+        TempData[ok ? "Success" : "Error"] = message;
+        return RedirectToAction(nameof(Edit), null, new { id }, "pe-qty-panel");
     }
 
     // ── Compatibilidades con vehículos ──

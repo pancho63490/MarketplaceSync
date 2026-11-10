@@ -561,6 +561,60 @@
             </section>
         }
 
+        @if (Model.QuantityPrices is { } qp)
+        {
+            var qRows = qp.Tiers.Count > 0 ? qp.Tiers : qp.Suggested;
+            var qFill = Enumerable.Range(0, 3).Select(i => i < qRows.Count ? qRows[i] : null).ToList();
+            <section class="panel" aria-labelledby="pe-qty" id="pe-qty-panel">
+                <div class="panel-head">
+                    <h2 id="pe-qty">@Html.Icon("boxes") Precio por cantidad</h2>
+                    <p class="mb-0">Precio por pieza más bajo cuando llevan varias. Mercado Libre hoy lo muestra a compradores con cuenta de negocio y lo activa a vendedores seleccionados.</p>
+                </div>
+                <div class="panel-body">
+                    @if (qp.Unavailable is not null)
+                    {
+                        <p class="small text-muted mb-0">@qp.Unavailable</p>
+                    }
+                    else if (qp.Floor is null)
+                    {
+                        <p class="small mb-0">Pon el costo del producto para usarlo: sin costo no sé tu precio mínimo. <a asp-controller="Products" asp-action="Details" asp-route-id="@item.ProductId">Poner costo</a></p>
+                    }
+                    else
+                    {
+                        @if (qp.Publication.Price is { } qPrice && qPrice <= qp.Floor)
+                        {
+                            <p class="small mb-2 text-bad">Tu precio actual (@Mxn(qPrice)) ya está en tu mínimo o abajo (@Mxn(qp.Floor)): primero sube el precio; con descuento perderías.</p>
+                        }
+                        else
+                        {
+                            <p class="small mb-2">@(qp.Tiers.Count > 0 ? "Tienes " + qp.Tiers.Count + (qp.Tiers.Count == 1 ? " tramo" : " tramos") + " en Mercado Libre." : qp.Suggested.Count > 0 ? "Sin precio por cantidad. Te propongo estos, sin bajar de tu mínimo:" : "Sin precio por cantidad. Escribe desde cuántas piezas y el precio por pieza.")</p>
+                        }
+                        <form asp-action="QuantityPrices" asp-route-id="@item.PublicationId" method="post" class="qp-form" data-busy="Guardando en Mercado Libre…">
+                            @Html.AntiForgeryToken()
+                            <div class="qp-head small text-muted"><span>Desde</span><span>Precio c/u</span></div>
+                            @foreach (var t in qFill)
+                            {
+                                <div class="qp-row">
+                                    <div class="input-group input-group-sm"><input name="units" type="number" min="2" max="999" class="form-control" value="@(t?.MinUnits)" aria-label="Desde cuántas piezas" /><span class="input-group-text">pzas</span></div>
+                                    <div class="input-group input-group-sm"><span class="input-group-text">$</span><input name="amounts" class="form-control" inputmode="decimal" value="@(t?.Amount.ToString("0", CultureInfo.InvariantCulture))" aria-label="Precio por pieza" /></div>
+                                </div>
+                            }
+                            <div class="form-text">Tu mínimo por pieza con el costo de hoy: <b>@Mxn(qp.Floor)</b>. No te dejo poner menos, y te aviso si sube tu costo.</div>
+                            <button type="submit" class="btn btn-outline-primary btn-sm mt-2">@(qp.Tiers.Count > 0 ? "Guardar tramos" : "Activar precio por cantidad")</button>
+                        </form>
+                        @if (qp.Tiers.Count > 0)
+                        {
+                            <form asp-action="QuantityPrices" asp-route-id="@item.PublicationId" method="post" class="mt-2">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="qtyAction" value="off" />
+                                <button type="submit" class="btn btn-link btn-sm p-0 text-bad" data-arm="Confirmar: quitar precio por cantidad">Quitar precio por cantidad</button>
+                            </form>
+                        }
+                    }
+                </div>
+            </section>
+        }
+
         <section class="panel" aria-labelledby="pe-summary">
             <div class="panel-head"><h2 id="pe-summary">Resumen</h2></div>
             <div class="panel-body">

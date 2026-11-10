@@ -71,6 +71,9 @@ public static class BotActionKinds
 
     /// <summary>Pausar un anuncio de Mercado Ads (Payload {"accountId":1,"itemId":"MLM1"}).</summary>
     public const string AdPause = "ad_pause";
+
+    /// <summary>Mandar un mensaje al comprador (Payload {"orderId":1,"text":"…","templateId":2}).</summary>
+    public const string BuyerMessage = "buyer_message";
 }
 
 public static class BotActionStatus

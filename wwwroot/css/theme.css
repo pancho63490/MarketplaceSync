@@ -2271,3 +2271,32 @@ body {
 .ap-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--fs-sm); }
 .ap-history li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; }
 .ap-history li span:first-child { color: var(--muted); }
+
+/* ── Mensajes rápidos ── */
+.tpl-list { list-style: none; margin: 0; padding: 0; }
+.tpl-list > li { padding: 14px 18px; border-top: 1px solid var(--line); }
+.tpl-form { display: grid; gap: 6px; }
+.tpl-title { font-weight: 700; max-width: 360px; }
+.tpl-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.tpl-new { border-top: 1px solid var(--line); }
+
+/* ── Opiniones ── */
+.rv-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); border-top: 1px solid var(--line); }
+.rv-grid > div + div { border-left: 1px solid var(--line); }
+.rv-list { list-style: none; margin: 0; padding: 0 18px 14px; display: grid; gap: 12px; }
+.rv-list > li { min-width: 0; overflow-wrap: anywhere; font-size: var(--fs-sm); }
+.rv-head { display: flex; justify-content: space-between; gap: 8px; }
+.rv-stars { color: var(--warn); font-weight: 700; letter-spacing: 1px; white-space: nowrap; }
+.rv-stars.is-bad { color: var(--bad); }
+.rv-row { display: flex; justify-content: space-between; gap: 10px; }
+.rv-row a { min-width: 0; color: var(--ink); }
+@media (max-width: 991.98px) {
+    .rv-grid { grid-template-columns: minmax(0, 1fr); }
+    .rv-grid > div + div { border-left: 0; border-top: 1px solid var(--line); }
+}
+
+/* ── Precio por cantidad ── */
+.qp-form { display: grid; gap: 6px; }
+.qp-head, .qp-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.rv-stars .rv-off { color: var(--line-strong); }
+.rv-stars .rv-num { font-size: var(--fs-xs); color: var(--muted); letter-spacing: 0; font-weight: 600; }

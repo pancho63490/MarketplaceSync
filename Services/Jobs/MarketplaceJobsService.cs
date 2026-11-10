@@ -313,6 +313,14 @@ namespace MarketplaceSync.Services.Jobs
             await _telegram.SyncAutoPricesAllAsync();
         }
 
+        /// <summary>Opiniones de compradores; avisa las de 1 y 2 estrellas.</summary>
+        [AutomaticRetry(Attempts = 0)]
+        [DisableConcurrentExecution(timeoutInSeconds: 900)]
+        public async Task RefreshReviews()
+        {
+            await _telegram.RefreshReviewsAllAsync();
+        }
+
         /// <summary>Calidad de las publicaciones según Mercado Libre (cada 3 días por publicación).</summary>
         [AutomaticRetry(Attempts = 0)]
         [DisableConcurrentExecution(timeoutInSeconds: 1800)]

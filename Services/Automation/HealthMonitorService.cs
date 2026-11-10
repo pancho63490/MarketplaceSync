@@ -164,6 +164,7 @@ public sealed class HealthMonitorService
         "RefreshAllAsync" => "revisión de promociones",
         "RefreshCatalog" => "catálogo",
         "SyncAutoPrices" => "precio automático",
+        "RefreshReviews" => "opiniones",
         "RefreshListingQuality" => "calidad de publicaciones",
         "RefreshPackages" => "rastreo de paquetes",
         "ReconcilePayments" => "pagos de Mercado Pago",

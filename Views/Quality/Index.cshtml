@@ -19,7 +19,7 @@
 <header class="page-head">
     <div class="page-head-text">
         <h1 class="page-title">Calidad y catálogo</h1>
-        <p>Qué publicaciones pierden el botón de compra en catálogo y qué le falta a cada una según Mercado Libre para salir más arriba.</p>
+        <p>Qué publicaciones pierden el botón de compra en catálogo, qué opinan tus compradores y qué le falta a cada una según Mercado Libre para salir más arriba.</p>
     </div>
     <form asp-action="Refresh" method="post" data-busy="Revisando con Mercado Libre…">
         @Html.AntiForgeryToken()
@@ -110,6 +110,53 @@
         </div>
     }
 </section>
+
+@if (Model.Reviews is { } rv)
+{
+    <section class="panel mt-3" aria-labelledby="qa-rev" id="opiniones">
+        <div class="panel-head">
+            <h2 id="qa-rev">Opiniones de compradores</h2>
+            <p class="mb-0">@(rv.Average is { } ravg ? $"Promedio {ravg.ToString("0.0", mx)} de 5 en {rv.Count} {(rv.Count == 1 ? "opinión" : "opiniones")}" : "Aún no hay opiniones") · @rv.LowLast30 de 1 o 2 estrellas en 30 días. Te aviso por Telegram cuando llega una mala para que corrijas la publicación.</p>
+        </div>
+        @if (rv.RecentLow.Count == 0 && rv.Worst.Count == 0)
+        {
+            <div class="panel-body">
+                <div class="today-clear">
+                    <span class="today-clear-mark" aria-hidden="true">✓</span>
+                    <div>Sin opiniones malas. Se revisan solas cada 6 horas en las publicaciones que ya vendieron.</div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="rv-grid">
+                <div>
+                    <h3 class="today-section-title px-3 pt-3">Opiniones de 1 a 3 estrellas</h3>
+                    <ul class="rv-list">
+                        @foreach (var r in rv.RecentLow)
+                        {
+                            <li>
+                                <div class="rv-head"><span class="rv-stars @(r.Rate <= 2 ? "is-bad" : "")" aria-label="@r.Rate de 5 estrellas">@(new string('★', r.Rate))<span class="rv-off">@(new string('★', 5 - r.Rate))</span> <span class="rv-num">@r.Rate de 5</span></span><span class="small text-muted">@r.CreatedAt.AddHours(-7).ToString("d MMM", mx)</span></div>
+                                @if (r.Title is not null) { <b class="d-block">@r.Title</b> }
+                                @if (r.Content is not null) { <p class="mb-1">@r.Content</p> }
+                                <a asp-controller="Publications" asp-action="Edit" asp-route-id="@r.PublicationId" class="small">@(r.Publication?.Product.Title ?? "Ver publicación")</a>
+                            </li>
+                        }
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="today-section-title px-3 pt-3">Peor calificadas</h3>
+                    <ul class="rv-list">
+                        @foreach (var p in rv.Worst)
+                        {
+                            <li class="rv-row"><a asp-controller="Publications" asp-action="Edit" asp-route-id="@p.Id">@p.Product.Title</a><span class="rv-stars @(p.RatingAverage < 4 ? "is-bad" : "")">★ @p.RatingAverage?.ToString("0.0", mx) <span class="text-muted">(@p.RatingCount)</span></span></li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        }
+    </section>
+}
 
 <section class="panel mt-3" aria-labelledby="qa-q" id="calidad">
     <div class="panel-head">

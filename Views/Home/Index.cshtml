@@ -62,6 +62,9 @@
         tasks.Add((expiringLots, expiringLots == 1 ? "lote por caducar" : "lotes por caducar", "Véndelos primero (baja el precio o arma un kit); lo caducado dalo de baja.", "Ver caducidades", "Inventory", "Index", null, "tone-urgent"));
     if (radarInTransit > 0)
         tasks.Add((radarInTransit, radarInTransit == 1 ? "compra en camino" : "compras en camino", "Márcalas como recibidas al llegar a Juárez para sumar el stock.", "Recibir", "Purchasing", "Index", new { tab = "transit" }, "tone-normal"));
+    var lowReviews = (int)(ViewBag.LowReviews ?? 0);
+    if (lowReviews > 0)
+        tasks.Add((lowReviews, lowReviews == 1 ? "opinión de 1 o 2 estrellas" : "opiniones de 1 o 2 estrellas", "En los últimos 7 días. Lee qué dijo el comprador y corrige la descripción, fotos o compatibilidad.", "Ver opiniones", "Quality", "Index", null, "tone-urgent"));
     var catalogLosing = (int)(ViewBag.CatalogLosing ?? 0);
     if (catalogLosing > 0)
         tasks.Add((catalogLosing, catalogLosing == 1 ? "publicación de catálogo perdiendo" : "publicaciones de catálogo perdiendo", "Otro vendedor se lleva el botón de compra. Mira a qué precio ganarías y si te conviene.", "Ver catálogo", "Quality", "Index", null, "tone-normal"));

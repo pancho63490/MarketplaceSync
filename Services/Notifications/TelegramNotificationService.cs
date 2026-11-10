@@ -440,6 +440,9 @@ public sealed partial class TelegramNotificationService
             case "/dinero":
                 await SendMoneyStatusAsync(token, settings, cancellationToken);
                 break;
+            case "/opiniones" or "/opinion" or "/opinión":
+                await SendReviewsStatusAsync(token, settings, cancellationToken);
+                break;
             case "/catalogo" or "/catálogo" or "/calidad":
                 await SendQualityStatusAsync(token, settings, cancellationToken);
                 break;
@@ -483,6 +486,7 @@ public sealed partial class TelegramNotificationService
                     "/viaje nuevo Buen Fin — abrir un viaje; los links que mandes se agregan a él\n" +
                     "/dinero — lo que Mercado Pago tiene por liberar\n" +
                     "/catalogo — publicaciones de catálogo que pierden y calidad\n" +
+                    "/opiniones — promedio de estrellas y opiniones malas\n" +
                     "/gasto 250 gasolina — anotar un gasto del negocio\n" +
                     "/precios — revisar qué publicaciones ya no ganan lo mínimo\n\n" +
                     "💬 <b>O escríbeme normal</b>: «¿cuánto vendí hoy?», «sube el faro de Tacoma a 3500», «pausa las balatas».\n\n" +

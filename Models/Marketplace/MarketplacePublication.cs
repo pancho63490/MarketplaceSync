@@ -201,6 +201,24 @@ namespace MarketplaceSync.Web.Models.Marketplace
         public DateTime? AutoPriceCheckedAt { get; set; }
 
         // =====================================
+        // OPINIONES Y PRECIO POR CANTIDAD
+        // =====================================
+
+        /// <summary>Promedio de estrellas de las opiniones (1 a 5).</summary>
+        [System.ComponentModel.DataAnnotations.Schema.Column(TypeName = "numeric(3,2)")]
+        public decimal? RatingAverage { get; set; }
+
+        public int? RatingCount { get; set; }
+
+        public DateTime? ReviewsCheckedAt { get; set; }
+
+        /// <summary>Tramos de precio por cantidad en Mercado Libre (JSON: id, piezas mínimas, precio c/u).</summary>
+        [MaxLength(1000)]
+        public string? QuantityPricesJson { get; set; }
+
+        public DateTime? QuantityPricesCheckedAt { get; set; }
+
+        // =====================================
         // DATES
         // =====================================
 

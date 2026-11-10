@@ -105,6 +105,33 @@ public sealed partial class TelegramNotificationService
                 return true;
             }
 
+            case "mt" when parts[1].Split('-') is { Length: 2 } mtp && int.TryParse(mtp[0], out var templateId) && int.TryParse(mtp[1], out var mtOrder):
+            {
+                await _telegram.AnswerCallbackAsync(token, update.CallbackId!, "Revisa y envía", cancellationToken);
+                var template = await _context.MessageTemplates.AsNoTracking().FirstOrDefaultAsync(t => t.Id == templateId && t.OrganizationId == org, cancellationToken);
+                var mtOrderRow = await _context.SalesOrders.AsNoTracking().Include(o => o.Items).FirstOrDefaultAsync(o => o.Id == mtOrder && o.OrganizationId == org, cancellationToken);
+                if (template is null || mtOrderRow is null)
+                {
+                    await _telegram.SendMessageAsync(token, chatId, "Ese mensaje rápido ya no existe.", cancellationToken: cancellationToken);
+                    return true;
+                }
+                await ProposeBuyerMessageAsync(token, settings, mtOrder, MarketplaceSync.Services.PostSale.MessageTemplateService.Render(template.Text, mtOrderRow), template.Id, update.CallbackMessageId, cancellationToken);
+                return true;
+            }
+
+            case "ms" when int.TryParse(parts[1], out var msOrder):
+            {
+                await _telegram.AnswerCallbackAsync(token, update.CallbackId!, "Pensando la respuesta…", cancellationToken);
+                var suggestion = await Service<MarketplaceSync.Services.PostSale.PostSaleService>().SuggestReplyAsync(org, msOrder, cancellationToken);
+                if (string.IsNullOrWhiteSpace(suggestion))
+                {
+                    await _telegram.SendMessageAsync(token, chatId, "No pude preparar una respuesta. Responde al aviso con tu texto.", cancellationToken: cancellationToken);
+                    return true;
+                }
+                await ProposeBuyerMessageAsync(token, settings, msOrder, suggestion, null, update.CallbackMessageId, cancellationToken);
+                return true;
+            }
+
             case "tr" when int.TryParse(parts[1], out var tripItemId):
             {
                 var item = await _context.SupplyTripItems.Include(i => i.SupplyTrip)

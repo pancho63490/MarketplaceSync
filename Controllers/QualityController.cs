@@ -48,6 +48,7 @@ public sealed class QualityController : Controller
         public int Basic { get; init; }
         public double? AverageScore { get; init; }
         public string Level { get; init; } = "all";
+        public ReviewsSummary? Reviews { get; init; }
     }
 
     [HttpGet]
@@ -72,7 +73,8 @@ public sealed class QualityController : Controller
             Standard = await withScore.CountAsync(p => p.QualityLevel == "Standard", cancellationToken),
             Basic = await withScore.CountAsync(p => p.QualityLevel == "Basic", cancellationToken),
             AverageScore = await withScore.AverageAsync(p => (double?)p.QualityScore, cancellationToken),
-            Level = level
+            Level = level,
+            Reviews = await HttpContext.RequestServices.GetRequiredService<ReviewService>().SummaryAsync(org, cancellationToken)
         });
     }
 
@@ -83,9 +85,10 @@ public sealed class QualityController : Controller
         var org = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
         var changes = await _catalog.RefreshAsync(org, 80, force: true, cancellationToken);
         var quality = await _quality.RefreshAsync(org, 40, cancellationToken);
+        await HttpContext.RequestServices.GetRequiredService<ReviewService>().RefreshAsync(org, 60, force: true, cancellationToken);
         var losing = changes.Count(c => c.NewStatus == CatalogCompetitionService.Losing);
         TempData[losing > 0 ? "Warning" : "Success"] =
-            $"Revisé el catálogo y la calidad de {quality} {(quality == 1 ? "publicación" : "publicaciones")}." +
+            $"Revisé el catálogo, las opiniones y la calidad de {quality} {(quality == 1 ? "publicación" : "publicaciones")}." +
             (losing > 0 ? $" {losing} {(losing == 1 ? "empezó" : "empezaron")} a perder en catálogo." : "");
         return RedirectToAction(nameof(Index));
     }

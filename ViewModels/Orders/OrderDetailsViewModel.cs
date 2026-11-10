@@ -7,6 +7,8 @@ namespace MarketplaceSync.Web.ViewModels.Orders;
 public sealed class OrderDetailsViewModel
 {
     public required SalesOrder Order { get; init; }
+    /// <summary>Mensajes rápidos ya con el nombre del comprador y el producto (título, texto).</summary>
+    public IReadOnlyList<(int Id, string Title, string Text)> QuickMessages { get; init; } = Array.Empty<(int, string, string)>();
     public IReadOnlyList<ConversationMessage> Messages { get; init; } = Array.Empty<ConversationMessage>();
     public string? MessagesError { get; init; }
     public IReadOnlyList<OrderClaim> Claims { get; init; } = Array.Empty<OrderClaim>();

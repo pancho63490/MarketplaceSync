@@ -217,9 +217,15 @@ public sealed class OrdersController : Controller
             }
         }
 
+        var quick = (await HttpContext.RequestServices.GetRequiredService<MarketplaceSync.Services.PostSale.MessageTemplateService>()
+                .ListAsync(organizationId, cancellationToken))
+            .Select(t => (t.Id, t.Title, MarketplaceSync.Services.PostSale.MessageTemplateService.Render(t.Text, order)))
+            .ToList();
+
         return View(new MarketplaceSync.Web.ViewModels.Orders.OrderDetailsViewModel
         {
             Order = order,
+            QuickMessages = quick,
             Invoice = invoiceDraft,
             InvoiceMissing = invoiceMissing,
             Messages = messages,

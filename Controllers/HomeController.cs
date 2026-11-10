@@ -133,6 +133,9 @@ namespace MarketplaceSync.Web.Controllers
                 x.OrganizationId == organizationId && x.Status == MarketplaceSync.Web.Models.Questions.BuyerQuestionStatus.Unanswered);
             ViewBag.CatalogLosing = await _context.MarketplacePublications.CountAsync(x =>
                 x.Product.OrganizationId == organizationId && x.CatalogListing && x.Status == "active" && x.CatalogStatus == "competing");
+            var reviewSince = DateTime.UtcNow.AddDays(-7);
+            ViewBag.LowReviews = await _context.ItemReviews.CountAsync(x =>
+                x.OrganizationId == organizationId && x.Rate <= 2 && x.CreatedAt >= reviewSince);
             ViewBag.ReadyProducts = await organizationProducts.CountAsync(x =>
                 x.Status == "ReadyToPublish" &&
                 !x.MarketplacePublications.Any(p => p.Marketplace == "MercadoLibre" && p.IsPublished));

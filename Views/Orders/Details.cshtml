@@ -95,10 +95,12 @@
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="orderId" value="@o.Id" />
                     <div class="od-templates" aria-label="Respuestas rápidas">
-                        @foreach (var t in PostSaleService.Templates)
+                        <input type="hidden" name="templateId" id="templateId" />
+                        @foreach (var (qId, qTitle, qText) in Model.QuickMessages)
                         {
-                            <button type="button" class="pub-chip" data-template="@t">@(t.Length > 34 ? t[..32] + "…" : t)</button>
+                            <button type="button" class="pub-chip" data-template="@qText" data-template-id="@qId" title="@qText">@qTitle</button>
                         }
+                        <a asp-controller="PostSale" asp-action="Index" asp-route-tab="templates" class="pub-chip" title="Editar mensajes rápidos">@Html.Icon("pencil", "icon-xs") Editar</a>
                         @if (lastFromBuyer)
                         {
                             <button type="button" class="pub-chip is-ai" id="suggestButton">@Html.Icon("sparkles", "icon-xs") Sugerir con IA</button>
@@ -205,7 +207,7 @@
             function update() { count.textContent = text.value.length; }
             text.addEventListener('input', update);
             document.querySelectorAll('[data-template]').forEach(function (b) {
-                b.addEventListener('click', function () { text.value = b.dataset.template; update(); text.focus(); });
+                b.addEventListener('click', function () { text.value = b.dataset.template; var tid = document.getElementById('templateId'); if (tid) tid.value = b.dataset.templateId || ''; update(); text.focus(); });
             });
             var suggest = document.getElementById('suggestButton');
             if (suggest) suggest.addEventListener('click', function () {

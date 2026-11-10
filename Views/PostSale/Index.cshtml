@@ -43,6 +43,7 @@
     <a class="pub-chip @(Model.Tab == "messages" ? "active" : "")" asp-action="Index" asp-route-tab="messages">Mensajes sin responder <span>@Model.Pending.Count</span></a>
     <a class="pub-chip @(Model.OpenClaims.Count > 0 ? "is-bad" : "") @(Model.Tab == "claims" ? "active" : "")" asp-action="Index" asp-route-tab="claims">Reclamos abiertos <span>@Model.OpenClaims.Count</span></a>
     <a class="pub-chip @(Model.Tab == "blocked" ? "active" : "")" asp-action="Index" asp-route-tab="blocked">Bloqueados <span>@Model.Blocked.Count</span></a>
+    <a class="pub-chip @(Model.Tab == "templates" ? "active" : "")" asp-action="Index" asp-route-tab="templates">Mensajes rápidos <span>@Model.Templates.Count</span></a>
 </nav>
 
 @if (Model.Tab == "messages")
@@ -77,6 +78,56 @@
             }
         </ul>
     }
+}
+else if (Model.Tab == "templates")
+{
+    <section class="panel" aria-labelledby="ps-tpl">
+        <div class="panel-head">
+            <h2 id="ps-tpl">Mensajes rápidos</h2>
+            <p class="mb-0">Respuestas que usas seguido. Aparecen en la conversación de cada pedido y en Telegram, y la IA elige cuál contesta lo que preguntó el comprador. Puedes usar <code>{comprador}</code> y <code>{producto}</code>.</p>
+        </div>
+        <ul class="tpl-list">
+            @foreach (var t in Model.Templates)
+            {
+                <li id="tpl-@t.Id">
+                    <form asp-action="SaveTemplate" method="post" class="tpl-form">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@t.Id" />
+                        <input name="title" class="form-control form-control-sm tpl-title" value="@t.Title" maxlength="60" aria-label="Nombre del mensaje" required />
+                        <textarea name="text" class="form-control form-control-sm" rows="2" maxlength="@MarketplaceSync.Services.PostSale.PostSaleService.MaxMessageLength" aria-label="Texto de «@t.Title»" required>@t.Text</textarea>
+                        <div class="tpl-foot">
+                            <span class="small text-muted">@(t.UseCount == 0 ? "Sin usar todavía" : t.UseCount == 1 ? "Usado 1 vez" : $"Usado {t.UseCount} veces")</span>
+                            <span class="d-flex gap-2">
+                                <button type="submit" class="btn btn-outline-secondary btn-sm">Guardar</button>
+                                <button type="submit" form="del-@t.Id" class="btn btn-link btn-sm text-bad p-0" data-arm="Confirmar: borrar">Borrar</button>
+                            </span>
+                        </div>
+                    </form>
+                    <form asp-action="DeleteTemplate" method="post" id="del-@t.Id" class="d-none">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@t.Id" /></form>
+                </li>
+            }
+        </ul>
+        @if (Model.Templates.Count < MarketplaceSync.Services.PostSale.MessageTemplateService.MaxTemplates)
+        {
+            <form asp-action="SaveTemplate" method="post" class="panel-body tpl-form tpl-new" id="nuevo">
+                @Html.AntiForgeryToken()
+                <h3 class="today-section-title">Nuevo mensaje</h3>
+                <input name="title" class="form-control form-control-sm tpl-title" maxlength="60" placeholder="Nombre corto (ej. Instalación)" aria-label="Nombre del mensaje nuevo" required />
+                <textarea name="text" class="form-control form-control-sm" rows="2" maxlength="@MarketplaceSync.Services.PostSale.PostSaleService.MaxMessageLength" placeholder="Hola {comprador}, para instalar tu {producto}…" aria-label="Texto del mensaje nuevo" required></textarea>
+                <div class="tpl-foot"><span class="form-text m-0">Sin teléfonos, correos ni links: Mercado Libre los bloquea.</span><button type="submit" class="btn btn-primary btn-sm">Agregar mensaje</button></div>
+            </form>
+        }
+    </section>
+    <script>
+        document.querySelectorAll('button[data-arm]').forEach(function (b) {
+            var original = b.textContent;
+            b.addEventListener('click', function (e) {
+                if (b.dataset.armed === '1') return;
+                e.preventDefault(); b.dataset.armed = '1'; b.textContent = b.dataset.arm;
+                setTimeout(function () { b.dataset.armed = ''; b.textContent = original; }, 4000);
+            });
+        });
+    </script>
 }
 else if (Model.Tab == "claims")
 {

@@ -64,6 +64,9 @@ public sealed partial class TelegramNotificationService
                 var events = await Service<AutoPriceService>().SyncAsync(org, cancellationToken);
                 if (events.Count > 0)
                     await NotifyAutoPriceEventsAsync(org, events, cancellationToken);
+                var lowTiers = await Service<QuantityPriceService>().BelowFloorAsync(org, cancellationToken);
+                if (lowTiers.Count > 0)
+                    await NotifyLowTiersAsync(org, lowTiers, cancellationToken);
             }
             catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
             {
@@ -73,6 +76,25 @@ public sealed partial class TelegramNotificationService
             {
                 _context.ChangeTracker.Clear();
             }
+        }
+    }
+
+    private async Task NotifyLowTiersAsync(Guid org, List<(MarketplaceSync.Web.Models.Marketplace.MarketplacePublication Publication, QuantityTier Tier, decimal Floor)> rows, CancellationToken cancellationToken)
+    {
+        var settings = await _context.NotificationSettings.FirstOrDefaultAsync(x => x.OrganizationId == org, cancellationToken);
+        var token = settings is null ? null : TokenFor(settings);
+        if (settings?.TelegramChatId is not { } chatId || token is null)
+            return;
+        var week = System.Globalization.ISOWeek.GetWeekOfYear(LocalNow);
+        foreach (var (p, tier, floor) in rows.Take(5))
+        {
+            var key = $"qtylow:{p.Id}:{LocalNow.Year}-W{week}";
+            if (await _context.NotificationLogs.AnyAsync(l => l.OrganizationId == org && l.Key == key, cancellationToken)) continue;
+            var messageId = await _telegram.SendMessageAsync(token, chatId,
+                $"⚠️ <b>Precio por cantidad abajo de tu mínimo</b>\n{E(Short(p.Product.Title, 70))}\nDesde {tier.MinUnits} piezas a {Money(tier.Amount)} c/u, y con el dólar y tu costo de hoy tu mínimo es {Money(floor)}. Súbelo o quítalo.",
+                settings.PublicBaseUrl is null ? null : new[] { new[] { new TelegramButton("Corregir", Url: AppUrl(settings, $"/Publications/Edit/{p.Id}#pe-qty-panel")) } },
+                cancellationToken: cancellationToken);
+            await LogAsync(org, key, "qtylow", p.Id.ToString(CultureInfo.InvariantCulture), chatId, messageId, cancellationToken);
         }
     }
 
@@ -101,6 +123,74 @@ public sealed partial class TelegramNotificationService
                 cancellationToken: cancellationToken);
             await LogAsync(org, key, "autoprice", e.Publication.Id.ToString(CultureInfo.InvariantCulture), chatId, messageId, cancellationToken);
         }
+    }
+
+    /// <summary>Cada 6 horas: opiniones nuevas; avisa las de 1 y 2 estrellas.</summary>
+    public async Task RefreshReviewsAllAsync(CancellationToken cancellationToken = default)
+    {
+        foreach (var org in await ConnectedOrganizationsAsync(cancellationToken))
+        {
+            try
+            {
+                var low = await Service<ReviewService>().RefreshAsync(org, 80, force: false, cancellationToken);
+                if (low.Count > 0)
+                    await NotifyLowReviewsAsync(org, low, cancellationToken);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(exception, "Reviews check failed for {Org}.", org);
+            }
+            finally
+            {
+                _context.ChangeTracker.Clear();
+            }
+        }
+    }
+
+    private async Task NotifyLowReviewsAsync(Guid org, List<MarketplaceSync.Web.Models.Marketplace.ItemReview> reviews, CancellationToken cancellationToken)
+    {
+        var settings = await _context.NotificationSettings.FirstOrDefaultAsync(x => x.OrganizationId == org, cancellationToken);
+        var token = settings is null ? null : TokenFor(settings);
+        if (settings?.TelegramChatId is not { } chatId || token is null)
+            return;
+        foreach (var r in reviews.OrderBy(r => r.Rate).Take(5))
+        {
+            var key = "review:" + r.ExternalId;
+            if (await _context.NotificationLogs.AnyAsync(l => l.OrganizationId == org && l.Key == key, cancellationToken)) continue;
+            var title = r.Publication?.Product.Title ?? "una publicación";
+            var html = new StringBuilder("⭐ <b>Opinión de ").Append(r.Rate).Append(r.Rate == 1 ? " estrella" : " estrellas").Append("</b>\n")
+                .Append(E(Short(title, 70))).Append('\n').Append(ReviewService.Stars(r.Rate)).Append('\n');
+            if (r.Title is not null) html.Append("<b>").Append(E(Short(r.Title, 120))).Append("</b>\n");
+            if (r.Content is not null) html.Append('«').Append(E(Short(r.Content, 500))).Append("»\n");
+            html.Append("\nRevisa si la descripción, las fotos o la compatibilidad pueden confundir, para que no se repita.");
+            var messageId = await _telegram.SendMessageAsync(token, chatId, html.ToString(),
+                settings.PublicBaseUrl is null ? null : new[] { new[] { new TelegramButton("Editar publicación", Url: AppUrl(settings, $"/Publications/Edit/{r.PublicationId}")), new TelegramButton("Opiniones", Url: AppUrl(settings, "/Quality#opiniones")) } },
+                cancellationToken: cancellationToken);
+            await LogAsync(org, key, "review", r.PublicationId.ToString(CultureInfo.InvariantCulture), chatId, messageId, cancellationToken);
+        }
+    }
+
+    /// <summary>/opiniones: promedio y las últimas malas.</summary>
+    private async Task SendReviewsStatusAsync(string token, NotificationSettings settings, CancellationToken cancellationToken)
+    {
+        var reviews = Service<ReviewService>();
+        await reviews.RefreshAsync(settings.OrganizationId, 30, force: false, cancellationToken);
+        var summary = await reviews.SummaryAsync(settings.OrganizationId, cancellationToken);
+        var html = new StringBuilder("⭐ <b>Opiniones</b>\n");
+        html.Append(summary.Average is { } avg ? $"Promedio <b>{avg.ToString("0.0", MxCulture)}</b> de 5 en {summary.Count} {(summary.Count == 1 ? "opinión" : "opiniones")}" : "Aún no hay opiniones")
+            .Append(" · ").Append(summary.LowLast30).Append(" de 1–2 estrellas en 30 días.\n");
+        foreach (var r in summary.RecentLow.Where(r => r.Rate <= ReviewService.LowRate).Take(4))
+            html.Append("\n").Append(ReviewService.Stars(r.Rate)).Append(' ').Append(E(Short(r.Publication?.Product.Title, 45)))
+                .Append(r.Content is null ? "" : ": «" + E(Short(r.Content, 120)) + "»");
+        if (summary.Worst.Count > 0)
+        {
+            html.Append("\n\n<b>Peor calificadas</b>");
+            foreach (var p in summary.Worst.Take(4))
+                html.Append("\n• ").Append(p.RatingAverage?.ToString("0.0", MxCulture)).Append("★ ").Append(E(Short(p.Product.Title, 50)));
+        }
+        await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, html.ToString(),
+            settings.PublicBaseUrl is null ? null : new[] { new[] { new TelegramButton("Ver opiniones", Url: AppUrl(settings, "/Quality#opiniones")) } },
+            cancellationToken: cancellationToken);
     }
 
     private Task<List<Guid>> ConnectedOrganizationsAsync(CancellationToken cancellationToken) =>

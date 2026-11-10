@@ -32,6 +32,8 @@ public sealed class PublicationRow
     public int? QualityScore { get; init; }
     /// <summary>ACTIVE o PAUSED si Mercado Libre maneja el precio solo.</summary>
     public string? AutoPriceStatus { get; init; }
+    public decimal? RatingAverage { get; init; }
+    public int? RatingCount { get; init; }
     public string? QualityLevel { get; init; }
     public decimal? LandedCostMxn { get; init; }
     public CrossBorderProfitEstimate? Profit { get; init; }
