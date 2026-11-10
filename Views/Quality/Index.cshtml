@@ -1,0 +1,195 @@
+@model MarketplaceSync.Web.Controllers.QualityController.QualityViewModel
+@using System.Globalization
+@using MarketplaceSync.Services.MercadoLibre
+@{
+    ViewData["Title"] = "Calidad y catálogo";
+    var mx = CultureInfo.GetCultureInfo("es-MX");
+    string Mxn(decimal? v) => v.HasValue ? v.Value.ToString("C0", mx) : "—";
+    var losing = Model.Catalog.Count(r => r.Publication.CatalogStatus == CatalogCompetitionService.Losing);
+    var winning = Model.Catalog.Count(r => r.Publication.CatalogStatus is CatalogCompetitionService.Winning or CatalogCompetitionService.Sharing);
+    var levels = new[]
+    {
+        (Key: "all", Label: "Todas", Count: Model.QualityChecked),
+        (Key: "Basic", Label: "Básicas", Count: Model.Basic),
+        (Key: "Standard", Label: "Estándar", Count: Model.Standard),
+        (Key: "Professional", Label: "Profesionales", Count: Model.Professional)
+    };
+}
+
+<header class="page-head">
+    <div class="page-head-text">
+        <h1 class="page-title">Calidad y catálogo</h1>
+        <p>Qué publicaciones pierden el botón de compra en catálogo y qué le falta a cada una según Mercado Libre para salir más arriba.</p>
+    </div>
+    <form asp-action="Refresh" method="post" data-busy="Revisando con Mercado Libre…">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn btn-outline-secondary btn-sm">@Html.Icon("refresh-cw") Revisar ahora</button>
+    </form>
+</header>
+
+<dl class="stats">
+    <div class="stat @(losing > 0 ? "is-bad" : "")"><dt>Perdiendo en catálogo</dt><dd>@losing <small>de @Model.Catalog.Count en catálogo</small></dd></div>
+    <div class="stat @(winning > 0 ? "is-ok" : "")"><dt>Ganando el botón</dt><dd>@winning</dd></div>
+    <div class="stat"><dt>Calidad promedio</dt><dd>@(Model.AverageScore is { } avg ? avg.ToString("0", mx) : "—") <small>de 100 · @Model.QualityChecked de @Model.ActiveCount revisadas</small></dd></div>
+    <div class="stat @(Model.Basic > 0 ? "is-bad" : "")"><dt>Calidad básica</dt><dd>@Model.Basic <small>las que más te conviene mejorar</small></dd></div>
+</dl>
+
+<section class="panel" aria-labelledby="qa-cat" id="catalogo">
+    <div class="panel-head">
+        <h2 id="qa-cat">Catálogo</h2>
+        <p class="mb-0">En una ficha de catálogo solo un vendedor se lleva el botón «Comprar». Se revisa sola cada 2 horas; te aviso por Telegram cuando empiezas a perder.</p>
+    </div>
+    @if (Model.Catalog.Count == 0)
+    {
+        <div class="panel-body">
+            <div class="today-clear">
+                <span class="today-clear-mark" aria-hidden="true">✓</span>
+                <div>No tienes publicaciones en catálogo. Cuando metas una a una ficha de catálogo en Mercado Libre, aquí verás si ganas el botón de compra y a qué precio ganarías.</div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="data-table promo-table">
+                <thead><tr><th>Publicación</th><th>Estado</th><th class="num">Tu precio</th><th class="num">Para ganar</th><th class="num">Ganas por pieza</th><th aria-label="Acción"></th></tr></thead>
+                <tbody>
+                    @foreach (var r in Model.Catalog)
+                    {
+                        var p = r.Publication;
+                        var reasons = CatalogCompetitionService.Split(p.CatalogReasons).Select(CatalogCompetitionService.ReasonLabel).ToList();
+                        var boosts = CatalogCompetitionService.Split(p.CatalogOpportunities).Select(CatalogCompetitionService.BoostLabel).ToList();
+                        <tr>
+                            <td class="promo-title">
+                                <a asp-controller="Publications" asp-action="Edit" asp-route-id="@p.Id">@p.Product.Title</a>
+                                <span class="sub">@p.ExternalItemId@(p.CatalogCheckedAt is { } at ? $" · revisado {at.AddHours(-7).ToString("d MMM HH:mm", mx)}" : "")</span>
+                                @if (reasons.Count > 0) { <span class="sub text-bad">@string.Join(" · ", reasons)</span> }
+                                @if (boosts.Count > 0) { <span class="sub">Te ayudaría: @string.Join(", ", boosts)</span> }
+                            </td>
+                            <td data-label="Estado"><span class="pill @CatalogCompetitionService.StatusTone(p.CatalogStatus)">@CatalogCompetitionService.StatusLabel(p.CatalogStatus)</span></td>
+                            <td class="num" data-label="Tu precio">@Mxn(p.Price)</td>
+                            <td class="num" data-label="Para ganar">
+                                @if (p.CatalogStatus == CatalogCompetitionService.Losing && p.CatalogPriceToWin is > 0)
+                                {
+                                    <b>@Mxn(Math.Floor(p.CatalogPriceToWin.Value))</b>
+                                    @if (p.CatalogWinnerPrice is > 0) { <span class="sub">ganador @Mxn(p.CatalogWinnerPrice)</span> }
+                                }
+                                else { <span class="text-muted">—</span> }
+                            </td>
+                            <td class="num" data-label="Ganas por pieza">
+                                @if (r.Now is null)
+                                {
+                                    <a asp-controller="Publications" asp-action="Index" asp-route-q="@p.ExternalItemId" class="small">Falta el costo</a>
+                                }
+                                else
+                                {
+                                    <span class="@(r.Now.Profit.NetProfitMxn < 0 ? "text-bad" : "")">@Mxn(r.Now.Profit.NetProfitMxn)</span>
+                                    @if (p.CatalogStatus == CatalogCompetitionService.Losing && r.AtPriceToWin is { } win)
+                                    {
+                                        <span class="sub @(win.Profit.NetProfitMxn <= 0 ? "text-bad" : win.Profit.IsProfitable ? "text-ok" : "")">
+                                            @(win.Profit.NetProfitMxn <= 0 ? $"perderías {Mxn(-win.Profit.NetProfitMxn)} al ganar" : $"{Mxn(win.Profit.NetProfitMxn)} al ganar{(win.Profit.IsProfitable ? "" : " (menos de tu mínimo)")}")
+                                        </span>
+                                    }
+                                }
+                            </td>
+                            <td class="promo-action">
+                                @if (r.CanMatch)
+                                {
+                                    <form asp-action="MatchPrice" method="post" class="qa-arm">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="publicationId" value="@p.Id" />
+                                        <button type="submit" class="btn btn-outline-primary btn-sm" data-arm="Confirmar: bajar a @Mxn(Math.Floor(p.CatalogPriceToWin!.Value))">Bajar a @Mxn(Math.Floor(p.CatalogPriceToWin!.Value))</button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="panel mt-3" aria-labelledby="qa-q" id="calidad">
+    <div class="panel-head">
+        <h2 id="qa-q">Calidad de las publicaciones</h2>
+        <p class="mb-0">Mercado Libre califica cada publicación de 0 a 100 (fotos, ficha técnica, código universal, envío…). Las profesionales salen más arriba en la búsqueda. Se revisan solas cada 3 días.</p>
+    </div>
+    @if (Model.QualityChecked == 0)
+    {
+        <div class="panel-body">
+            <div class="today-clear">
+                <span class="today-clear-mark" aria-hidden="true">✓</span>
+                <div>Aún no reviso la calidad de tus publicaciones activas. Pulsa «Revisar ahora» o espera la revisión automática de la noche.</div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="panel-body pb-0">
+            <nav class="pl-chips" aria-label="Filtrar por nivel">
+                @foreach (var l in levels)
+                {
+                    <a class="pub-chip @(Model.Level == l.Key ? "active" : "")" asp-action="Index" asp-route-level="@(l.Key == "all" ? null : l.Key)" asp-fragment="calidad">@l.Label <span>@l.Count</span></a>
+                }
+            </nav>
+        </div>
+        @if (Model.Quality.Count == 0)
+        {
+            <div class="panel-body"><p class="text-muted mb-0">Ninguna publicación en este nivel.</p></div>
+        }
+        else
+        {
+            <ul class="qa-list">
+                @foreach (var p in Model.Quality)
+                {
+                    var actions = ListingQualityService.Actions(p);
+                    <li class="qa-item @(p.QualityLevel == "Basic" ? "is-low" : "")">
+                        <div class="qa-score" aria-label="Calificación @p.QualityScore de 100"><b>@p.QualityScore</b><span>/100</span></div>
+                        <div class="qa-body">
+                            <div class="qa-title">
+                                <a asp-controller="Publications" asp-action="Edit" asp-route-id="@p.Id">@p.Product.Title</a>
+                                <span class="pill @ListingQualityService.LevelTone(p.QualityLevel)">@ListingQualityService.LevelLabel(p.QualityLevel)</span>
+                            </div>
+                            @if (actions.Count == 0)
+                            {
+                                <p class="small text-muted mb-0">Mercado Libre no pide nada más para esta publicación.</p>
+                            }
+                            else
+                            {
+                                <ul class="qa-actions">
+                                    @foreach (var a in actions)
+                                    {
+                                        <li class="@(a.Warning ? "is-warning" : "")">
+                                            <span>@(a.Warning ? "Baja tu calificación: " : "")@a.Title</span>
+                                            @if (a.Link is not null) { <a href="@a.Link" target="_blank" rel="noopener noreferrer" class="small">@(a.Label ?? "Corregir en Mercado Libre") ↗</a> }
+                                        </li>
+                                    }
+                                </ul>
+                                <a asp-controller="Publications" asp-action="Edit" asp-route-id="@p.Id" class="small">Editar fotos, ficha técnica y código aquí</a>
+                            }
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    }
+</section>
+
+<script>
+    // Doble clic para cambiar el precio: el primero pide confirmar por 4 segundos.
+    document.querySelectorAll('form.qa-arm button[data-arm]').forEach(function (b) {
+        var original = b.textContent, timer = null;
+        b.addEventListener('click', function (e) {
+            if (b.dataset.armed === '1') return;
+            e.preventDefault();
+            b.dataset.armed = '1';
+            b.textContent = b.dataset.arm;
+            b.classList.remove('btn-outline-primary'); b.classList.add('btn-outline-danger');
+            timer = setTimeout(function () {
+                b.dataset.armed = ''; b.textContent = original;
+                b.classList.add('btn-outline-primary'); b.classList.remove('btn-outline-danger');
+            }, 4000);
+        });
+    });
+</script>

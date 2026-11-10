@@ -62,6 +62,9 @@
         tasks.Add((expiringLots, expiringLots == 1 ? "lote por caducar" : "lotes por caducar", "Véndelos primero (baja el precio o arma un kit); lo caducado dalo de baja.", "Ver caducidades", "Inventory", "Index", null, "tone-urgent"));
     if (radarInTransit > 0)
         tasks.Add((radarInTransit, radarInTransit == 1 ? "compra en camino" : "compras en camino", "Márcalas como recibidas al llegar a Juárez para sumar el stock.", "Recibir", "Purchasing", "Index", new { tab = "transit" }, "tone-normal"));
+    var catalogLosing = (int)(ViewBag.CatalogLosing ?? 0);
+    if (catalogLosing > 0)
+        tasks.Add((catalogLosing, catalogLosing == 1 ? "publicación de catálogo perdiendo" : "publicaciones de catálogo perdiendo", "Otro vendedor se lleva el botón de compra. Mira a qué precio ganarías y si te conviene.", "Ver catálogo", "Quality", "Index", null, "tone-normal"));
     if (readyProducts > 0)
         tasks.Add((readyProducts, readyProducts == 1 ? "producto listo para publicar" : "productos listos para publicar", "Ya tienen sus datos; solo falta publicarlos.", "Publicar", "Products", "Index", new { stage = "Ready" }, "tone-normal"));
     if (draftProducts + reviewProducts > 0)
@@ -72,7 +75,7 @@
         tasks.Add((radarToBuy, radarToBuy == 1 ? "producto que conviene comprar" : "productos que conviene comprar", "Tienen demanda en Mercado Libre y te dejan margen.", "Ver lista", "Purchasing", "Index", null, "tone-normal"));
 
     foreach (var alert in repAlerts.Where(a => a.Risk == "near"))
-        tasks.Add((0, $"{alert.Metric}: {alert.RatePercent.ToString("0.##", mx)}%, cerca del límite verde ({alert.GreenLimit.ToString("0.#", mx)}%)", "Todavía estás en verde; cuida los próximos pedidos.", "Ver reputación", "Metrics", "Index", null, "tone-normal"));
+        tasks.Add((0, $"{alert.Metric}: {alert.RatePercent.ToString("0.##", mx)}%, cerca del límite verde ({alert.GreenLimit.ToString("0.#", mx)}%)", alert.RoomLeft is { } room ? (room == 0 ? "Un caso más y pasas el límite: cuida los próximos pedidos." : $"Te {(room == 1 ? "queda 1 caso" : $"quedan {room} casos")} antes de pasarlo; cuida los próximos pedidos.") : "Todavía estás en verde; cuida los próximos pedidos.", "Ver reputación", "Metrics", "Index", null, "tone-normal"));
 
     var setupSteps = new[]
     {

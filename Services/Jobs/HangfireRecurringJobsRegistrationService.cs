@@ -89,6 +89,14 @@ public sealed class HangfireRecurringJobsRegistrationService : BackgroundService
                     "reconcile-payments",
                     job => job.ReconcilePayments(),
                     "40 */3 * * *");
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "refresh-catalog",
+                    job => job.RefreshCatalog(),
+                    "50 */2 * * *");
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "refresh-listing-quality",
+                    job => job.RefreshListingQuality(),
+                    "15 9 * * *");
 
                 // Avisos de fallas: cada hora (minuto 20).
                 _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(

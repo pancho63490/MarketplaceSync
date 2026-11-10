@@ -162,6 +162,10 @@ public sealed class HealthMonitorService
         "RunImportAgent" or "RunImportAgentRequest" => "agente de importación",
         "ApplyAsync" => "cambios por Excel",
         "RefreshAllAsync" => "revisión de promociones",
+        "RefreshCatalog" => "catálogo",
+        "RefreshListingQuality" => "calidad de publicaciones",
+        "RefreshPackages" => "rastreo de paquetes",
+        "ReconcilePayments" => "pagos de Mercado Pago",
         null => "tarea",
         _ => method
     };

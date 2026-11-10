@@ -297,6 +297,22 @@ namespace MarketplaceSync.Services.Jobs
             await _telegram.RefreshPackagesAllAsync();
         }
 
+        /// <summary>Catálogo: quién gana el botón de compra; avisa cuando empiezas a perder.</summary>
+        [AutomaticRetry(Attempts = 0)]
+        [DisableConcurrentExecution(timeoutInSeconds: 900)]
+        public async Task RefreshCatalog()
+        {
+            await _telegram.RefreshCatalogAllAsync();
+        }
+
+        /// <summary>Calidad de las publicaciones según Mercado Libre (cada 3 días por publicación).</summary>
+        [AutomaticRetry(Attempts = 0)]
+        [DisableConcurrentExecution(timeoutInSeconds: 1800)]
+        public async Task RefreshListingQuality()
+        {
+            await _telegram.RefreshListingQualityAllAsync();
+        }
+
         /// <summary>Pagos de Mercado Pago: neto y fecha de liberación de cada venta; avisa diferencias.</summary>
         [AutomaticRetry(Attempts = 0)]
         [DisableConcurrentExecution(timeoutInSeconds: 900)]

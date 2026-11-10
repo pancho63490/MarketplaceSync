@@ -425,7 +425,8 @@ public sealed partial class TelegramNotificationService
             var limit = alert.GreenLimit.ToString("0.#", Mx) + "%";
             var html = alert.Risk == "over"
                 ? $"🔴 <b>Reputación en riesgo</b> · {E(alert.Account)}\n<b>{E(alert.Metric)}: {rate}</b>, arriba del límite verde ({limit}).\nMercado Libre puede bajarte de color y mostrar menos tus publicaciones. Evita nuevos casos esta semana."
-                : $"🟡 <b>Cuida tu reputación</b> · {E(alert.Account)}\n{E(alert.Metric)}: {rate}, cerca del límite verde ({limit}).";
+                : $"🟡 <b>Cuida tu reputación</b> · {E(alert.Account)}\n{E(alert.Metric)}: {rate}, cerca del límite verde ({limit})." +
+                  (alert.RoomLeft is { } room ? room == 0 ? "\nUn caso más y pasas el límite." : $"\nTe {(room == 1 ? "queda 1 caso" : $"quedan {room} casos")} antes de pasarlo (con tus ventas de hoy)." : "");
             var buttons = settings.PublicBaseUrl is null
                 ? null
                 : new List<IReadOnlyList<TelegramButton>> { new[] { new TelegramButton("Ver métricas", Url: AppUrl(settings, "/Metrics")) } };

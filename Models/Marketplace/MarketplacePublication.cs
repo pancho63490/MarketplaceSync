@@ -128,6 +128,54 @@ namespace MarketplaceSync.Web.Models.Marketplace
         public DateTime? PromotionCheckedAt { get; set; }
 
         // =====================================
+        // CATÁLOGO (competencia por el botón de compra)
+        // =====================================
+
+        /// <summary>La publicación compite en una ficha de catálogo de Mercado Libre.</summary>
+        public bool CatalogListing { get; set; }
+
+        [MaxLength(40)]
+        public string? CatalogProductId { get; set; }
+
+        /// <summary>winning, sharing_first_place, competing (perdiendo) o listed.</summary>
+        [MaxLength(30)]
+        public string? CatalogStatus { get; set; }
+
+        /// <summary>Precio con el que ganarías (de /items/{id}/price_to_win).</summary>
+        [System.ComponentModel.DataAnnotations.Schema.Column(TypeName = "numeric(12,2)")]
+        public decimal? CatalogPriceToWin { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Schema.Column(TypeName = "numeric(12,2)")]
+        public decimal? CatalogWinnerPrice { get; set; }
+
+        /// <summary>Motivos por los que no compite (separados por coma, en el código de Mercado Libre).</summary>
+        [MaxLength(400)]
+        public string? CatalogReasons { get; set; }
+
+        /// <summary>Ventajas que tiene el ganador y tú no (envío gratis, Full, meses…), separadas por coma.</summary>
+        [MaxLength(300)]
+        public string? CatalogOpportunities { get; set; }
+
+        public DateTime? CatalogCheckedAt { get; set; }
+
+        // =====================================
+        // CALIDAD DE LA PUBLICACIÓN (/item/{id}/performance)
+        // =====================================
+
+        /// <summary>0 a 100.</summary>
+        public int? QualityScore { get; set; }
+
+        /// <summary>Basic, Standard o Professional.</summary>
+        [MaxLength(20)]
+        public string? QualityLevel { get; set; }
+
+        /// <summary>Lo que falta (JSON: título, botón, link y si baja la calificación).</summary>
+        [MaxLength(4000)]
+        public string? QualityActionsJson { get; set; }
+
+        public DateTime? QualityCheckedAt { get; set; }
+
+        // =====================================
         // DATES
         // =====================================
 

@@ -1253,6 +1253,34 @@ namespace MarketplaceSync.Web.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<DateTime?>("CatalogCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("CatalogListing")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("CatalogOpportunities")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<decimal?>("CatalogPriceToWin")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<string>("CatalogProductId")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("CatalogReasons")
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)");
+
+                    b.Property<string>("CatalogStatus")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<decimal?>("CatalogWinnerPrice")
+                        .HasColumnType("numeric(12,2)");
+
                     b.Property<string>("CategoryId")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -1340,6 +1368,20 @@ namespace MarketplaceSync.Web.Migrations
 
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("QualityActionsJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTime?>("QualityCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("QualityLevel")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int?>("QualityScore")
+                        .HasColumnType("integer");
 
                     b.Property<decimal?>("SaleFeeForPrice")
                         .HasColumnType("numeric(18,2)");

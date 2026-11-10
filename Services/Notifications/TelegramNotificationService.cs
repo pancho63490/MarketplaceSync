@@ -437,6 +437,9 @@ public sealed partial class TelegramNotificationService
             case "/dinero":
                 await SendMoneyStatusAsync(token, settings, cancellationToken);
                 break;
+            case "/catalogo" or "/catálogo" or "/calidad":
+                await SendQualityStatusAsync(token, settings, cancellationToken);
+                break;
             case "/estado":
                 await SendHealthStatusAsync(token, settings, cancellationToken);
                 break;
@@ -475,6 +478,7 @@ public sealed partial class TelegramNotificationService
                     "/guia 1Z… faros — rastrear un paquete a El Paso\n" +
                     "/paquetes — qué viene en camino y el viaje abierto\n" +
                     "/dinero — lo que Mercado Pago tiene por liberar\n" +
+                    "/catalogo — publicaciones de catálogo que pierden y calidad\n" +
                     "/gasto 250 gasolina — anotar un gasto del negocio\n" +
                     "/precios — revisar qué publicaciones ya no ganan lo mínimo\n\n" +
                     "💬 <b>O escríbeme normal</b>: «¿cuánto vendí hoy?», «sube el faro de Tacoma a 3500», «pausa las balatas».\n\n" +

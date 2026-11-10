@@ -17,15 +17,23 @@ public sealed record KpiValue(decimal Value, decimal? Previous)
     public decimal? ChangePercent => Previous is > 0 ? Math.Round((Value - Previous.Value) / Previous.Value * 100m, 1) : null;
 }
 
-public sealed record ReputationMetric(string Key, string Label, string Help, decimal? RatePercent, int? Value, decimal GreenLimit, decimal LeaderLimit, string? Period)
+public sealed record ReputationMetric(string Key, string Label, string Help, decimal? RatePercent, int? Value, decimal GreenLimit, decimal LeaderLimit, string? Period, int? Sales = null)
 {
+    /// <summary>
+    /// Cuántos casos más caben antes de pasar el límite verde, con las ventas del periodo de hoy
+    /// (aproximado: Mercado Libre divide los casos entre las ventas del periodo). Null si ya pasó o no hay datos.
+    /// </summary>
+    public int? RoomLeft => Sales is > 0 && Value is { } value && RatePercent is { } rate && rate <= GreenLimit
+        ? Math.Max(0, (int)Math.Floor(GreenLimit / 100m * Sales.Value) - value)
+        : null;
+
     public string Tone => RatePercent is null ? "" : RatePercent <= LeaderLimit ? "ok" : RatePercent <= GreenLimit ? "warn" : "bad";
 
     /// <summary>"over" si ya pasó el límite verde; "near" si va en 80% o más del límite; null si va bien.</summary>
     public string? Risk => RatePercent is not { } r ? null : r > GreenLimit ? "over" : r >= GreenLimit * 0.8m ? "near" : null;
 }
 
-public sealed record ReputationAlert(string Account, string Metric, string Risk, decimal RatePercent, decimal GreenLimit);
+public sealed record ReputationAlert(string Account, string Metric, string Risk, decimal RatePercent, decimal GreenLimit, int? RoomLeft = null);
 
 public sealed record AccountReputation(
     string AccountName,
@@ -409,7 +417,7 @@ public sealed class MetricsService
                 using var user = await GetAsync(token, $"/users/{Uri.EscapeDataString(account.ExternalAccountId)}", cancellationToken);
                 var rep = ParseReputation(account.DisplayName, user.RootElement);
                 alerts.AddRange(rep.Metrics.Where(m => m.Risk is not null)
-                    .Select(m => new ReputationAlert(account.DisplayName, m.Label, m.Risk!, m.RatePercent!.Value, m.GreenLimit)));
+                    .Select(m => new ReputationAlert(account.DisplayName, m.Label, m.Risk!, m.RatePercent!.Value, m.GreenLimit, m.RoomLeft)));
             }
             catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
             {
@@ -474,7 +482,7 @@ public sealed class MetricsService
                     var rate = Dec(metric, "rate");
                     // Mercado Libre devuelve la tasa como fracción (0.012 = 1.2%).
                     decimal? percent = rate.HasValue ? Math.Round(rate.Value <= 1 ? rate.Value * 100m : rate.Value, 2) : null;
-                    metrics.Add(new ReputationMetric(key, label, help, percent, Int(metric, "value"), green, leader, Str(metric, "period")));
+                    metrics.Add(new ReputationMetric(key, label, help, percent, Int(metric, "value"), green, leader, Str(metric, "period"), completed));
                 }
             }
         }

@@ -2243,3 +2243,23 @@ body {
 .pk-add .form-select { width: auto; }
 @media (max-width: 700px) { .trip-costs { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 @media (max-width: 640px) { .promo-table .trip-num { margin-left: 0; } }
+
+/* ── Calidad y catálogo ── */
+.qa-list { list-style: none; margin: 0; padding: 0; }
+.qa-item { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; padding: 14px 18px; border-top: 1px solid var(--line); }
+.qa-item.is-low { box-shadow: inset 4px 0 0 var(--warn); }
+.qa-score { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 56px; border-radius: var(--r-control); background: var(--paper-2); color: var(--ink); line-height: 1; }
+.qa-score b { font-size: var(--fs-lg); font-weight: 800; }
+.qa-score span { font-size: var(--fs-xs); color: var(--muted); }
+.qa-item.is-low .qa-score { background: var(--warn-soft); }
+.qa-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; min-width: 0; }
+.qa-title a { font-weight: 700; color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+.qa-actions { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 4px; }
+.qa-actions li { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: var(--fs-sm); color: var(--ink-2); padding-left: 14px; position: relative; }
+.qa-actions li::before { content: ""; position: absolute; left: 0; top: .55em; width: 6px; height: 6px; border-radius: 50%; background: var(--muted-2); }
+.qa-actions li.is-warning { color: var(--bad); }
+.qa-actions li.is-warning::before { background: var(--bad); }
+@media (max-width: 575.98px) {
+    .qa-item { grid-template-columns: 48px minmax(0, 1fr); padding: 12px 14px; gap: 10px; }
+    .qa-score { height: 48px; }
+}

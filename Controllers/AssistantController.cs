@@ -109,6 +109,7 @@ public sealed class AssistantController : Controller
             - Revisar títulos (palabras prohibidas, inglés, términos de México, mayúsculas, símbolos; sugerencia con IA y cambiar los que no tienen ventas): /Titles
             - Viajes a El Paso (lo que compraste, gasolina, cruce, impuestos; costo real por pieza al recibir) y paquetes con guía (UPS, USPS, FedEx, Amazon): /Trips
             - Dinero de Mercado Pago (por liberar, próximas liberaciones, ventas donde te dejan diferente de lo esperado): /Money
+            - Calidad y catálogo (publicaciones de catálogo que pierden el botón de compra y a qué precio ganarían; calificación de calidad de Mercado Libre y qué le falta a cada publicación): /Quality
             - Importar producto con IA: /Products/CreateFromUrl
             - Inventario (incluye caducidades por lote): /Inventory
             - Pedidos: /Orders

@@ -186,6 +186,8 @@ builder.Services.AddScoped<MarketplaceSync.Services.Automation.HealthMonitorServ
 builder.Services.AddScoped<MarketplaceSync.Services.Purchasing.SupplyTripService>();
 builder.Services.AddScoped<MarketplaceSync.Services.Purchasing.PackageTrackingService>();
 builder.Services.AddScoped<MarketplaceSync.Services.Finance.MercadoPagoService>();
+builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.CatalogCompetitionService>();
+builder.Services.AddScoped<MarketplaceSync.Services.MercadoLibre.ListingQualityService>();
 builder.Services.AddScoped<MarketplaceSync.Services.Notifications.TelegramAssistantService>();
 
 builder.Services.AddScoped<MercadoLibreCategoryService>();

@@ -131,6 +131,8 @@ namespace MarketplaceSync.Web.Controllers
                 x.OrganizationId == organizationId && x.IsSelected);
             ViewBag.OpenQuestions = await _context.BuyerQuestions.CountAsync(x =>
                 x.OrganizationId == organizationId && x.Status == MarketplaceSync.Web.Models.Questions.BuyerQuestionStatus.Unanswered);
+            ViewBag.CatalogLosing = await _context.MarketplacePublications.CountAsync(x =>
+                x.Product.OrganizationId == organizationId && x.CatalogListing && x.Status == "active" && x.CatalogStatus == "competing");
             ViewBag.ReadyProducts = await organizationProducts.CountAsync(x =>
                 x.Status == "ReadyToPublish" &&
                 !x.MarketplacePublications.Any(p => p.Marketplace == "MercadoLibre" && p.IsPublished));

@@ -273,6 +273,9 @@ public sealed class MercadoLibreListingSyncService : IMercadoLibreListingSyncSer
             publication.CategoryId = ReadString(item, "category_id") ?? publication.CategoryId;
             publication.ListingTypeId = ReadString(item, "listing_type_id") ?? publication.ListingTypeId;
             publication.CurrencyId = ReadString(item, "currency_id") ?? publication.CurrencyId ?? "MXN";
+            if (item.TryGetProperty("catalog_listing", out var catalogListing) && catalogListing.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                publication.CatalogListing = catalogListing.ValueKind == JsonValueKind.True;
+            publication.CatalogProductId = Truncate(ReadString(item, "catalog_product_id"), 40) ?? publication.CatalogProductId;
             publication.IsPublished = true;
             publication.MarketplaceAccountId ??= accountId;
             publication.LastSyncedAt = DateTime.UtcNow;

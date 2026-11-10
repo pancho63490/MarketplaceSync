@@ -187,7 +187,7 @@
                                     <span class="mt-meter-mark" style="left: @(((double)m.LeaderLimit / scale * 100).ToString("0.#", CultureInfo.InvariantCulture))%" title="MercadoLíder"></span>
                                     <span class="mt-meter-mark is-green" style="left: @(((double)m.GreenLimit / scale * 100).ToString("0.#", CultureInfo.InvariantCulture))%" title="Límite verde"></span>
                                 </div>
-                                <div class="mt-limit-legend">Límite verde @Pct(m.GreenLimit) · MercadoLíder @Pct(m.LeaderLimit)</div>
+                                <div class="mt-limit-legend">Límite verde @Pct(m.GreenLimit) · MercadoLíder @Pct(m.LeaderLimit)@if (m.RoomLeft is { } room) { <text> · <b class="@(room <= 1 ? "text-bad" : "")">@(room == 0 ? "un caso más y pasas el límite" : room == 1 ? "te queda 1 caso" : $"te quedan {room} casos")</b></text> }</div>
                             </li>
                         }
                     </ul>

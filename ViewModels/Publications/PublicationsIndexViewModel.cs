@@ -27,6 +27,10 @@ public sealed class PublicationRow
     public string? CostCurrency { get; init; }
     /// <summary>El costo viene de un viaje recibido (costo real), no del estimado.</summary>
     public bool CostIsReal { get; init; }
+    /// <summary>Estado en catálogo (winning, competing…); null si no es de catálogo o no se ha revisado.</summary>
+    public string? CatalogStatus { get; init; }
+    public int? QualityScore { get; init; }
+    public string? QualityLevel { get; init; }
     public decimal? LandedCostMxn { get; init; }
     public CrossBorderProfitEstimate? Profit { get; init; }
     public KitSuggestion? Kit { get; init; }
