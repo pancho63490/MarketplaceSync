@@ -1015,7 +1015,7 @@ public sealed partial class TelegramNotificationService
     }
 
     /// <summary>Revisión de precios (después de actualizar el tipo de cambio): avisa o aplica según Automático.</summary>
-    public async Task ReviewPricesAsync(Guid organizationId, CancellationToken cancellationToken = default)
+    public async Task ReviewPricesAsync(Guid organizationId, CancellationToken cancellationToken = default, bool reportWhenClean = false)
     {
         var settings = await _context.NotificationSettings.FirstOrDefaultAsync(x => x.OrganizationId == organizationId, cancellationToken);
         var token = settings is null ? null : TokenFor(settings);
@@ -1023,6 +1023,15 @@ public sealed partial class TelegramNotificationService
             return;
 
         var (items, more) = await Service<RepricingService>().ReviewAsync(organizationId, cancellationToken);
+        if (reportWhenClean && items.Count == 0 && more == 0)
+        {
+            await _telegram.SendMessageAsync(token, chatId,
+                "✅ No hay precios nuevos que cambiar con el dólar y tus costos de hoy. " +
+                "Las que ya te avisé en los últimos 3 días o marcaste «Ignorar» no se repiten; todas las que no ganan lo mínimo están en Publicados → Con pérdida.",
+                settings.PublicBaseUrl is null ? null : new[] { new[] { new TelegramButton("Ver Con pérdida", Url: AppUrl(settings, "/Publications?filter=loss")) } },
+                cancellationToken: cancellationToken);
+            return;
+        }
         foreach (var item in items)
         {
             if (item.Applied)

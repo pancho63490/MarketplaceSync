@@ -460,7 +460,7 @@ public sealed partial class TelegramNotificationService
                 break;
             case "/precios":
                 await _telegram.SendMessageAsync(token, update.ChatId, "Reviso tus precios con el dólar y los costos de hoy…", cancellationToken: cancellationToken);
-                await ReviewPricesAsync(settings.OrganizationId, cancellationToken);
+                await ReviewPricesAsync(settings.OrganizationId, cancellationToken, reportWhenClean: true);
                 break;
             case var command when !command.StartsWith('/') && text.Length > 0:
                 await HandleAssistantAsync(token, settings, text, update.MessageId, cancellationToken);
