@@ -20,6 +20,21 @@ public sealed partial class TelegramNotificationService
     [GeneratedRegex(@"(?<![\w./-])(?:us\$|\$|usd\s*)?\s*(\d{1,5}(?:[.,]\d{1,2})?)\s*(?:usd|dls|dlls|d[oó]lares)?(?![\w/])", RegexOptions.IgnoreCase)]
     private static partial Regex PriceRegex();
 
+    [GeneratedRegex(@"(?:(?<![\w])x\s*(\d{1,4})(?![\w.,])|(?<![\w.,])(\d{1,4})\s*(?:x(?![\w])|pzas?\b|pzs\b|piezas?\b|pcs\b|unidades?\b))", RegexOptions.IgnoreCase)]
+    private static partial Regex QuantityRegex();
+
+    /// <summary>"link 38.50 x2" o "link 2 piezas" → 2 (y el texto sin la cantidad, para no leerla como precio).</summary>
+    private static (int Quantity, string Remaining) FindQuantity(string text, string link)
+    {
+        var rest = text.Replace(link, " ", StringComparison.Ordinal);
+        var match = QuantityRegex().Match(rest);
+        if (!match.Success) return (1, text);
+        var raw = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
+        var quantity = int.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out var q) && q is >= 1 and <= 10_000 ? q : 1;
+        var index = text.IndexOf(match.Value, StringComparison.Ordinal);
+        return (quantity, index >= 0 ? text.Remove(index, match.Value.Length) : text);
+    }
+
     private static string? FindLink(string text)
     {
         var match = LinkRegex().Match(text);
@@ -147,15 +162,24 @@ public sealed partial class TelegramNotificationService
         }
 
         var cleanLink = MarketplaceSync.Web.Helpers.UrlCleaner.CleanSourceUrl(link);
+        var (quantity, priceText) = FindQuantity(text, link);
+        var trips = Service<MarketplaceSync.Services.Purchasing.SupplyTripService>();
+        var openTrip = await trips.OpenTripAsync(org, cancellationToken);
+
         var existing = await _context.Products.AsNoTracking()
             .Where(p => p.OrganizationId == org && (p.SourceUrl == link || p.SourceUrl == cleanLink))
-            .Select(p => new { p.Id, p.Title })
             .FirstOrDefaultAsync(cancellationToken);
         if (existing is not null)
         {
-            await _telegram.SendMessageAsync(token, chatId,
-                $"Ya tienes ese producto: <b>{E(existing.Title)}</b>.",
-                ProductButtons(settings, existing.Id, publish: false), replyToMessageId: userMessageId, cancellationToken: cancellationToken);
+            var existingHtml = $"Ya tienes ese producto: <b>{E(existing.Title)}</b>.";
+            var existingButtons = ProductButtons(settings, existing.Id, publish: false);
+            if (openTrip is not null)
+            {
+                var added = await trips.AddFromLinkAsync(org, openTrip, existing, cleanLink, quantity, FindPriceUsd(priceText, link), cancellationToken);
+                existingHtml += "\n" + TripLine(openTrip, added);
+                existingButtons = WithTripButtons(settings, existingButtons, openTrip, added);
+            }
+            await _telegram.SendMessageAsync(token, chatId, existingHtml, existingButtons, replyToMessageId: userMessageId, cancellationToken: cancellationToken);
             return;
         }
 
@@ -172,7 +196,7 @@ public sealed partial class TelegramNotificationService
 
         var progressId = await _telegram.SendMessageAsync(token, chatId, "⏳ Importando el producto…", replyToMessageId: userMessageId, cancellationToken: cancellationToken);
 
-        var manualPrice = FindPriceUsd(text, link);
+        var manualPrice = FindPriceUsd(priceText, link);
         Product product;
         try
         {
@@ -228,12 +252,39 @@ public sealed partial class TelegramNotificationService
         if (missing.Count > 0)
             html.Append("⚠️ La tienda no dejó leer ").Append(string.Join(" ni ", missing))
                 .Append(product.SourcePrice is > 0 ? "." : ". Mándame el link otra vez con el precio: <code>link 38.50</code>.").Append('\n');
+        var buttons = ProductButtons(settings, product.Id, publish: false);
+        if (openTrip is not null)
+        {
+            var added = await trips.AddFromLinkAsync(org, openTrip, product, product.SourceUrl ?? cleanLink, quantity, manualPrice, cancellationToken);
+            html.Append(TripLine(openTrip, added)).Append('\n');
+            buttons = WithTripButtons(settings, buttons, openTrip, added);
+        }
         html.Append("\n✨ La IA está preparando título, categoría, atributos y precio para Mercado Libre…");
 
-        await _telegram.EditMessageAsync(token, chatId, progressId, html.ToString(), ProductButtons(settings, product.Id, publish: false), cancellationToken);
+        await _telegram.EditMessageAsync(token, chatId, progressId, html.ToString(), buttons, cancellationToken);
 
         // La IA tarda: se hace aparte para no detener los demás mensajes del bot.
         _jobs.Enqueue<TelegramNotificationService>(s => s.PrepareImportedProductAsync(org, product.Id, chatId, progressId, CancellationToken.None));
+    }
+
+    /// <summary>"🧳 Agregado al viaje «X»: 2 × US$38.50" (o pide el precio si la tienda no lo dio).</summary>
+    private static string TripLine(MarketplaceSync.Web.Models.Purchasing.SupplyTrip trip, MarketplaceSync.Web.Models.Purchasing.SupplyTripItem item) =>
+        $"🧳 Agregado al viaje «{E(trip.Name)}»: {item.Quantity} × " +
+        (item.UnitCostUsd > 0
+            ? $"US$ {item.UnitCostUsd.ToString("0.00", CultureInfo.InvariantCulture)}"
+            : "<b>sin precio</b> (escríbelo en el viaje o manda el link con el precio: <code>link 38.50 x2</code>)") +
+        (item.ProductVariantId is null ? "" : " · se suma al inventario al recibir") + ".";
+
+    /// <summary>Agrega «Quitar del viaje» y «Ver viaje» a los botones del producto.</summary>
+    private static List<IReadOnlyList<TelegramButton>> WithTripButtons(NotificationSettings settings, List<IReadOnlyList<TelegramButton>>? buttons,
+        MarketplaceSync.Web.Models.Purchasing.SupplyTrip trip, MarketplaceSync.Web.Models.Purchasing.SupplyTripItem item)
+    {
+        var rows = buttons ?? new List<IReadOnlyList<TelegramButton>>();
+        var row = new List<TelegramButton> { new("↩️ Quitar del viaje", CallbackData: $"tr:{item.Id}") };
+        if (settings.PublicBaseUrl is not null)
+            row.Add(new TelegramButton("Ver viaje", Url: AppUrl(settings, $"/Trips/Details/{trip.Id}#piezas")));
+        rows.Add(row);
+        return rows;
     }
 
     /// <summary>Trabajo en segundo plano: prepara con IA el producto importado desde Telegram y actualiza su mensaje.</summary>
@@ -254,9 +305,19 @@ public sealed partial class TelegramNotificationService
             _logger.LogWarning(exception, "Autopilot failed for Telegram import {ProductId}.", productId);
         }
 
-        await _telegram.EditMessageAsync(token, chatId, messageId,
-            await ProductCardAsync(organizationId, productId, result, published: false, cancellationToken),
-            ProductButtons(settings, productId, publish: result?.Ready == true), cancellationToken);
+        var card = await ProductCardAsync(organizationId, productId, result, published: false, cancellationToken);
+        var buttons = ProductButtons(settings, productId, publish: result?.Ready == true);
+        // Si se agregó al viaje abierto, se conserva la línea y el botón para quitarlo.
+        var tripItem = await _context.SupplyTripItems.AsNoTracking().Include(i => i.SupplyTrip)
+            .Where(i => i.ProductId == productId && i.SupplyTrip.OrganizationId == organizationId &&
+                        i.SupplyTrip.Status == MarketplaceSync.Web.Models.Purchasing.SupplyTripStatus.Planning)
+            .OrderByDescending(i => i.Id).FirstOrDefaultAsync(cancellationToken);
+        if (tripItem is not null)
+        {
+            card += "\n" + TripLine(tripItem.SupplyTrip, tripItem);
+            buttons = WithTripButtons(settings, buttons, tripItem.SupplyTrip, tripItem);
+        }
+        await _telegram.EditMessageAsync(token, chatId, messageId, card, buttons, cancellationToken);
     }
 
     private async Task PublishFromTelegramAsync(string token, NotificationSettings settings, int productId, TelegramIncoming update, CancellationToken cancellationToken)

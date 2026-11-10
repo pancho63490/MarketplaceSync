@@ -2644,6 +2644,9 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<decimal?>("EstimatedUnitCostMxn")
                         .HasColumnType("numeric(12,2)");
 
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("ProductVariantId")
                         .HasColumnType("integer");
 
@@ -2655,6 +2658,10 @@ namespace MarketplaceSync.Web.Migrations
 
                     b.Property<decimal>("ShippingUsd")
                         .HasColumnType("numeric(12,2)");
+
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<string>("Store")
                         .HasMaxLength(60)

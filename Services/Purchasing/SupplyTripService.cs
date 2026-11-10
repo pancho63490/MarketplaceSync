@@ -2,6 +2,7 @@ using System.Globalization;
 using MarketplaceSync.Services.Interfaces;
 using MarketplaceSync.Services.MercadoLibre;
 using MarketplaceSync.Web.Data;
+using MarketplaceSync.Web.Models;
 using MarketplaceSync.Web.Models.Inventory;
 using MarketplaceSync.Web.Models.Purchasing;
 using Microsoft.EntityFrameworkCore;
@@ -103,6 +104,57 @@ public sealed class SupplyTripService
         return (true, variant is null
             ? $"Agregué «{Short(text, 40)}». No es un SKU de la app: su costo real no se guarda en un producto."
             : $"Agregué {quantity} × {variant.Sku}.");
+    }
+
+    /// <summary>El viaje que está abierto (comprando), el más reciente.</summary>
+    public Task<SupplyTrip?> OpenTripAsync(Guid org, CancellationToken cancellationToken = default) =>
+        _context.SupplyTrips.Include(t => t.Items)
+            .Where(t => t.OrganizationId == org && t.Status == SupplyTripStatus.Planning)
+            .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    /// <summary>
+    /// Agrega al viaje un producto mandado por link (Telegram). Si el producto tiene un solo SKU activo se liga a él
+    /// para sumar inventario al recibir; si no, se liga al producto para guardarle el costo real.
+    /// El precio puede quedar en 0: la pantalla del viaje lo marca y no deja recibir hasta escribirlo.
+    /// </summary>
+    public async Task<SupplyTripItem> AddFromLinkAsync(Guid org, SupplyTrip trip, Product product, string link, int quantity, decimal? unitCostUsd, CancellationToken cancellationToken = default)
+    {
+        var variants = await _context.ProductVariants.AsNoTracking()
+            .Where(v => v.OrganizationId == org && v.ProductId == product.Id && v.IsActive)
+            .Select(v => v.Id).Take(2).ToListAsync(cancellationToken);
+        var unit = unitCostUsd is > 0 ? unitCostUsd.Value
+            : product.SourcePrice is > 0 && string.Equals(product.SourceCurrency, "USD", StringComparison.OrdinalIgnoreCase) ? product.SourcePrice.Value : 0m;
+        var title = string.IsNullOrWhiteSpace(product.Title) ? "Producto sin título" : product.Title.Trim();
+        var item = new SupplyTripItem
+        {
+            SupplyTripId = trip.Id,
+            ProductId = product.Id,
+            ProductVariantId = variants.Count == 1 ? variants[0] : null,
+            Description = title[..Math.Min(title.Length, 300)],
+            Quantity = Math.Clamp(quantity, 1, 10_000),
+            UnitCostUsd = Math.Round(unit, 2),
+            Store = StoreName(product.SourceMarketplace, link),
+            SourceUrl = link.Length <= 1000 ? link : null
+        };
+        _context.SupplyTripItems.Add(item);
+        await _context.SaveChangesAsync(cancellationToken);
+        return item;
+    }
+
+    private static string? StoreName(string? marketplace, string link)
+    {
+        var known = (marketplace ?? string.Empty).ToLowerInvariant() switch
+        {
+            "ebay" => "eBay",
+            "amazon" => "Amazon",
+            "walmart" => "Walmart",
+            "aliexpress" => "AliExpress",
+            "rockauto" => "RockAuto",
+            _ => null
+        };
+        if (known is not null) return known;
+        return Uri.TryCreate(link, UriKind.Absolute, out var uri) ? uri.Host.Replace("www.", string.Empty)[..Math.Min(uri.Host.Replace("www.", string.Empty).Length, 60)] : null;
     }
 
     public async Task<bool> RemoveItemAsync(Guid org, int tripId, int itemId, CancellationToken cancellationToken = default)
@@ -224,6 +276,14 @@ public sealed class SupplyTripService
         var pieces = 0;
         if (addToInventory)
         {
+            // Piezas que llegaron por link sin SKU: si su producto ya tiene un solo SKU, se suman a ese.
+            foreach (var item in trip.Items.Where(i => i.ProductVariantId == null && i.ProductId != null))
+            {
+                var ids = await _context.ProductVariants.AsNoTracking()
+                    .Where(v => v.OrganizationId == org && v.ProductId == item.ProductId && v.IsActive)
+                    .Select(v => v.Id).Take(2).ToListAsync(cancellationToken);
+                if (ids.Count == 1) item.ProductVariantId = ids[0];
+            }
             foreach (var item in trip.Items.Where(i => i.ProductVariantId != null))
             {
                 var variant = await _context.ProductVariants.FirstOrDefaultAsync(v => v.Id == item.ProductVariantId && v.OrganizationId == org, cancellationToken);
@@ -275,9 +335,12 @@ public sealed class SupplyTripService
         {
             line.Item.RealUnitCostMxn = line.RealUnitMxn;
             line.Item.EstimatedUnitCostMxn = line.EstimatedUnitMxn;
-            if (line.Item.ProductVariantId is not { } variantId) continue;
-            var product = await _context.ProductVariants.Where(v => v.Id == variantId && v.OrganizationId == org)
-                .Select(v => v.Product).FirstOrDefaultAsync(cancellationToken);
+            Product? product = null;
+            if (line.Item.ProductVariantId is { } variantId)
+                product = await _context.ProductVariants.Where(v => v.Id == variantId && v.OrganizationId == org)
+                    .Select(v => v.Product).FirstOrDefaultAsync(cancellationToken);
+            else if (line.Item.ProductId is { } productId)
+                product = await _context.Products.FirstOrDefaultAsync(p => p.Id == productId && p.OrganizationId == org, cancellationToken);
             if (product is null) continue;
             // Un viaje más viejo no pisa el costo de uno más nuevo.
             var newer = product.RealLandedTripId is { } previous && previous != trip.Id &&

@@ -431,6 +431,9 @@ public sealed partial class TelegramNotificationService
             case "/guia" or "/guía" or "/rastreo":
                 await HandleTrackingCommandAsync(token, settings, text.Split(' ', 2) is { Length: 2 } tp ? tp[1] : string.Empty, update.MessageId, cancellationToken);
                 break;
+            case "/viaje" when text.Split(' ', 3) is { Length: >= 2 } vp && vp[1].Equals("nuevo", StringComparison.OrdinalIgnoreCase):
+                await StartTripAsync(token, settings, text.Split(' ', 3) is { Length: 3 } vn ? vn[2] : null, update.MessageId, cancellationToken);
+                break;
             case "/paquetes" or "/viaje":
                 await SendPackagesStatusAsync(token, settings, cancellationToken);
                 break;
@@ -477,6 +480,7 @@ public sealed partial class TelegramNotificationService
                     "/estado — si todo está funcionando (sesión, pedidos, tareas)\n" +
                     "/guia 1Z… faros — rastrear un paquete a El Paso\n" +
                     "/paquetes — qué viene en camino y el viaje abierto\n" +
+                    "/viaje nuevo Buen Fin — abrir un viaje; los links que mandes se agregan a él\n" +
                     "/dinero — lo que Mercado Pago tiene por liberar\n" +
                     "/catalogo — publicaciones de catálogo que pierden y calidad\n" +
                     "/gasto 250 gasolina — anotar un gasto del negocio\n" +

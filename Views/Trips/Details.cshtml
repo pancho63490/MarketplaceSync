@@ -78,7 +78,7 @@
                         {
                             var idx = i++;
                             <tr>
-                                <td class="promo-title">@l.Item.Description<span class="sub">@(l.Sku ?? "sin SKU en la app")@(l.Item.Store is { } s ? " · " + s : "")</span></td>
+                                <td class="promo-title">@if (l.Item.SourceUrl is { } src) { <a href="@src" target="_blank" rel="noopener noreferrer">@l.Item.Description</a> } else { @l.Item.Description }<span class="sub">@(l.Sku ?? (l.Item.ProductId is not null ? "producto de la app, aún sin SKU" : "sin SKU en la app"))@(l.Item.Store is { } s ? " · " + s : "")</span></td>
                                 <td class="num" data-label="Piezas">
                                     <input type="hidden" name="items[@idx].Id" value="@l.Item.Id" />
                                     @if (received) { @l.Item.Quantity } else { <input name="items[@idx].Quantity" type="number" min="1" class="form-control form-control-sm trip-num" value="@l.Item.Quantity" aria-label="Piezas" /> }

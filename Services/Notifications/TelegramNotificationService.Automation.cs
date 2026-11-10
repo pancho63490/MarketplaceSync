@@ -105,6 +105,26 @@ public sealed partial class TelegramNotificationService
                 return true;
             }
 
+            case "tr" when int.TryParse(parts[1], out var tripItemId):
+            {
+                var item = await _context.SupplyTripItems.Include(i => i.SupplyTrip)
+                    .FirstOrDefaultAsync(i => i.Id == tripItemId && i.SupplyTrip.OrganizationId == org, cancellationToken);
+                string answer;
+                if (item is null) answer = "Esa pieza ya no está en el viaje.";
+                else if (item.SupplyTrip.Status != MarketplaceSync.Web.Models.Purchasing.SupplyTripStatus.Planning) answer = "El viaje ya se recibió; corrígelo en la app.";
+                else
+                {
+                    _context.SupplyTripItems.Remove(item);
+                    await _context.SaveChangesAsync(cancellationToken);
+                    answer = "Quitado del viaje";
+                }
+                await _telegram.AnswerCallbackAsync(token, update.CallbackId!, answer, cancellationToken);
+                if (item is not null && answer == "Quitado del viaje")
+                    await _telegram.SendMessageAsync(token, chatId, $"↩️ Quité «{E(Short(item.Description, 60))}» del viaje «{E(item.SupplyTrip.Name)}». El producto sigue importado.",
+                        replyToMessageId: update.CallbackMessageId, cancellationToken: cancellationToken);
+                return true;
+            }
+
             case "pk" when int.TryParse(parts[1], out var orderId):
             {
                 var order = await _context.SalesOrders.FirstOrDefaultAsync(o => o.Id == orderId && o.OrganizationId == org, cancellationToken);
@@ -521,6 +541,25 @@ public sealed partial class TelegramNotificationService
               (tracking.IsConfigured ? "\nTe aviso cuando salga a entrega y cuando llegue." : "");
         var buttons = package is null ? null : new[] { new[] { new TelegramButton("Ver rastreo", Url: MarketplaceSync.Services.Purchasing.PackageTrackingService.TrackingUrl(package.Carrier, package.TrackingNumber)) } };
         await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value, html, buttons, replyToMessageId: messageId, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>/viaje nuevo [nombre]: abre un viaje a El Paso; los links de tienda que mande después se agregan a él.</summary>
+    private async Task StartTripAsync(string token, NotificationSettings settings, string? name, long? messageId, CancellationToken cancellationToken)
+    {
+        var trips = Service<MarketplaceSync.Services.Purchasing.SupplyTripService>();
+        var open = await trips.OpenTripAsync(settings.OrganizationId, cancellationToken);
+        if (open is not null && string.IsNullOrWhiteSpace(name))
+        {
+            await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value,
+                $"Ya tienes abierto «{E(open.Name)}» ({open.Items.Count} {(open.Items.Count == 1 ? "pieza" : "piezas")}). Los links que mandes se agregan ahí. Para otro, ponle nombre: <code>/viaje nuevo Navidad</code>.",
+                replyToMessageId: messageId, cancellationToken: cancellationToken);
+            return;
+        }
+        var trip = await trips.CreateAsync(settings.OrganizationId, name, null, cancellationToken);
+        await _telegram.SendMessageAsync(token, settings.TelegramChatId!.Value,
+            $"🚗 Abrí el viaje «{E(trip.Name)}». Mándame el link de cada cosa que compres (con precio y cantidad si quieres: <code>link 38.50 x2</code>) y la agrego.",
+            settings.PublicBaseUrl is null ? null : new[] { new[] { new TelegramButton("Ver viaje", Url: AppUrl(settings, $"/Trips/Details/{trip.Id}")) } },
+            replyToMessageId: messageId, cancellationToken: cancellationToken);
     }
 
     /// <summary>/paquetes y /viaje: lo que viene en camino y el viaje abierto.</summary>

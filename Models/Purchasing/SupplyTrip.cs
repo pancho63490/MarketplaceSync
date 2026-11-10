@@ -67,6 +67,13 @@ public sealed class SupplyTripItem
     /// <summary>SKU de la app (si es pieza que ya tienes); null = pieza nueva sin SKU.</summary>
     public int? ProductVariantId { get; set; }
 
+    /// <summary>Producto de la app aunque aún no tenga SKU (importado por link): al recibir se le guarda el costo real.</summary>
+    public int? ProductId { get; set; }
+
+    /// <summary>Link de la tienda donde se compró (Amazon, eBay, Walmart…).</summary>
+    [MaxLength(1000)]
+    public string? SourceUrl { get; set; }
+
     [MaxLength(300)]
     public string Description { get; set; } = string.Empty;
 
