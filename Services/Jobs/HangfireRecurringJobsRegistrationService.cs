@@ -94,6 +94,10 @@ public sealed class HangfireRecurringJobsRegistrationService : BackgroundService
                     job => job.RefreshCatalog(),
                     "50 */2 * * *");
                 _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
+                    "sync-auto-prices",
+                    job => job.SyncAutoPrices(),
+                    "35 2,14 * * *");
+                _recurringJobManager.AddOrUpdate<MarketplaceJobsService>(
                     "refresh-listing-quality",
                     job => job.RefreshListingQuality(),
                     "15 9 * * *");

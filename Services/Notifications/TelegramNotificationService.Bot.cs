@@ -153,11 +153,11 @@ public sealed partial class TelegramNotificationService
         var chatId = settings.TelegramChatId!.Value;
         var org = settings.OrganizationId;
 
-        if (link.Contains("mercadolibre.", StringComparison.OrdinalIgnoreCase) || link.Contains("mercadolivre.", StringComparison.OrdinalIgnoreCase))
+        if (link.Contains("mercadolibre.", StringComparison.OrdinalIgnoreCase) || link.Contains("mercadolivre.", StringComparison.OrdinalIgnoreCase) ||
+            link.Contains("meli.la/", StringComparison.OrdinalIgnoreCase))
         {
-            await _telegram.SendMessageAsync(token, chatId,
-                "Ese link es de Mercado Libre. Mándame el link de la tienda donde lo compras (Amazon, eBay, Walmart…) y lo importo con su costo en dólares.",
-                replyToMessageId: userMessageId, cancellationToken: cancellationToken);
+            // Publicación de Mercado Libre (de la competencia): el agente busca la misma pieza en eBay.
+            await HandleMercadoLibreLinkAsync(token, settings, link, userMessageId, cancellationToken);
             return;
         }
 

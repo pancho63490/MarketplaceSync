@@ -101,6 +101,7 @@ public sealed class PublicationsController : Controller
                 CostCurrency = product.SourceCurrency,
                 CostIsReal = product.RealLandedCostMxn is > 0,
                 CatalogStatus = p.CatalogListing ? p.CatalogStatus : null,
+                AutoPriceStatus = p.AutoPriceStatus,
                 QualityScore = p.QualityScore,
                 QualityLevel = p.QualityLevel,
                 LandedCostMxn = landed,
@@ -307,9 +308,20 @@ public sealed class PublicationsController : Controller
             }
         }
 
+        AutoPricePanel? autoPrice = null;
+        if (!item.IsClosed)
+        {
+            try { autoPrice = await HttpContext.RequestServices.GetRequiredService<AutoPriceService>().PanelAsync(organizationId, id, cancellationToken); }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                HttpContext.RequestServices.GetRequiredService<ILogger<PublicationsController>>().LogInformation(exception, "Auto price panel failed for {Id}.", id);
+            }
+        }
+
         return View(new PublicationEditViewModel
         {
             Item = item,
+            AutoPrice = autoPrice,
             LandedCostMxn = landed,
             Profit = profit,
             Compatibilities = product is null ? new() : CompatibilityService.Read(product),
@@ -321,6 +333,22 @@ public sealed class PublicationsController : Controller
             PromotionProfit = promotionProfit,
             PromotionsUnavailable = offers is null && !item.IsClosed
         });
+    }
+
+    // ── Precio automático de Mercado Libre ──
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AutoPrice(int id, string? autoAction, string? rule, string? min, string? max, CancellationToken cancellationToken)
+    {
+        var organizationId = await _organizationContext.RequireCurrentOrganizationIdAsync(cancellationToken);
+        var service = HttpContext.RequestServices.GetRequiredService<AutoPriceService>();
+        static decimal? Parse(string? text) => MercadoLibreItemEditorService.TryParseMoney(text, out var value) && value > 0 ? value : null;
+        var (ok, message) = autoAction == "off"
+            ? await service.DisableAsync(organizationId, id, cancellationToken)
+            : await service.EnableAsync(organizationId, id, rule, Parse(min), Parse(max), cancellationToken);
+        TempData[ok ? "Success" : "Error"] = message;
+        return RedirectToAction(nameof(Edit), null, new { id }, "pe-auto-panel");
     }
 
     // ── Compatibilidades con vehículos ──
@@ -494,6 +522,15 @@ public sealed class PublicationsController : Controller
 
         if (bulkAction == "suggested")
             return await ApplySuggestedPricesAsync(organizationId, ids, filter, cancellationToken);
+        if (bulkAction == "autoprice")
+        {
+            var (done, problems) = await HttpContext.RequestServices.GetRequiredService<AutoPriceService>().EnableManyAsync(organizationId, ids, null, cancellationToken);
+            if (done > 0)
+                TempData["Success"] = $"Precio automático en {done} {(done == 1 ? "publicación" : "publicaciones")}: Mercado Libre moverá el precio sin bajar de tu ganancia mínima.";
+            if (problems.Count > 0)
+                TempData["Error"] = string.Join(" · ", problems.Take(5)) + (problems.Count > 5 ? $" (y {problems.Count - 5} más)" : "");
+            return RedirectToAction(nameof(Index), new { filter });
+        }
         if (bulkAction is "discount" or "undiscount")
             return await BulkDiscountAsync(organizationId, ids, bulkAction, percent ?? 10, days ?? 7, includeLosing, filter, cancellationToken);
 

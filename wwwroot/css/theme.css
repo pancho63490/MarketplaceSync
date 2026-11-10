@@ -2263,3 +2263,11 @@ body {
     .qa-item { grid-template-columns: 48px minmax(0, 1fr); padding: 12px 14px; gap: 10px; }
     .qa-score { height: 48px; }
 }
+
+/* ── Precio automático ── */
+.ap-form { display: grid; gap: 6px; }
+.ap-range { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.ap-sub { font-size: var(--fs-sm); font-weight: 700; margin: 14px 0 6px; color: var(--ink-2); }
+.ap-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--fs-sm); }
+.ap-history li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; }
+.ap-history li span:first-child { color: var(--muted); }

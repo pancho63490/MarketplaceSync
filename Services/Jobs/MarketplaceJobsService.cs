@@ -305,6 +305,14 @@ namespace MarketplaceSync.Services.Jobs
             await _telegram.RefreshCatalogAllAsync();
         }
 
+        /// <summary>Precio automático de Mercado Libre: estado y mínimo según tu costo de hoy.</summary>
+        [AutomaticRetry(Attempts = 0)]
+        [DisableConcurrentExecution(timeoutInSeconds: 900)]
+        public async Task SyncAutoPrices()
+        {
+            await _telegram.SyncAutoPricesAllAsync();
+        }
+
         /// <summary>Calidad de las publicaciones según Mercado Libre (cada 3 días por publicación).</summary>
         [AutomaticRetry(Attempts = 0)]
         [DisableConcurrentExecution(timeoutInSeconds: 1800)]

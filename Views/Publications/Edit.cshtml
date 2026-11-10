@@ -497,6 +497,70 @@
             </section>
         }
 
+        @if (Model.AutoPrice is { } ap)
+        {
+            var apPub = ap.Publication;
+            var apOn = apPub.AutoPriceStatus is not null;
+            var apRules = ap.Rules.Count > 0 ? ap.Rules : (apOn ? new List<MarketplaceSync.Services.MercadoLibre.AutoPriceRuleOption> { new(apPub.AutoPriceRule ?? "INT", MarketplaceSync.Services.MercadoLibre.AutoPriceService.RuleLabel(apPub.AutoPriceRule ?? "INT"), null) } : ap.Rules);
+            <section class="panel" aria-labelledby="pe-auto" id="pe-auto-panel">
+                <div class="panel-head">
+                    <h2 id="pe-auto">@Html.Icon("trending-down") Precio automático</h2>
+                    <p class="mb-0">Mercado Libre sube y baja el precio para competir, entre un mínimo y un máximo. El mínimo lo pone la app con tu costo para que nunca ganes menos de lo mínimo.</p>
+                </div>
+                <div class="panel-body ap-box">
+                    @if (apOn)
+                    {
+                        <p class="mb-2"><span class="pill @(apPub.AutoPriceStatus == "ACTIVE" ? "pill-ok" : "pill-warn")">@MarketplaceSync.Services.MercadoLibre.AutoPriceService.StatusLabel(apPub.AutoPriceStatus, apPub.AutoPriceCause)</span>
+                            <span class="small text-muted d-block mt-1">@MarketplaceSync.Services.MercadoLibre.AutoPriceService.RuleLabel(apPub.AutoPriceRule) · entre @Mxn(apPub.AutoPriceMin) y @Mxn(apPub.AutoPriceMax)</span></p>
+                    }
+                    @if (ap.Unavailable is not null && !apOn)
+                    {
+                        <p class="small text-muted mb-0">@ap.Unavailable</p>
+                    }
+                    else if (ap.Floor is null)
+                    {
+                        <p class="small mb-0">Pon el costo del producto para usarlo: sin costo no sé cuál es tu precio mínimo. <a asp-controller="Products" asp-action="Details" asp-route-id="@item.ProductId">Poner costo</a></p>
+                    }
+                    else
+                    {
+                        <form asp-action="AutoPrice" asp-route-id="@item.PublicationId" method="post" class="ap-form" data-busy="Guardando en Mercado Libre…">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="autoAction" value="on" />
+                            <label class="form-label small" for="apRule">Cómo compite</label>
+                            <select id="apRule" name="rule" class="form-select form-select-sm">
+                                @foreach (var r in apRules) { <option value="@r.RuleId" selected="@(r.RuleId == (apPub.AutoPriceRule ?? "INT"))">@r.Title</option> }
+                            </select>
+                            <div class="ap-range">
+                                <div><label class="form-label small" for="apMin">Mínimo</label><div class="input-group input-group-sm"><span class="input-group-text">$</span><input id="apMin" name="min" class="form-control" inputmode="decimal" value="@((apPub.AutoPriceMin ?? ap.Floor)?.ToString("0", CultureInfo.InvariantCulture))" /></div></div>
+                                <div><label class="form-label small" for="apMax">Máximo</label><div class="input-group input-group-sm"><span class="input-group-text">$</span><input id="apMax" name="max" class="form-control" inputmode="decimal" value="@((apPub.AutoPriceMax ?? ap.SuggestedMax).ToString("0", CultureInfo.InvariantCulture))" /></div></div>
+                            </div>
+                            <div class="form-text">Tu mínimo con el costo de hoy: <b>@Mxn(ap.Floor)</b>. No te dejo poner menos, y si sube el dólar o tu costo, lo subo solo cada día.</div>
+                            <button type="submit" class="btn btn-outline-primary btn-sm mt-2">@(apOn ? "Guardar mínimo y máximo" : "Activar precio automático")</button>
+                        </form>
+                    }
+                    @if (apOn)
+                    {
+                        <form asp-action="AutoPrice" asp-route-id="@item.PublicationId" method="post" class="mt-2">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="autoAction" value="off" />
+                            <button type="submit" class="btn btn-link btn-sm p-0 text-bad" data-arm="Confirmar: apagar precio automático">Apagar precio automático</button>
+                        </form>
+                        <p class="small text-muted mt-2 mb-0">Si cambias el precio a mano (aquí o en Mercado Libre), Mercado Libre apaga el precio automático.</p>
+                    }
+                    @if (ap.History.Count > 0)
+                    {
+                        <h3 class="ap-sub">Cambios recientes</h3>
+                        <ul class="ap-history">
+                            @foreach (var h in ap.History)
+                            {
+                                <li><span>@h.When.AddHours(-7).ToString("d MMM HH:mm", mx)</span><b>@Mxn(h.Price)</b>@if (h.PercentChange is { } pc && pc != 0) { <span class="@(pc < 0 ? "text-bad" : "text-ok")">@pc.ToString("+0.#;-0.#", mx)%</span> }</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </section>
+        }
+
         <section class="panel" aria-labelledby="pe-summary">
             <div class="panel-head"><h2 id="pe-summary">Resumen</h2></div>
             <div class="panel-body">
@@ -518,6 +582,14 @@
 
 @section Scripts {
 <script>
+    document.querySelectorAll('button[data-arm]').forEach(function (b) {
+        var original = b.textContent;
+        b.addEventListener('click', function (e) {
+            if (b.dataset.armed === '1') return;
+            e.preventDefault(); b.dataset.armed = '1'; b.textContent = b.dataset.arm;
+            setTimeout(function () { b.dataset.armed = ''; b.textContent = original; }, 4000);
+        });
+    });
     (function () {
         var pct = document.getElementById('promoPct');
         var out = document.getElementById('promoPreview');

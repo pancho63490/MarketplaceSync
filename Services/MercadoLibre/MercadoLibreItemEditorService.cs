@@ -388,6 +388,13 @@ public sealed class MercadoLibreItemEditorService
             var error = await SendAsync(token, HttpMethod.Put, $"/items/{Esc(itemId)}", body, cancellationToken);
             if (error is not null)
                 return new EditResult(Array.Empty<string>(), new[] { "Mercado Libre no aceptó los cambios: " + error });
+            // Mercado Libre quita el precio automático cuando el precio se cambia por fuera.
+            if (newPrice is not null && publication.AutoPriceStatus is not null)
+            {
+                publication.AutoPriceStatus = null;
+                publication.AutoPriceCause = null;
+                changed.Add("precio fijo (se quitó el precio automático)");
+            }
         }
 
         // Descripción (recurso aparte)

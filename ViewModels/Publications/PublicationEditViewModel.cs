@@ -6,6 +6,8 @@ namespace MarketplaceSync.Web.ViewModels.Publications;
 public sealed class PublicationEditViewModel
 {
     public required ItemDetails Item { get; init; }
+    /// <summary>Precio automático de Mercado Libre (null si no se pudo leer).</summary>
+    public MarketplaceSync.Services.MercadoLibre.AutoPricePanel? AutoPrice { get; init; }
     public decimal? LandedCostMxn { get; init; }
     public CrossBorderProfitEstimate? Profit { get; init; }
 

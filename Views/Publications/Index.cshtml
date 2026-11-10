@@ -119,6 +119,7 @@ else
                         <span><a asp-controller="Products" asp-action="Details" asp-route-id="@r.ProductId">Producto</a></span>
                         @if (r.Status != "active") { <span class="text-danger">@(r.Status == "paused" ? "Pausada" : r.Status)</span> }
                         @if (r.CatalogStatus is { } cat) { <span><a asp-controller="Quality" asp-action="Index" asp-fragment="catalogo" class="pill @MarketplaceSync.Services.MercadoLibre.CatalogCompetitionService.StatusTone(cat)">Catálogo: @MarketplaceSync.Services.MercadoLibre.CatalogCompetitionService.StatusLabel(cat).ToLowerInvariant()</a></span> }
+                        @if (r.AutoPriceStatus is { } aps) { <span><a asp-action="Edit" asp-route-id="@r.PublicationId" asp-fragment="pe-auto-panel" class="pill @(aps == "ACTIVE" ? "pill-info" : "pill-warn")" title="Mercado Libre mueve el precio para competir">Precio automático@(aps == "ACTIVE" ? "" : " en pausa")</a></span> }
                         @if (r.QualityScore is { } qs) { <span><a asp-controller="Quality" asp-action="Index" asp-fragment="calidad" class="pill @MarketplaceSync.Services.MercadoLibre.ListingQualityService.LevelTone(r.QualityLevel)" title="Calidad según Mercado Libre">Calidad @qs</a></span> }
                         @if (!string.IsNullOrWhiteSpace(r.Permalink)) { <span><a href="@r.Permalink" target="_blank" rel="noopener noreferrer">Ver en Mercado Libre @Html.Icon("external-link", "icon-xs")</a></span> }
                     </div>
@@ -224,6 +225,7 @@ else
         <select name="bulkAction" id="bulkAction" class="form-select form-select-sm" aria-label="Qué hacer">
             <option value="price">Cambiar precio</option>
             <option value="suggested">Precio sugerido (solo las que no ganan lo mínimo)</option>
+            <option value="autoprice">Precio automático (sin bajar de tu mínimo)</option>
             <option value="discount">Poner descuento</option>
             <option value="undiscount">Quitar descuento o promoción</option>
             <option value="paused">Pausar</option>

@@ -17,6 +17,7 @@ public sealed record CatalogRow(MarketplacePublication Publication, PublicationM
 {
     /// <summary>Bajar al precio para ganar deja ganancia (aunque sea menos que tu mínimo).</summary>
     public bool CanMatch => Publication.CatalogStatus == CatalogCompetitionService.Losing &&
+                            Publication.AutoPriceStatus != "ACTIVE" &&
                             Publication.CatalogPriceToWin is > 0 && Publication.Price is > 0 &&
                             Publication.CatalogPriceToWin < Publication.Price &&
                             AtPriceToWin is { Profit.NetProfitMxn: > 0 };

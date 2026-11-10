@@ -163,6 +163,7 @@ public sealed class HealthMonitorService
         "ApplyAsync" => "cambios por Excel",
         "RefreshAllAsync" => "revisión de promociones",
         "RefreshCatalog" => "catálogo",
+        "SyncAutoPrices" => "precio automático",
         "RefreshListingQuality" => "calidad de publicaciones",
         "RefreshPackages" => "rastreo de paquetes",
         "ReconcilePayments" => "pagos de Mercado Pago",

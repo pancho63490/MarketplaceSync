@@ -486,7 +486,8 @@ public sealed partial class TelegramNotificationService
                     "/gasto 250 gasolina — anotar un gasto del negocio\n" +
                     "/precios — revisar qué publicaciones ya no ganan lo mínimo\n\n" +
                     "💬 <b>O escríbeme normal</b>: «¿cuánto vendí hoy?», «sube el faro de Tacoma a 3500», «pausa las balatas».\n\n" +
-                    "📥 <b>Mándame un link</b> de Amazon, eBay, Walmart o AliExpress y lo importo como producto. " +
+                    "📥 <b>Mándame un link</b> de Amazon, eBay, Walmart o AliExpress y lo importo como producto (si tienes un viaje abierto, también lo agrego al viaje). " +
+                    "Si es un link de Mercado Libre de la competencia, busco la misma pieza en eBay. " +
                     "Si quieres, agrega el precio en dólares: <code>https://… 38.50</code>\n\n" +
                     "Para contestar una pregunta, <b>responde a su mensaje</b> con tu texto o usa sus botones.",
                     cancellationToken: cancellationToken);

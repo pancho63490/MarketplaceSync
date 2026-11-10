@@ -30,6 +30,8 @@ public sealed class PublicationRow
     /// <summary>Estado en catálogo (winning, competing…); null si no es de catálogo o no se ha revisado.</summary>
     public string? CatalogStatus { get; init; }
     public int? QualityScore { get; init; }
+    /// <summary>ACTIVE o PAUSED si Mercado Libre maneja el precio solo.</summary>
+    public string? AutoPriceStatus { get; init; }
     public string? QualityLevel { get; init; }
     public decimal? LandedCostMxn { get; init; }
     public CrossBorderProfitEstimate? Profit { get; init; }

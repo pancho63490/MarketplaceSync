@@ -57,7 +57,8 @@ public sealed class RepricingService
             .Include(p => p.Product)
             .Where(p => p.Product.OrganizationId == org && p.Marketplace == "MercadoLibre" && p.IsPublished &&
                         p.ExternalItemId != null && p.Status == "active" && p.Price > 0 &&
-                        p.PromotionType == null) // subir el precio le quitaría el descuento
+                        p.PromotionType == null && // subir el precio le quitaría el descuento
+                        p.AutoPriceStatus == null) // con precio automático, la app solo cuida el mínimo
             .ToListAsync(cancellationToken);
 
         var candidates = publications

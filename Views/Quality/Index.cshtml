@@ -65,6 +65,7 @@
                                 <span class="sub">@p.ExternalItemId@(p.CatalogCheckedAt is { } at ? $" · revisado {at.AddHours(-7).ToString("d MMM HH:mm", mx)}" : "")</span>
                                 @if (reasons.Count > 0) { <span class="sub text-bad">@string.Join(" · ", reasons)</span> }
                                 @if (boosts.Count > 0) { <span class="sub">Te ayudaría: @string.Join(", ", boosts)</span> }
+                                @if (p.AutoPriceStatus == "ACTIVE") { <span class="sub">Con precio automático: Mercado Libre ajusta el precio (sin bajar de @Mxn(p.AutoPriceMin)).</span> }
                             </td>
                             <td data-label="Estado"><span class="pill @CatalogCompetitionService.StatusTone(p.CatalogStatus)">@CatalogCompetitionService.StatusLabel(p.CatalogStatus)</span></td>
                             <td class="num" data-label="Tu precio">@Mxn(p.Price)</td>

@@ -176,6 +176,31 @@ namespace MarketplaceSync.Web.Models.Marketplace
         public DateTime? QualityCheckedAt { get; set; }
 
         // =====================================
+        // PRECIO AUTOMÁTICO DE MERCADO LIBRE (/pricing-automation)
+        // =====================================
+
+        /// <summary>ACTIVE o PAUSED; null = sin precio automático.</summary>
+        [MaxLength(20)]
+        public string? AutoPriceStatus { get; set; }
+
+        /// <summary>INT (lo más bajo en Mercado Libre) o INT_EXT (también fuera de Mercado Libre).</summary>
+        [MaxLength(20)]
+        public string? AutoPriceRule { get; set; }
+
+        /// <summary>Precio mínimo que puede poner Mercado Libre (la app lo mantiene arriba de tu ganancia mínima).</summary>
+        [System.ComponentModel.DataAnnotations.Schema.Column(TypeName = "numeric(12,2)")]
+        public decimal? AutoPriceMin { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Schema.Column(TypeName = "numeric(12,2)")]
+        public decimal? AutoPriceMax { get; set; }
+
+        /// <summary>Por qué está en pausa (ITEM_NO_ACTIVE, PROMO, COMPETITORS).</summary>
+        [MaxLength(40)]
+        public string? AutoPriceCause { get; set; }
+
+        public DateTime? AutoPriceCheckedAt { get; set; }
+
+        // =====================================
         // DATES
         // =====================================
 

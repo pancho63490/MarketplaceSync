@@ -54,6 +54,55 @@ public sealed partial class TelegramNotificationService
         }
     }
 
+    /// <summary>Dos veces al día: revisa el precio automático y mantiene el mínimo arriba de tu ganancia mínima.</summary>
+    public async Task SyncAutoPricesAllAsync(CancellationToken cancellationToken = default)
+    {
+        foreach (var org in await ConnectedOrganizationsAsync(cancellationToken))
+        {
+            try
+            {
+                var events = await Service<AutoPriceService>().SyncAsync(org, cancellationToken);
+                if (events.Count > 0)
+                    await NotifyAutoPriceEventsAsync(org, events, cancellationToken);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(exception, "Auto price sync failed for {Org}.", org);
+            }
+            finally
+            {
+                _context.ChangeTracker.Clear();
+            }
+        }
+    }
+
+    private async Task NotifyAutoPriceEventsAsync(Guid org, List<AutoPriceEvent> events, CancellationToken cancellationToken)
+    {
+        var settings = await _context.NotificationSettings.FirstOrDefaultAsync(x => x.OrganizationId == org, cancellationToken);
+        var token = settings is null ? null : TokenFor(settings);
+        if (settings?.TelegramChatId is not { } chatId || token is null)
+            return;
+        var day = LocalNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        foreach (var e in events.Where(e => e.Kind != "min_lowered").Take(8))
+        {
+            var key = $"autoprice:{e.Publication.Id}:{e.Kind}:{day}";
+            if (await _context.NotificationLogs.AnyAsync(l => l.OrganizationId == org && l.Key == key, cancellationToken)) continue;
+            var title = E(Short(e.Publication.Product.Title, 70));
+            var html = e.Kind switch
+            {
+                "min_raised" => $"🔼 <b>Subí el mínimo del precio automático</b>\n{title}\nDe {Money(e.OldMin ?? 0)} a <b>{Money(e.NewMin ?? 0)}</b>: con el dólar y tu costo de hoy, más abajo ya no ganabas lo mínimo.",
+                "removed" => $"⚠️ <b>Mercado Libre quitó el precio automático</b>\n{title}\nPasa cuando el precio se cambia a mano. Vuelve a activarlo si quieres que siga compitiendo.",
+                "paused" => $"⏸ <b>Precio automático en pausa</b>\n{title}\n{E(AutoPriceService.CauseLabel(e.Publication.AutoPriceCause) ?? "Mercado Libre lo pausó")}.",
+                _ => null
+            };
+            if (html is null) continue;
+            var messageId = await _telegram.SendMessageAsync(token, chatId, html,
+                settings.PublicBaseUrl is null ? null : new[] { new[] { new TelegramButton("Ver publicación", Url: AppUrl(settings, $"/Publications/Edit/{e.Publication.Id}#pe-auto-panel")) } },
+                cancellationToken: cancellationToken);
+            await LogAsync(org, key, "autoprice", e.Publication.Id.ToString(CultureInfo.InvariantCulture), chatId, messageId, cancellationToken);
+        }
+    }
+
     private Task<List<Guid>> ConnectedOrganizationsAsync(CancellationToken cancellationToken) =>
         _context.MarketplaceAccounts.AsNoTracking()
             .Where(a => a.Marketplace == "MercadoLibre" && a.Status == "Connected")
@@ -99,7 +148,11 @@ public sealed partial class TelegramNotificationService
             if (boosts.Count > 0) html.Append("\nTe ayudaría: ").Append(E(string.Join(", ", boosts))).Append('.');
 
             BotAction? action = null;
-            if (p.CatalogPriceToWin is > 0 && p.Price is > 0 && p.CatalogPriceToWin < p.Price)
+            if (p.AutoPriceStatus == "ACTIVE")
+            {
+                html.Append("\nTiene precio automático: Mercado Libre lo ajusta solo, sin bajar de ").Append(Money(p.AutoPriceMin ?? 0)).Append('.');
+            }
+            else if (p.CatalogPriceToWin is > 0 && p.Price is > 0 && p.CatalogPriceToWin < p.Price)
             {
                 var target = Math.Floor(p.CatalogPriceToWin.Value);
                 var atTarget = economics.Calculate(p, p.Product, pricing, target);

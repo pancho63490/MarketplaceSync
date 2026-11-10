@@ -1249,6 +1249,27 @@ namespace MarketplaceSync.Web.Migrations
                     b.Property<string>("AttributesJson")
                         .HasColumnType("jsonb");
 
+                    b.Property<string>("AutoPriceCause")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime?>("AutoPriceCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("AutoPriceMax")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal?>("AutoPriceMin")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<string>("AutoPriceRule")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("AutoPriceStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<string>("AutopilotNotes")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
